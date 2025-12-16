@@ -1,0 +1,79 @@
+import { supabase } from './supabase';
+
+// 소스의 어노테이션 목록 조회
+export async function getAnnotations(sourceId) {
+  const { data, error } = await supabase
+    .from('annotations')
+    .select('*')
+    .eq('source_id', sourceId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return data;
+}
+
+// 어노테이션 추가 (하이라이트/메모)
+export async function createAnnotation(annotation) {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('annotations')
+    .insert({
+      ...annotation,
+      user_id: user.id,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  // 복습 아이템으로 자동 등록
+  if (annotation.type === 'highlight') {
+    await createReviewItem(data.id);
+  }
+
+  return data;
+}
+
+// 어노테이션 삭제
+export async function deleteAnnotation(id) {
+  const { error } = await supabase
+    .from('annotations')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+// 어노테이션 업데이트
+export async function updateAnnotation(id, updates) {
+  const { data, error } = await supabase
+    .from('annotations')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// 복습 아이템 생성
+async function createReviewItem(annotationId) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const today = new Date().toISOString().split('T')[0];
+
+  const { error } = await supabase
+    .from('review_items')
+    .insert({
+      user_id: user.id,
+      annotation_id: annotationId,
+      next_review_date: today,
+      interval_days: 1,
+      ease_factor: 2.5,
+      repetitions: 0,
+      status: 'active',
+    });
+
+  if (error) throw error;
+}

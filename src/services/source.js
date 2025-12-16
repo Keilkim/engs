@@ -1,0 +1,81 @@
+import { supabase } from './supabase';
+
+// 소스 목록 조회
+export async function getSources() {
+  const { data, error } = await supabase
+    .from('sources')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+// 소스 상세 조회
+export async function getSource(id) {
+  const { data, error } = await supabase
+    .from('sources')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// 소스 추가
+export async function createSource(source) {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('sources')
+    .insert({
+      ...source,
+      user_id: user.id,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// 소스 삭제
+export async function deleteSource(id) {
+  const { error } = await supabase
+    .from('sources')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+// 파일 업로드 (PDF, 이미지)
+export async function uploadFile(file, bucket = 'sources') {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Date.now()}.${fileExt}`;
+  const filePath = `${fileName}`;
+
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .upload(filePath, file);
+
+  if (error) throw error;
+
+  // Public URL 가져오기
+  const { data: { publicUrl } } = supabase.storage
+    .from(bucket)
+    .getPublicUrl(filePath);
+
+  return { path: data.path, url: publicUrl };
+}
+
+// URL에서 콘텐츠 가져오기 (서버리스 함수 호출)
+export async function fetchUrlContent(url) {
+  const { data, error } = await supabase.functions.invoke('fetch-url', {
+    body: { url },
+  });
+
+  if (error) throw error;
+  return data;
+}
