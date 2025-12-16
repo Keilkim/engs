@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getSource } from '../../services/source';
 import { getAnnotations } from '../../services/annotation';
 import ContextMenu from '../../components/modals/ContextMenu';
+import { TranslatableText } from '../../components/translatable';
 
 export default function Viewer() {
   const { id } = useParams();
@@ -12,7 +13,6 @@ export default function Viewer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // 컨텍스트 메뉴 상태
   const [contextMenu, setContextMenu] = useState({
     isOpen: false,
     position: { x: 0, y: 0 },
@@ -33,7 +33,7 @@ export default function Viewer() {
       setSource(sourceData);
       setAnnotations(annotationsData || []);
     } catch (err) {
-      setError('소스를 불러올 수 없습니다');
+      setError('Unable to load source');
       console.error(err);
     } finally {
       setLoading(false);
@@ -96,7 +96,7 @@ export default function Viewer() {
       <div className="viewer-screen">
         <div className="viewer-loading">
           <div className="spinner" />
-          <p>불러오는 중...</p>
+          <p><TranslatableText textKey="viewer.loading">Loading...</TranslatableText></p>
         </div>
       </div>
     );
@@ -106,8 +106,10 @@ export default function Viewer() {
     return (
       <div className="viewer-screen">
         <div className="viewer-error">
-          <p>{error || '소스를 찾을 수 없습니다'}</p>
-          <button onClick={() => navigate('/')}>홈으로</button>
+          <p>{error || <TranslatableText textKey="viewer.sourceNotFound">Source not found</TranslatableText>}</p>
+          <button onClick={() => navigate('/')}>
+            <TranslatableText textKey="viewer.goHome">Go Home</TranslatableText>
+          </button>
         </div>
       </div>
     );
@@ -120,7 +122,7 @@ export default function Viewer() {
           className="back-button"
           onClick={() => navigate('/')}
         >
-          ← 뒤로
+          <TranslatableText textKey="nav.back">Back</TranslatableText>
         </button>
         <h1 className="viewer-title">{source.title}</h1>
         <div className="viewer-actions">
@@ -154,7 +156,6 @@ export default function Viewer() {
           </div>
         )}
 
-        {/* 어노테이션 오버레이 */}
         {annotations
           .filter((a) => a.type === 'memo')
           .map((memo) => (

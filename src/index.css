@@ -1,6 +1,6 @@
 /*
  * ===========================================
- * ENGS - SpongeBob Style Global CSS
+ * ENGS - Apple Titanium Black Style
  * ===========================================
  */
 
@@ -27,6 +27,7 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background-color: var(--color-base);
 }
 
 /* Screen base */
@@ -47,8 +48,10 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--spacing-md) var(--spacing-lg);
-  background-color: var(--color-base-sub);
-  border-bottom: 3px solid var(--color-accent);
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--color-accent);
   position: sticky;
   top: 0;
   z-index: var(--z-sticky);
@@ -74,37 +77,37 @@
   padding: var(--spacing-sm);
   background-color: transparent;
   border: none;
-  color: var(--color-text);
+  color: var(--color-highlight);
   font-size: var(--font-lg);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .back-button:hover {
-  color: var(--color-signature-dark);
-  transform: translateX(-2px);
+  color: var(--color-highlight-light);
 }
 
 /* Profile/Mypage button */
 .mypage-button,
 .profile-button {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-full);
-  background-color: var(--color-signature);
-  border: 2px solid var(--color-accent);
+  background-color: var(--color-base-sub);
+  border: 1px solid var(--color-accent);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: var(--font-lg);
   cursor: pointer;
   transition: all var(--transition-normal);
+  color: var(--color-text);
 }
 
 .mypage-button:hover,
 .profile-button:hover {
-  transform: scale(1.1);
-  box-shadow: var(--shadow-md);
+  background-color: var(--color-base-sub-light);
+  border-color: var(--color-accent-light);
 }
 
 .profile-icon {
@@ -126,8 +129,10 @@
   justify-content: space-around;
   align-items: center;
   padding: var(--spacing-sm) var(--spacing-md);
-  background-color: var(--color-base-sub);
-  border-top: 3px solid var(--color-accent);
+  background-color: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--color-accent);
   z-index: var(--z-sticky);
 }
 
@@ -135,48 +140,45 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: 2px;
   padding: var(--spacing-sm) var(--spacing-md);
   background: none;
   border: none;
-  color: var(--color-text-sub);
-  font-size: var(--font-sm);
+  color: var(--color-text-light);
+  font-size: var(--font-xs);
   cursor: pointer;
   transition: all var(--transition-normal);
   border-radius: var(--radius-lg);
 }
 
 .nav-button span:first-child {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
 }
 
 .nav-button:hover {
   color: var(--color-text);
-  background-color: var(--color-base-sub-dark);
 }
 
 .nav-button.active {
-  color: var(--color-signature-dark);
-  background-color: var(--color-signature);
-  font-weight: var(--font-weight-semibold);
+  color: var(--color-highlight);
 }
 
 .nav-button.add-button {
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   border-radius: var(--radius-full);
-  background-color: var(--color-signature);
-  border: 3px solid var(--color-accent);
-  box-shadow: var(--shadow-sponge);
-  margin-top: -20px;
+  background-color: var(--color-highlight);
+  border: none;
+  margin-top: -24px;
 }
 
 .nav-button.add-button:hover {
-  transform: scale(1.1);
+  background-color: var(--color-highlight-light);
+  transform: scale(1.05);
 }
 
 .nav-button.add-button span {
-  font-size: 1.8rem;
+  font-size: 1.6rem;
   color: var(--color-text);
 }
 
@@ -198,22 +200,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
 }
 
 .section-header h2 {
-  font-size: var(--font-lg);
+  font-size: var(--font-base);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
   margin: 0;
 }
 
 .source-count {
-  font-size: var(--font-sm);
+  font-size: var(--font-xs);
   color: var(--color-text-sub);
-  background-color: var(--color-base-sub);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border-radius: var(--radius-full);
 }
 
 /*
@@ -224,40 +223,38 @@
 
 .review-card,
 .today-review-card {
-  background: linear-gradient(135deg, var(--color-signature) 0%, var(--color-signature-light) 100%);
-  border: 3px solid var(--color-accent);
+  background: linear-gradient(135deg, var(--color-highlight-dark) 0%, var(--color-highlight) 100%);
   border-radius: var(--radius-xl);
   padding: var(--spacing-lg);
-  box-shadow: var(--shadow-sponge);
   cursor: pointer;
   transition: all var(--transition-normal);
 }
 
 .review-card:hover,
 .today-review-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 0 var(--color-accent), 0 12px 20px rgba(139, 69, 19, 0.25);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(10, 132, 255, 0.3);
 }
 
 .review-card h3,
 .today-review-card h3 {
-  font-size: var(--font-lg);
-  font-weight: var(--font-weight-bold);
+  font-size: var(--font-base);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text);
-  margin-bottom: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
 }
 
 .review-card .count,
 .today-review-card .count {
-  font-size: var(--font-3xl);
+  font-size: var(--font-2xl);
   font-weight: var(--font-weight-bold);
-  color: var(--color-accent);
+  color: var(--color-text);
 }
 
 .review-card .label,
 .today-review-card .label {
   font-size: var(--font-sm);
-  color: var(--color-text-sub);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 /*
@@ -275,8 +272,8 @@
 .source-item,
 .source-card {
   background-color: var(--color-base-sub);
-  border: 2px solid var(--color-accent);
   border-radius: var(--radius-xl);
+  border: 1px solid var(--color-accent);
   overflow: hidden;
   cursor: pointer;
   transition: all var(--transition-normal);
@@ -285,19 +282,20 @@
 
 .source-item:hover,
 .source-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
+  border-color: var(--color-accent-light);
+  background-color: var(--color-base-sub-light);
 }
 
 .source-item .thumbnail,
 .source-card .thumbnail {
   width: 100%;
   height: 70%;
-  background-color: var(--color-base-sub-dark);
+  background-color: var(--color-base-dark);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 3rem;
+  color: var(--color-text-light);
 }
 
 .source-item .info,
@@ -334,12 +332,13 @@
 }
 
 .empty-state .icon {
-  font-size: 4rem;
+  font-size: 3rem;
   margin-bottom: var(--spacing-md);
+  opacity: 0.5;
 }
 
 .empty-state p {
-  font-size: var(--font-base);
+  font-size: var(--font-sm);
   margin-bottom: var(--spacing-lg);
 }
 
@@ -357,12 +356,12 @@
 }
 
 .loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid var(--color-base-sub-dark);
-  border-top-color: var(--color-signature);
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--color-accent);
+  border-top-color: var(--color-highlight);
   border-radius: var(--radius-full);
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
@@ -373,28 +372,28 @@
 
 /*
  * ===========================================
- * Error Message
+ * Error / Success Messages
  * ===========================================
  */
 
 .error-message {
-  background-color: #FEF2F2;
+  background-color: rgba(255, 69, 58, 0.15);
   color: var(--color-error);
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-error);
   margin-bottom: var(--spacing-md);
   font-size: var(--font-sm);
+  border: 1px solid rgba(255, 69, 58, 0.3);
 }
 
 .success-message {
-  background-color: #ECFDF5;
+  background-color: rgba(48, 209, 88, 0.15);
   color: var(--color-success);
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-success);
   margin-bottom: var(--spacing-md);
   font-size: var(--font-sm);
+  border: 1px solid rgba(48, 209, 88, 0.3);
 }
 
 /*

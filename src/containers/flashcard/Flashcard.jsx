@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { speakText } from '../../services/ai';
+import { TranslatableText } from '../../components/translatable';
 
 export default function Flashcard({ item, onShowAnswer }) {
   const [isFlipped, setIsFlipped] = useState(false);
@@ -25,7 +26,7 @@ export default function Flashcard({ item, onShowAnswer }) {
     try {
       await speakText(annotation.selected_text);
     } catch (err) {
-      console.error('TTS 실패:', err);
+      console.error('Text-to-speech failed:', err);
     } finally {
       setSpeaking(false);
     }
@@ -37,9 +38,10 @@ export default function Flashcard({ item, onShowAnswer }) {
       onClick={handleFlip}
     >
       <div className="flashcard-inner">
-        {/* 앞면 - 문제 */}
         <div className="flashcard-front">
-          <div className="card-label">탭하여 정답 확인</div>
+          <div className="card-label">
+            <TranslatableText textKey="flashcard.tapToReveal">Tap to reveal answer</TranslatableText>
+          </div>
           <div className="card-content">
             <p className="question-text">{annotation.selected_text}</p>
           </div>
@@ -52,9 +54,10 @@ export default function Flashcard({ item, onShowAnswer }) {
           </button>
         </div>
 
-        {/* 뒷면 - 정답 */}
         <div className="flashcard-back">
-          <div className="card-label">정답</div>
+          <div className="card-label">
+            <TranslatableText textKey="flashcard.answer">Answer</TranslatableText>
+          </div>
           <div className="card-content">
             {analysisData ? (
               <div className="analysis-content">
@@ -70,7 +73,7 @@ export default function Flashcard({ item, onShowAnswer }) {
             )}
           </div>
           <div className="source-info">
-            📚 {annotation.source?.title || '소스'}
+            📚 {annotation.source?.title || 'Source'}
           </div>
         </div>
       </div>

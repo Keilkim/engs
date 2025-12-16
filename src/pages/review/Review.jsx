@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getTodayReviewItems, updateReviewResult } from '../../services/review';
 import Flashcard from '../../containers/flashcard/Flashcard';
+import { TranslatableText } from '../../components/translatable';
 
 export default function Review() {
   const navigate = useNavigate();
@@ -21,7 +22,7 @@ export default function Review() {
       const data = await getTodayReviewItems();
       setItems(data || []);
     } catch (err) {
-      console.error('복습 아이템 로드 실패:', err);
+      console.error('Failed to load review items:', err);
     } finally {
       setLoading(false);
     }
@@ -38,16 +39,14 @@ export default function Review() {
         incorrect: prev.incorrect + (isCorrect ? 0 : 1),
       }));
 
-      // 다음 카드로 이동
       if (currentIndex < items.length - 1) {
         setCurrentIndex((prev) => prev + 1);
         setShowAnswer(false);
       } else {
-        // 모든 복습 완료
         setCurrentIndex(-1);
       }
     } catch (err) {
-      console.error('평가 저장 실패:', err);
+      console.error('Failed to save evaluation:', err);
     }
   }
 
@@ -64,13 +63,12 @@ export default function Review() {
       <div className="review-screen">
         <div className="review-loading">
           <div className="spinner" />
-          <p>복습 항목 불러오는 중...</p>
+          <p><TranslatableText textKey="review.loadingItems">Loading review items...</TranslatableText></p>
         </div>
       </div>
     );
   }
 
-  // 복습 완료 화면
   if (currentIndex === -1 || items.length === 0) {
     const total = stats.correct + stats.incorrect;
     const percentage = total > 0 ? Math.round((stats.correct / total) * 100) : 0;
@@ -79,34 +77,40 @@ export default function Review() {
       <div className="review-screen">
         <header className="review-header">
           <button className="back-button" onClick={() => navigate('/')}>
-            ← 뒤로
+            <TranslatableText textKey="nav.back">Back</TranslatableText>
           </button>
-          <h1>복습 완료!</h1>
+          <h1><TranslatableText textKey="review.reviewComplete">Review Complete!</TranslatableText></h1>
         </header>
 
         <main className="review-complete">
           <div className="complete-icon">🎉</div>
-          <h2>오늘의 복습을 마쳤습니다</h2>
+          <h2><TranslatableText textKey="review.completedMessage">You've completed today's review</TranslatableText></h2>
 
           {total > 0 && (
             <div className="review-stats">
               <div className="stat-item">
-                <span className="stat-label">정답률</span>
+                <span className="stat-label">
+                  <TranslatableText textKey="review.accuracy">Accuracy</TranslatableText>
+                </span>
                 <span className="stat-value">{percentage}%</span>
               </div>
               <div className="stat-item">
-                <span className="stat-label correct">✓ 알아요</span>
+                <span className="stat-label correct">
+                  <TranslatableText textKey="review.iKnow">I know</TranslatableText>
+                </span>
                 <span className="stat-value">{stats.correct}</span>
               </div>
               <div className="stat-item">
-                <span className="stat-label incorrect">✗ 몰라요</span>
+                <span className="stat-label incorrect">
+                  <TranslatableText textKey="review.dontKnow">Don't know</TranslatableText>
+                </span>
                 <span className="stat-value">{stats.incorrect}</span>
               </div>
             </div>
           )}
 
           <button className="home-button" onClick={() => navigate('/')}>
-            홈으로 돌아가기
+            <TranslatableText textKey="review.returnHome">Return Home</TranslatableText>
           </button>
         </main>
       </div>
@@ -120,9 +124,9 @@ export default function Review() {
     <div className="review-screen">
       <header className="review-header">
         <button className="back-button" onClick={() => navigate('/')}>
-          ← 뒤로
+          <TranslatableText textKey="nav.back">Back</TranslatableText>
         </button>
-        <h1>복습 센터</h1>
+        <h1><TranslatableText textKey="review.reviewCenter">Review Center</TranslatableText></h1>
         <span className="progress-text">
           {currentIndex + 1} / {items.length}
         </span>
@@ -145,7 +149,7 @@ export default function Review() {
           className="view-source-button"
           onClick={handleViewSource}
         >
-          📖 원문 문맥 보기
+          <TranslatableText textKey="review.viewContext">View original context</TranslatableText>
         </button>
 
         {showAnswer && (
@@ -154,13 +158,13 @@ export default function Review() {
               className="eval-button incorrect"
               onClick={() => handleEvaluation(false)}
             >
-              😕 몰라요
+              <TranslatableText textKey="review.dontKnow">Don't know</TranslatableText>
             </button>
             <button
               className="eval-button correct"
               onClick={() => handleEvaluation(true)}
             >
-              😊 알아요
+              <TranslatableText textKey="review.iKnow">I know</TranslatableText>
             </button>
           </div>
         )}

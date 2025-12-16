@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { TranslatableText } from '../../components/translatable';
 
 export default function SourceGrid({ sources, loading }) {
   const navigate = useNavigate();
@@ -16,8 +17,8 @@ export default function SourceGrid({ sources, loading }) {
   if (!sources || sources.length === 0) {
     return (
       <div className="source-grid-empty">
-        <p>아직 추가된 소스가 없습니다</p>
-        <p>새 소스를 추가해보세요!</p>
+        <p><TranslatableText textKey="sourceGrid.noSources">No sources added yet</TranslatableText></p>
+        <p><TranslatableText textKey="sourceGrid.addFirst">Add your first source!</TranslatableText></p>
       </div>
     );
   }

@@ -3,22 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { signOut } from '../../services/auth';
 import StatsDashboard from '../../containers/stats-dashboard/StatsDashboard';
+import { TranslatableText } from '../../components/translatable';
 
 export default function Mypage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const nickname = user?.user_metadata?.nickname || '사용자';
+  const nickname = user?.user_metadata?.nickname || 'User';
   const email = user?.email || '';
   const createdAt = user?.created_at
-    ? new Date(user.created_at).toLocaleDateString('ko-KR')
+    ? new Date(user.created_at).toLocaleDateString('en-US')
     : '';
 
   async function handleLogout() {
     if (loggingOut) return;
 
-    const confirmed = window.confirm('로그아웃 하시겠습니까?');
+    const confirmed = window.confirm('Are you sure you want to sign out?');
     if (!confirmed) return;
 
     setLoggingOut(true);
@@ -26,7 +27,7 @@ export default function Mypage() {
       await signOut();
       navigate('/login');
     } catch (err) {
-      console.error('로그아웃 실패:', err);
+      console.error('Sign out failed:', err);
     } finally {
       setLoggingOut(false);
     }
@@ -36,9 +37,9 @@ export default function Mypage() {
     <div className="mypage-screen">
       <header className="mypage-header">
         <button className="back-button" onClick={() => navigate('/')}>
-          ← 뒤로
+          <TranslatableText textKey="nav.back">Back</TranslatableText>
         </button>
-        <h1>마이페이지</h1>
+        <h1><TranslatableText textKey="mypage.myPage">My Page</TranslatableText></h1>
         <button
           className="settings-button"
           onClick={() => navigate('/settings')}
@@ -55,12 +56,14 @@ export default function Mypage() {
           <div className="profile-info">
             <h2 className="profile-nickname">{nickname}</h2>
             <p className="profile-email">{email}</p>
-            <p className="profile-joined">가입일: {createdAt}</p>
+            <p className="profile-joined">
+              <TranslatableText textKey="mypage.joined">Joined:</TranslatableText> {createdAt}
+            </p>
           </div>
         </section>
 
         <section className="stats-section">
-          <h2>학습 통계</h2>
+          <h2><TranslatableText textKey="mypage.learningStats">Learning Stats</TranslatableText></h2>
           <StatsDashboard />
         </section>
 
@@ -70,7 +73,15 @@ export default function Mypage() {
             onClick={() => navigate('/settings')}
           >
             <span>⚙️</span>
-            <span>설정</span>
+            <span><TranslatableText textKey="mypage.settings">Settings</TranslatableText></span>
+            <span className="arrow">→</span>
+          </button>
+          <button
+            className="menu-item"
+            onClick={() => navigate('/onboarding')}
+          >
+            <span>📖</span>
+            <span><TranslatableText textKey="settings.viewOnboarding">View Guide</TranslatableText></span>
             <span className="arrow">→</span>
           </button>
           <button
@@ -79,7 +90,13 @@ export default function Mypage() {
             disabled={loggingOut}
           >
             <span>🚪</span>
-            <span>{loggingOut ? '로그아웃 중...' : '로그아웃'}</span>
+            <span>
+              {loggingOut ? (
+                <TranslatableText textKey="mypage.signingOut">Signing out...</TranslatableText>
+              ) : (
+                <TranslatableText textKey="mypage.signOut">Sign Out</TranslatableText>
+              )}
+            </span>
             <span className="arrow">→</span>
           </button>
         </section>

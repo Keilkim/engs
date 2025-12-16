@@ -6,6 +6,7 @@ import { getTodayReviewCount } from '../../services/review';
 import SourceGrid from '../../containers/source-grid/SourceGrid';
 import ReviewCard from '../../components/cards/ReviewCard';
 import AddSourceModal from '../../components/modals/AddSourceModal';
+import { TranslatableText } from '../../components/translatable';
 
 export default function Home() {
   const { user } = useAuth();
@@ -17,7 +18,15 @@ export default function Home() {
 
   useEffect(() => {
     loadData();
+    checkOnboarding();
   }, []);
+
+  function checkOnboarding() {
+    const hasSeenOnboarding = localStorage.getItem('onboarding_completed');
+    if (!hasSeenOnboarding) {
+      navigate('/onboarding');
+    }
+  }
 
   async function loadData() {
     setLoading(true);
@@ -29,7 +38,7 @@ export default function Home() {
       setSources(sourcesData || []);
       setReviewCount(count || 0);
     } catch (err) {
-      console.error('데이터 로드 실패:', err);
+      console.error('Failed to load data:', err);
     } finally {
       setLoading(false);
     }
@@ -42,7 +51,7 @@ export default function Home() {
   return (
     <div className="home-screen">
       <header className="home-header">
-        <h1>내 서재</h1>
+        <h1><TranslatableText textKey="home.myLibrary">My Library</TranslatableText></h1>
         <button
           className="mypage-button"
           onClick={() => navigate('/mypage')}
@@ -58,8 +67,8 @@ export default function Home() {
 
         <section className="source-section">
           <div className="section-header">
-            <h2>학습 소스</h2>
-            <span className="source-count">{sources.length}개</span>
+            <h2><TranslatableText textKey="home.learningSources">Learning Sources</TranslatableText></h2>
+            <span className="source-count">{sources.length} <TranslatableText textKey="home.items">items</TranslatableText></span>
           </div>
           <SourceGrid sources={sources} loading={loading} />
         </section>
@@ -68,7 +77,7 @@ export default function Home() {
       <nav className="bottom-nav">
         <button className="nav-button active">
           <span>🏠</span>
-          <span>홈</span>
+          <span><TranslatableText textKey="nav.home">Home</TranslatableText></span>
         </button>
         <button
           className="nav-button add-button"
@@ -81,7 +90,7 @@ export default function Home() {
           onClick={() => navigate('/chat')}
         >
           <span>💬</span>
-          <span>대화</span>
+          <span><TranslatableText textKey="nav.chat">Chat</TranslatableText></span>
         </button>
       </nav>
 

@@ -4,6 +4,7 @@ import { chat } from '../../services/ai';
 import { saveChatMessage, getChatLogs } from '../../services/chat';
 import { getSource } from '../../services/source';
 import ChatLog from '../../containers/chat-log/ChatLog';
+import { TranslatableText } from '../../components/translatable';
 
 export default function Chat() {
   const navigate = useNavigate();
@@ -13,7 +14,6 @@ export default function Chat() {
   const [loading, setLoading] = useState(false);
   const [sourceContext, setSourceContext] = useState(null);
 
-  // 학습 뷰어에서 넘어온 경우
   const initialMessage = location.state?.initialMessage;
   const sourceId = location.state?.sourceId;
 
@@ -25,7 +25,6 @@ export default function Chat() {
   }, [sourceId]);
 
   useEffect(() => {
-    // 초기 메시지가 있으면 자동 전송
     if (initialMessage && messages.length === 0) {
       handleSend(initialMessage);
     }
@@ -36,7 +35,7 @@ export default function Chat() {
       const logs = await getChatLogs(sourceId);
       setMessages(logs || []);
     } catch (err) {
-      console.error('채팅 기록 로드 실패:', err);
+      console.error('Failed to load chat history:', err);
     }
   }
 
@@ -45,7 +44,7 @@ export default function Chat() {
       const source = await getSource(sourceId);
       setSourceContext(source?.content || '');
     } catch (err) {
-      console.error('소스 컨텍스트 로드 실패:', err);
+      console.error('Failed to load source context:', err);
     }
   }
 
@@ -56,7 +55,6 @@ export default function Chat() {
     setInput('');
     setLoading(true);
 
-    // 사용자 메시지 추가
     const userMessage = {
       tempId: Date.now(),
       role: 'user',
@@ -65,7 +63,6 @@ export default function Chat() {
     setMessages((prev) => [...prev, userMessage]);
 
     try {
-      // 메시지 저장
       const savedUserMsg = await saveChatMessage(text, 'user', sourceId);
       setMessages((prev) =>
         prev.map((m) =>
@@ -73,21 +70,17 @@ export default function Chat() {
         )
       );
 
-      // AI 응답 생성
       const aiResponse = await chat(text, sourceContext);
-
-      // AI 응답 저장
       const savedAiMsg = await saveChatMessage(aiResponse, 'assistant', sourceId);
       setMessages((prev) => [...prev, savedAiMsg]);
     } catch (err) {
-      console.error('메시지 전송 실패:', err);
-      // 에러 메시지 표시
+      console.error('Failed to send message:', err);
       setMessages((prev) => [
         ...prev,
         {
           tempId: Date.now(),
           role: 'assistant',
-          message: 'AI 응답에 실패했습니다. 다시 시도해주세요.',
+          message: 'AI response failed. Please try again.',
         },
       ]);
     } finally {
@@ -106,11 +99,11 @@ export default function Chat() {
     <div className="chat-screen">
       <header className="chat-header">
         <button className="back-button" onClick={() => navigate('/')}>
-          ← 뒤로
+          <TranslatableText textKey="nav.back">Back</TranslatableText>
         </button>
-        <h1>AI 대화</h1>
+        <h1><TranslatableText textKey="chat.aiChat">AI Chat</TranslatableText></h1>
         {sourceContext && (
-          <span className="context-badge" title="학습 소스 연결됨">
+          <span className="context-badge" title="Learning source connected">
             📚
           </span>
         )}
@@ -137,7 +130,7 @@ export default function Chat() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyPress={handleKeyPress}
-          placeholder="메시지를 입력하세요..."
+          placeholder="Type a message..."
           rows={1}
           disabled={loading}
         />
@@ -146,7 +139,7 @@ export default function Chat() {
           onClick={() => handleSend()}
           disabled={!input.trim() || loading}
         >
-          {loading ? '...' : '전송'}
+          {loading ? '...' : <TranslatableText textKey="chat.send">Send</TranslatableText>}
         </button>
       </footer>
     </div>

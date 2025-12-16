@@ -1,5 +1,7 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { TranslationProvider } from './i18n';
+import { TranslationTooltip } from './components/translatable';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
@@ -11,11 +13,14 @@ import Review from './pages/review/Review';
 import Chat from './pages/chat/Chat';
 import Mypage from './pages/mypage/Mypage';
 import Settings from './pages/settings/Settings';
+import Onboarding from './pages/onboarding/Onboarding';
 
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <TranslationProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <TranslationTooltip />
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
@@ -70,9 +75,21 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/onboarding"
+            element={
+              <ProtectedRoute>
+                <Onboarding />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Catch-all route */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+        </BrowserRouter>
+      </AuthProvider>
+    </TranslationProvider>
   );
 }
 

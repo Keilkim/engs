@@ -1,6 +1,6 @@
 /*
  * ===========================================
- * Buttons - SpongeBob Style Guide
+ * Buttons - Apple Titanium Black Style
  * ===========================================
  */
 
@@ -12,7 +12,7 @@
   gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
   font-size: var(--font-base);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1;
   text-align: center;
   border-radius: var(--radius-lg);
@@ -20,77 +20,54 @@
   transition: all var(--transition-normal);
   user-select: none;
   white-space: nowrap;
+  border: none;
 }
 
-/* Primary button - Sponge Yellow */
+/* Primary button - Apple Blue */
 .btn-primary {
-  background-color: var(--color-signature);
+  background-color: var(--color-highlight);
   color: var(--color-text);
-  border: 3px solid var(--color-accent);
-  box-shadow: var(--shadow-sponge);
+  box-shadow: var(--shadow-btn);
 }
 
 .btn-primary:hover {
-  background-color: var(--color-signature-light);
-  transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 6px 0 var(--color-accent), 0 8px 16px rgba(139, 69, 19, 0.25);
+  background-color: var(--color-highlight-light);
+  box-shadow: var(--shadow-btn-hover);
 }
 
 .btn-primary:active {
-  transform: translateY(2px) scale(0.98);
-  box-shadow: 0 2px 0 var(--color-accent), 0 3px 6px rgba(139, 69, 19, 0.2);
+  background-color: var(--color-highlight-dark);
 }
 
-/* Secondary button - Sand Cream */
+/* Secondary button - Glassmorphism */
 .btn-secondary {
-  background-color: var(--color-base-sub);
+  background-color: var(--glass-bg);
   color: var(--color-text);
-  border: 2px solid var(--color-accent);
+  border: 1px solid var(--glass-border);
 }
 
 .btn-secondary:hover {
-  background-color: var(--color-base-sub-light);
-  transform: translateY(-1px) scale(1.02);
-  box-shadow: var(--shadow-md);
+  background-color: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
 }
 
 .btn-secondary:active {
-  transform: translateY(1px) scale(0.98);
+  background-color: var(--color-base-sub);
 }
 
 /* Outline button */
 .btn-outline {
   background-color: transparent;
-  color: var(--color-accent);
-  border: 2px solid var(--color-accent);
+  color: var(--color-highlight);
+  border: 1px solid var(--color-highlight);
 }
 
 .btn-outline:hover {
-  background-color: var(--color-accent);
-  color: var(--color-text-inverse);
-  transform: scale(1.02);
+  background-color: rgba(10, 132, 255, 0.1);
 }
 
 .btn-outline:active {
-  transform: scale(0.98);
-}
-
-/* Highlight button - Tie Red */
-.btn-highlight {
-  background-color: var(--color-highlight);
-  color: var(--color-text-inverse);
-  border: 3px solid var(--color-highlight-dark);
-  box-shadow: 0 4px 0 var(--color-highlight-dark);
-}
-
-.btn-highlight:hover {
-  background-color: var(--color-highlight-light);
-  transform: translateY(-2px) scale(1.02);
-}
-
-.btn-highlight:active {
-  transform: translateY(2px) scale(0.98);
-  box-shadow: 0 2px 0 var(--color-highlight-dark);
+  background-color: rgba(10, 132, 255, 0.2);
 }
 
 /* Ghost button */
@@ -101,28 +78,56 @@
 }
 
 .btn-ghost:hover {
-  background-color: var(--color-base-sub);
-  transform: scale(1.02);
+  background-color: var(--glass-bg);
 }
 
 .btn-ghost:active {
-  transform: scale(0.98);
+  background-color: var(--glass-bg-hover);
 }
 
-/* Pink accent button - Patrick Pink */
-.btn-pink {
-  background-color: var(--color-sub-accent);
+/* Danger button */
+.btn-danger {
+  background-color: var(--color-error);
   color: var(--color-text);
-  border: 2px solid var(--color-sub-accent-dark);
+  box-shadow: var(--shadow-btn);
 }
 
-.btn-pink:hover {
-  background-color: var(--color-sub-accent-light);
-  transform: translateY(-1px) scale(1.02);
+.btn-danger:hover {
+  background-color: #FF6961;
 }
 
-.btn-pink:active {
-  transform: translateY(1px) scale(0.98);
+.btn-danger:active {
+  background-color: #E53935;
+}
+
+/* Success button */
+.btn-success {
+  background-color: var(--color-success);
+  color: var(--color-text-inverse);
+  box-shadow: var(--shadow-btn);
+}
+
+.btn-success:hover {
+  background-color: #34D860;
+}
+
+.btn-success:active {
+  background-color: #28C950;
+}
+
+/* Titanium button - signature style */
+.btn-titanium {
+  background-color: var(--color-signature);
+  color: var(--color-text);
+  box-shadow: var(--shadow-btn);
+}
+
+.btn-titanium:hover {
+  background-color: var(--color-signature-light);
+}
+
+.btn-titanium:active {
+  background-color: var(--color-signature-dark);
 }
 
 /* Button sizes */
@@ -166,19 +171,17 @@
 /* Disabled state */
 .btn:disabled,
 .btn.disabled {
-  background-color: var(--color-text-light);
-  color: var(--color-text-sub);
-  border-color: var(--color-text-light);
+  background-color: var(--color-accent);
+  color: var(--color-text-light);
+  border-color: var(--color-accent);
   box-shadow: none;
   cursor: not-allowed;
-  transform: none;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .btn:disabled:hover,
 .btn.disabled:hover {
-  transform: none;
-  box-shadow: none;
+  background-color: var(--color-accent);
 }
 
 /* Loading state */
@@ -193,7 +196,7 @@
   position: absolute;
   width: 1em;
   height: 1em;
-  border: 2px solid currentColor;
+  border: 2px solid var(--color-text);
   border-right-color: transparent;
   border-radius: var(--radius-full);
   animation: btn-spin 0.6s linear infinite;
@@ -224,4 +227,10 @@
 
 .btn-group .btn:not(:last-child) {
   border-right: none;
+}
+
+/* Focus state */
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }

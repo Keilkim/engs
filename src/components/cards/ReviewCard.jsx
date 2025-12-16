@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { TranslatableText } from '../translatable';
 
 export default function ReviewCard({ count, loading }) {
   const navigate = useNavigate();
@@ -20,25 +21,35 @@ export default function ReviewCard({ count, loading }) {
     <div className="review-card" onClick={handleClick}>
       <div className="review-card-header">
         <span className="review-icon">📚</span>
-        <h2>오늘의 복습</h2>
+        <h2><TranslatableText textKey="reviewCard.title">Today's Review</TranslatableText></h2>
       </div>
       <div className="review-card-body">
         {count > 0 ? (
           <>
             <p className="review-count">
-              <strong>{count}</strong>개의 항목
+              <strong>{count}</strong> <TranslatableText textKey="reviewCard.itemsToReview">items to review</TranslatableText>
             </p>
-            <p className="review-description">복습할 시간이에요!</p>
+            <p className="review-description">
+              <TranslatableText textKey="reviewCard.timeToReview">Time to review!</TranslatableText>
+            </p>
           </>
         ) : (
           <>
-            <p className="review-count">모두 완료!</p>
-            <p className="review-description">오늘 복습을 마쳤습니다</p>
+            <p className="review-count">
+              <TranslatableText textKey="reviewCard.allDone">All done!</TranslatableText>
+            </p>
+            <p className="review-description">
+              <TranslatableText textKey="reviewCard.completedToday">You've completed today's review</TranslatableText>
+            </p>
           </>
         )}
       </div>
       <button className="review-start-button">
-        {count > 0 ? '복습 시작하기' : '다시 보기'}
+        {count > 0 ? (
+          <TranslatableText textKey="reviewCard.startReview">Start Review</TranslatableText>
+        ) : (
+          <TranslatableText textKey="reviewCard.reviewAgain">Review Again</TranslatableText>
+        )}
       </button>
     </div>
   );

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { signIn, signInWithGoogle, signInWithKakao } from '../../services/auth';
+import { TranslatableText } from '../../components/translatable';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ export default function Login() {
       await signIn(email, password);
       navigate('/');
     } catch (err) {
-      setError('이메일 또는 비밀번호가 올바르지 않습니다');
+      setError('Invalid email or password');
     } finally {
       setLoading(false);
     }
@@ -28,7 +29,7 @@ export default function Login() {
     try {
       await signInWithGoogle();
     } catch (err) {
-      setError('Google 로그인에 실패했습니다');
+      setError('Google sign in failed');
     }
   }
 
@@ -36,7 +37,7 @@ export default function Login() {
     try {
       await signInWithKakao();
     } catch (err) {
-      setError('Kakao 로그인에 실패했습니다');
+      setError('Kakao sign in failed');
     }
   }
 
@@ -51,25 +52,29 @@ export default function Login() {
           {error && <div className="error-message">{error}</div>}
 
           <div className="input-group">
-            <label htmlFor="email">이메일</label>
+            <label htmlFor="email">
+              <TranslatableText textKey="login.email">Email</TranslatableText>
+            </label>
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="이메일을 입력하세요"
+              placeholder="Enter your email"
               required
             />
           </div>
 
           <div className="input-group">
-            <label htmlFor="password">비밀번호</label>
+            <label htmlFor="password">
+              <TranslatableText textKey="login.password">Password</TranslatableText>
+            </label>
             <input
               id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="비밀번호를 입력하세요"
+              placeholder="Enter your password"
               required
             />
           </div>
@@ -79,33 +84,33 @@ export default function Login() {
             className="login-button"
             disabled={loading}
           >
-            {loading ? '로그인 중...' : '로그인'}
+            {loading ? 'Signing in...' : <TranslatableText textKey="login.signIn">Sign In</TranslatableText>}
           </button>
         </form>
 
         <div className="social-login">
-          <p>소셜 계정으로 로그인</p>
+          <p><TranslatableText textKey="login.signInWithSocial">Sign in with social account</TranslatableText></p>
           <div className="social-buttons">
             <button
               type="button"
               onClick={handleGoogleLogin}
               className="google-button"
             >
-              Google로 계속하기
+              <TranslatableText textKey="login.continueWithGoogle">Continue with Google</TranslatableText>
             </button>
             <button
               type="button"
               onClick={handleKakaoLogin}
               className="kakao-button"
             >
-              Kakao로 계속하기
+              <TranslatableText textKey="login.continueWithKakao">Continue with Kakao</TranslatableText>
             </button>
           </div>
         </div>
 
         <div className="login-links">
-          <Link to="/register">회원가입</Link>
-          <Link to="/forgot-password">비밀번호 찾기</Link>
+          <Link to="/register"><TranslatableText textKey="login.signUp">Sign Up</TranslatableText></Link>
+          <Link to="/forgot-password"><TranslatableText textKey="login.forgotPassword">Forgot Password</TranslatableText></Link>
         </div>
       </div>
     </div>

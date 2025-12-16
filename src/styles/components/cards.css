@@ -1,6 +1,6 @@
 /*
  * ===========================================
- * Cards - SpongeBob Style Guide
+ * Cards - Apple Titanium Black Style
  * ===========================================
  */
 
@@ -8,8 +8,7 @@
 .card {
   background-color: var(--color-base-sub);
   border-radius: var(--radius-xl);
-  border: 2px solid var(--color-accent);
-  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-accent);
   overflow: hidden;
   transition: all var(--transition-normal);
 }
@@ -20,35 +19,46 @@
 }
 
 .card-interactive:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
+  border-color: var(--color-accent-light);
+  background-color: var(--color-base-sub-light);
 }
 
 .card-interactive:active {
-  transform: translateY(-2px);
+  background-color: var(--color-base-sub);
 }
 
-/* Elevated card - SpongeBob playful style */
+/* Elevated card */
 .card-elevated {
-  box-shadow: var(--shadow-sponge);
+  box-shadow: var(--shadow-card);
 }
 
 .card-elevated:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 0 var(--color-accent), 0 12px 20px rgba(139, 69, 19, 0.25);
+  box-shadow: var(--shadow-card-hover);
 }
 
 /* Flat card */
 .card-flat {
   border: none;
-  box-shadow: none;
+  background-color: transparent;
+}
+
+/* Glass card */
+.card-glass {
+  background-color: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.card-glass:hover {
+  background-color: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
 }
 
 /* Card sections */
 .card-header {
   padding: var(--spacing-md) var(--spacing-lg);
-  border-bottom: 1px solid var(--color-accent-light);
-  background-color: var(--color-base-sub-dark);
+  border-bottom: 1px solid var(--color-accent);
 }
 
 .card-body {
@@ -57,8 +67,7 @@
 
 .card-footer {
   padding: var(--spacing-md) var(--spacing-lg);
-  border-top: 1px solid var(--color-accent-light);
-  background-color: var(--color-base-sub-dark);
+  border-top: 1px solid var(--color-accent);
 }
 
 /* Card title */
@@ -98,30 +107,29 @@
 }
 
 /* Card variants */
-.card-signature {
-  background-color: var(--color-signature);
-  border-color: var(--color-signature-dark);
-}
-
 .card-highlight {
   background-color: var(--color-highlight);
-  border-color: var(--color-highlight-dark);
-  color: var(--color-text-inverse);
+  border: none;
 }
 
 .card-highlight .card-title,
 .card-highlight .card-text {
-  color: var(--color-text-inverse);
+  color: var(--color-text);
 }
 
-.card-pink {
-  background-color: var(--color-sub-accent);
-  border-color: var(--color-sub-accent-dark);
+.card-titanium {
+  background: linear-gradient(135deg, var(--color-signature-dark) 0%, var(--color-signature) 100%);
+  border: none;
 }
 
-.card-sky {
-  background-color: var(--color-base);
-  border-color: var(--color-base-dark);
+.card-titanium .card-title,
+.card-titanium .card-text {
+  color: var(--color-text);
+}
+
+.card-dark {
+  background-color: var(--color-base-dark);
+  border-color: var(--color-accent-dark);
 }
 
 /* Card sizes */
@@ -220,7 +228,7 @@
 
 .flashcard-back {
   transform: rotateY(180deg);
-  background-color: var(--color-signature);
+  background: linear-gradient(135deg, var(--color-highlight-dark) 0%, var(--color-highlight) 100%);
 }
 
 /* Source card - for library grid */
@@ -233,6 +241,7 @@
 .source-card .card-img {
   flex: 1;
   object-fit: cover;
+  background-color: var(--color-base-dark);
 }
 
 .source-card .card-body {
