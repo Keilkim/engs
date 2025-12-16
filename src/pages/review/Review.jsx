@@ -83,7 +83,7 @@ export default function Review() {
         </header>
 
         <main className="review-complete">
-          <div className="complete-icon">🎉</div>
+          <div className="complete-icon">Done</div>
           <h2><TranslatableText textKey="review.completedMessage">You've completed today's review</TranslatableText></h2>
 
           {total > 0 && (

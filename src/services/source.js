@@ -79,3 +79,26 @@ export async function fetchUrlContent(url) {
   if (error) throw error;
   return data;
 }
+
+// URL/PDF 스크린샷 캡처 (서버리스 함수 호출)
+export async function captureScreenshot(url, type = 'url') {
+  const { data, error } = await supabase.functions.invoke('capture-screenshot', {
+    body: { url, type },
+  });
+
+  if (error) throw error;
+  return data; // { screenshot: base64 or url }
+}
+
+// 소스에 스크린샷 업데이트
+export async function updateSourceScreenshot(id, screenshot) {
+  const { data, error } = await supabase
+    .from('sources')
+    .update({ screenshot })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}

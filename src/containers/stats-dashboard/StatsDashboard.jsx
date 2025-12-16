@@ -42,34 +42,30 @@ export default function StatsDashboard() {
     <div className="stats-dashboard">
       <div className="stats-grid">
         <div className="stat-card">
-          <span className="stat-icon">📚</span>
           <div className="stat-info">
             <span className="stat-value">{stats?.sourceCount || 0}</span>
-            <span className="stat-label">학습 소스</span>
+            <span className="stat-label">Sources</span>
           </div>
         </div>
 
         <div className="stat-card">
-          <span className="stat-icon">📝</span>
           <div className="stat-info">
             <span className="stat-value">{stats?.annotationCount || 0}</span>
-            <span className="stat-label">암기 카드</span>
+            <span className="stat-label">Cards</span>
           </div>
         </div>
 
         <div className="stat-card">
-          <span className="stat-icon">✅</span>
           <div className="stat-info">
             <span className="stat-value">{stats?.reviewedCount || 0}</span>
-            <span className="stat-label">복습 완료</span>
+            <span className="stat-label">Reviewed</span>
           </div>
         </div>
 
         <div className="stat-card">
-          <span className="stat-icon">📊</span>
           <div className="stat-info">
             <span className="stat-value">{stats?.reviewRate || 0}%</span>
-            <span className="stat-label">달성률</span>
+            <span className="stat-label">Rate</span>
           </div>
         </div>
       </div>

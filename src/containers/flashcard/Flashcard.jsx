@@ -50,7 +50,7 @@ export default function Flashcard({ item, onShowAnswer }) {
             onClick={handleSpeak}
             disabled={speaking}
           >
-            {speaking ? '🔊...' : '🔊'}
+            {speaking ? '...' : 'Speak'}
           </button>
         </div>
 
@@ -67,13 +67,13 @@ export default function Flashcard({ item, onShowAnswer }) {
               <div className="no-analysis">
                 <p className="answer-text">{annotation.selected_text}</p>
                 {annotation.memo_content && (
-                  <p className="memo-text">📝 {annotation.memo_content}</p>
+                  <p className="memo-text">{annotation.memo_content}</p>
                 )}
               </div>
             )}
           </div>
           <div className="source-info">
-            📚 {annotation.source?.title || 'Source'}
+            {annotation.source?.title || 'Source'}
           </div>
         </div>
       </div>

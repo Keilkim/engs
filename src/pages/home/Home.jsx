@@ -56,7 +56,7 @@ export default function Home() {
           className="mypage-button"
           onClick={() => navigate('/mypage')}
         >
-          <span className="profile-icon">👤</span>
+          <span className="profile-icon">M</span>
         </button>
       </header>
 
@@ -70,26 +70,26 @@ export default function Home() {
             <h2><TranslatableText textKey="home.learningSources">Learning Sources</TranslatableText></h2>
             <span className="source-count">{sources.length} <TranslatableText textKey="home.items">items</TranslatableText></span>
           </div>
-          <SourceGrid sources={sources} loading={loading} />
+          <SourceGrid sources={sources} loading={loading} onSourceDeleted={loadData} />
         </section>
       </main>
 
       <nav className="bottom-nav">
         <button className="nav-button active">
-          <span>🏠</span>
+          <span>H</span>
           <span><TranslatableText textKey="nav.home">Home</TranslatableText></span>
         </button>
         <button
           className="nav-button add-button"
           onClick={() => setShowAddModal(true)}
         >
-          <span>➕</span>
+          <span>+</span>
         </button>
         <button
           className="nav-button"
           onClick={() => navigate('/chat')}
         >
-          <span>💬</span>
+          <span>C</span>
           <span><TranslatableText textKey="nav.chat">Chat</TranslatableText></span>
         </button>
       </nav>

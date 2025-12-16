@@ -1,16 +1,121 @@
 import { useState, useRef } from 'react';
-import { createSource, uploadFile } from '../../services/source';
+import { createSource, uploadFile, captureScreenshot } from '../../services/source';
 import { TranslatableText } from '../translatable';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// PDF.js worker 설정 - use unpkg for better ESM compatibility
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
   const [activeTab, setActiveTab] = useState('file');
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState('');
   const [error, setError] = useState('');
   const fileInputRef = useRef(null);
 
   if (!isOpen) return null;
+
+  // Generate thumbnail from image file
+  async function generateImageThumbnail(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxSize = 300;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxSize) {
+              height = (height * maxSize) / width;
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = (width * maxSize) / height;
+              height = maxSize;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Convert all PDF pages to high-quality images
+  async function convertPdfToImages(file, onProgress) {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const numPages = pdf.numPages;
+    const pages = [];
+
+    for (let i = 1; i <= numPages; i++) {
+      onProgress?.(`Converting page ${i}/${numPages}...`);
+
+      const page = await pdf.getPage(i);
+      const scale = 2.0; // 고화질
+      const viewport = page.getViewport({ scale });
+
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      await page.render({
+        canvasContext: context,
+        viewport: viewport,
+      }).promise;
+
+      // 고화질 JPEG로 저장
+      const imageData = canvas.toDataURL('image/jpeg', 0.9);
+      pages.push(imageData);
+    }
+
+    return pages;
+  }
+
+  // Generate thumbnail from first page
+  function generateThumbnailFromPage(pageImage) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxSize = 300;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxSize) {
+            height = (height * maxSize) / width;
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width = (width * maxSize) / height;
+            height = maxSize;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = pageImage;
+    });
+  }
 
   async function handleFileUpload(e) {
     const file = e.target.files[0];
@@ -21,21 +126,48 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
 
     try {
       const fileType = file.type.includes('pdf') ? 'pdf' : 'image';
+      setLoadingStatus('Uploading file...');
       const { url: fileUrl } = await uploadFile(file);
 
+      let screenshot = null;
+
+      let pages = null;
+
+      if (fileType === 'image') {
+        // For images, generate thumbnail as screenshot
+        setLoadingStatus('Generating preview...');
+        screenshot = await generateImageThumbnail(file);
+      } else if (fileType === 'pdf') {
+        // For PDFs, convert all pages to images
+        try {
+          pages = await convertPdfToImages(file, setLoadingStatus);
+          // Use first page as thumbnail
+          if (pages.length > 0) {
+            setLoadingStatus('Generating thumbnail...');
+            screenshot = await generateThumbnailFromPage(pages[0]);
+          }
+        } catch (captureErr) {
+          console.warn('Could not convert PDF pages:', captureErr);
+        }
+      }
+
+      setLoadingStatus('Saving source...');
       await createSource({
         title: title || file.name,
         type: fileType,
         file_path: fileUrl,
-        content: '',
+        screenshot,
+        pages: pages ? JSON.stringify(pages) : null,
       });
 
       onSuccess();
       handleClose();
     } catch (err) {
+      console.error(err);
       setError('Failed to upload file');
     } finally {
       setLoading(false);
+      setLoadingStatus('');
     }
   }
 
@@ -51,19 +183,43 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
     setError('');
 
     try {
+      setLoadingStatus('Fetching content...');
+
+      // Capture screenshot and content of the URL
+      let screenshot = null;
+      let content = null;
+      let fetchedTitle = title;
+
+      try {
+        const screenshotData = await captureScreenshot(url, 'url');
+        screenshot = screenshotData.screenshot || null;
+        content = screenshotData.content || null;
+
+        if (!title && screenshotData.title) {
+          fetchedTitle = screenshotData.title;
+        }
+      } catch (captureErr) {
+        console.warn('Could not fetch content:', captureErr);
+        // Continue without content - user can still save the URL
+      }
+
+      setLoadingStatus('Saving source...');
       await createSource({
-        title: title || url,
+        title: fetchedTitle || url,
         type: 'url',
         file_path: url,
-        content: '',
+        screenshot,
+        content,
       });
 
       onSuccess();
       handleClose();
     } catch (err) {
+      console.error(err);
       setError('Failed to add URL');
     } finally {
       setLoading(false);
+      setLoadingStatus('');
     }
   }
 
@@ -130,7 +286,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                 onClick={() => fileInputRef.current?.click()}
                 disabled={loading}
               >
-                {loading ? 'Uploading...' : <TranslatableText textKey="addSource.selectFile">Select PDF or Image</TranslatableText>}
+                {loading ? (loadingStatus || 'Uploading...') : <TranslatableText textKey="addSource.selectFile">Select PDF or Image</TranslatableText>}
               </button>
               <p className="file-hint">
                 <TranslatableText textKey="addSource.supportedFormats">Supports PDF, PNG, JPG</TranslatableText>
@@ -154,7 +310,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                 className="submit-button"
                 disabled={loading}
               >
-                {loading ? 'Adding...' : <TranslatableText textKey="addSource.add">Add</TranslatableText>}
+                {loading ? (loadingStatus || 'Adding...') : <TranslatableText textKey="addSource.add">Add</TranslatableText>}
               </button>
             </form>
           )}

@@ -104,7 +104,7 @@ export default function Chat() {
         <h1><TranslatableText textKey="chat.aiChat">AI Chat</TranslatableText></h1>
         {sourceContext && (
           <span className="context-badge" title="Learning source connected">
-            📚
+            S
           </span>
         )}
       </header>

@@ -44,14 +44,14 @@ export default function Mypage() {
           className="settings-button"
           onClick={() => navigate('/settings')}
         >
-          ⚙️
+          Settings
         </button>
       </header>
 
       <main className="mypage-content">
         <section className="profile-section">
           <div className="profile-avatar">
-            <span className="avatar-icon">👤</span>
+            <span className="avatar-icon">{nickname.charAt(0).toUpperCase()}</span>
           </div>
           <div className="profile-info">
             <h2 className="profile-nickname">{nickname}</h2>
@@ -72,7 +72,6 @@ export default function Mypage() {
             className="menu-item"
             onClick={() => navigate('/settings')}
           >
-            <span>⚙️</span>
             <span><TranslatableText textKey="mypage.settings">Settings</TranslatableText></span>
             <span className="arrow">→</span>
           </button>
@@ -80,16 +79,14 @@ export default function Mypage() {
             className="menu-item"
             onClick={() => navigate('/onboarding')}
           >
-            <span>📖</span>
             <span><TranslatableText textKey="settings.viewOnboarding">View Guide</TranslatableText></span>
             <span className="arrow">→</span>
           </button>
           <button
-            className="menu-item"
+            className="menu-item logout-item"
             onClick={handleLogout}
             disabled={loggingOut}
           >
-            <span>🚪</span>
             <span>
               {loggingOut ? (
                 <TranslatableText textKey="mypage.signingOut">Signing out...</TranslatableText>

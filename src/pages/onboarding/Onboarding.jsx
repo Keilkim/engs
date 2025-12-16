@@ -5,7 +5,7 @@ import { TranslatableText } from '../../components/translatable';
 const STEPS = [
   {
     id: 'welcome',
-    icon: '👋',
+    step: 1,
     titleKey: 'onboarding.welcome.title',
     titleFallback: 'Welcome to ENGS!',
     subtitleKey: 'onboarding.welcome.subtitle',
@@ -15,7 +15,7 @@ const STEPS = [
   },
   {
     id: 'addSources',
-    icon: '📚',
+    step: 2,
     titleKey: 'onboarding.addSources.title',
     titleFallback: 'Add Learning Materials',
     subtitleKey: 'onboarding.addSources.subtitle',
@@ -28,7 +28,7 @@ const STEPS = [
   },
   {
     id: 'highlight',
-    icon: '✨',
+    step: 3,
     titleKey: 'onboarding.highlight.title',
     titleFallback: 'Learn While Reading',
     subtitleKey: 'onboarding.highlight.subtitle',
@@ -42,7 +42,7 @@ const STEPS = [
   },
   {
     id: 'review',
-    icon: '🔄',
+    step: 4,
     titleKey: 'onboarding.review.title',
     titleFallback: 'Spaced Repetition Review',
     subtitleKey: 'onboarding.review.subtitle',
@@ -55,7 +55,7 @@ const STEPS = [
   },
   {
     id: 'aiChat',
-    icon: '🤖',
+    step: 5,
     titleKey: 'onboarding.aiChat.title',
     titleFallback: 'Chat with AI',
     subtitleKey: 'onboarding.aiChat.subtitle',
@@ -118,7 +118,7 @@ export default function Onboarding() {
       </div>
 
       <main className="onboarding-content">
-        <div className="step-icon">{step.icon}</div>
+        <div className="step-number">{step.step}</div>
 
         <h1 className="step-title">
           <TranslatableText textKey={step.titleKey}>{step.titleFallback}</TranslatableText>

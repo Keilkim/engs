@@ -38,7 +38,7 @@ export default function ChatLog({ messages, onScrapToggle }) {
           className={`chat-message ${message.role}`}
         >
           <div className="message-avatar">
-            {message.role === 'user' ? '👤' : '🤖'}
+            {message.role === 'user' ? 'U' : 'AI'}
           </div>
           <div className="message-content">
             <div className="message-text">
@@ -50,7 +50,7 @@ export default function ChatLog({ messages, onScrapToggle }) {
                 onClick={() => handleScrapToggle(message)}
                 title={message.is_scrapped ? '스크랩 해제' : '스크랩'}
               >
-                {message.is_scrapped ? '⭐' : '☆'}
+                {message.is_scrapped ? 'Saved' : 'Save'}
               </button>
             )}
           </div>

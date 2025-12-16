@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { TranslationProvider } from './i18n';
-import { TranslationTooltip } from './components/translatable';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
@@ -20,8 +19,7 @@ function App() {
     <TranslationProvider>
       <AuthProvider>
         <BrowserRouter>
-          <TranslationTooltip />
-        <Routes>
+          <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />

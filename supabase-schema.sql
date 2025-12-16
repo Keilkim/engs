@@ -11,10 +11,18 @@ CREATE TABLE IF NOT EXISTS sources (
   type VARCHAR(20) NOT NULL CHECK (type IN ('pdf', 'url', 'image')),
   content TEXT,
   thumbnail TEXT,
+  screenshot TEXT,
+  pages TEXT,
   file_path TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   last_accessed TIMESTAMP WITH TIME ZONE
 );
+
+-- Migration: Add screenshot column if not exists
+-- ALTER TABLE sources ADD COLUMN IF NOT EXISTS screenshot TEXT;
+
+-- Migration: Add pages column for PDF page images (JSON array of base64 strings)
+-- ALTER TABLE sources ADD COLUMN IF NOT EXISTS pages TEXT;
 
 -- 2. annotations (어노테이션 - 하이라이트/메모)
 CREATE TABLE IF NOT EXISTS annotations (
@@ -26,8 +34,12 @@ CREATE TABLE IF NOT EXISTS annotations (
   selected_text TEXT,
   memo_content TEXT,
   ai_analysis_json TEXT,
+  selection_rect TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Migration: Add selection_rect column for image annotations
+-- ALTER TABLE annotations ADD COLUMN IF NOT EXISTS selection_rect TEXT;
 
 -- 3. review_items (복습 아이템)
 CREATE TABLE IF NOT EXISTS review_items (
@@ -194,3 +206,15 @@ CREATE POLICY "Users can delete own push_tokens" ON push_tokens
 -- 또는 SQL로:
 -- INSERT INTO storage.buckets (id, name, public)
 -- VALUES ('sources', 'sources', true);
+
+-- 업로드 허용
+CREATE POLICY "Allow authenticated uploads"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'sources');
+
+-- 읽기 허용
+CREATE POLICY "Allow public read"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'sources');

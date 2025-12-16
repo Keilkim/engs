@@ -20,7 +20,6 @@ export default function ReviewCard({ count, loading }) {
   return (
     <div className="review-card" onClick={handleClick}>
       <div className="review-card-header">
-        <span className="review-icon">📚</span>
         <h2><TranslatableText textKey="reviewCard.title">Today's Review</TranslatableText></h2>
       </div>
       <div className="review-card-body">
