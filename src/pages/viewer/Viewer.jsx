@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getSource, deleteSource } from '../../services/source';
-import { getAnnotations } from '../../services/annotation';
+import { getAnnotations, getVocabulary } from '../../services/annotation';
 import ContextMenu from '../../components/modals/ContextMenu';
 import AnnotationPopover from '../../components/modals/AnnotationPopover';
 import { TranslatableText } from '../../components/translatable';
@@ -21,6 +21,11 @@ export default function Viewer() {
   const mouseDownPos = useRef(null);
   const touchStartRef = useRef(null); // For swipe detection
   const mobileNavRef = useRef(null); // For auto-scrolling mobile nav
+  const scrollContainerRef = useRef(null); // For scroll tracking
+  const minimapRef = useRef(null); // For minimap viewport indicator
+
+  // Scroll tracking for minimap viewport indicator
+  const [viewportPosition, setViewportPosition] = useState({ top: 0, height: 100 });
 
   // Image selection state - highlighter style path
   const [isSelecting, setIsSelecting] = useState(false);
@@ -38,6 +43,12 @@ export default function Viewer() {
     position: { x: 0, y: 0 },
     annotation: null,
   });
+
+  // Vocabulary panel state
+  const [vocabulary, setVocabulary] = useState([]);
+  const [showVocabPanel, setShowVocabPanel] = useState(false);
+  const [vocabTooltip, setVocabTooltip] = useState({ word: null, definition: '' });
+  const vocabTooltipTimer = useRef(null);
 
   useEffect(() => {
     loadData();
@@ -74,12 +85,14 @@ export default function Viewer() {
   async function loadData() {
     setLoading(true);
     try {
-      const [sourceData, annotationsData] = await Promise.all([
+      const [sourceData, annotationsData, vocabData] = await Promise.all([
         getSource(id),
         getAnnotations(id),
+        getVocabulary(),
       ]);
       setSource(sourceData);
       setAnnotations(annotationsData || []);
+      setVocabulary(vocabData || []);
       setCurrentPage(0); // Reset to first page
     } catch (err) {
       setError('Unable to load source');
@@ -88,6 +101,30 @@ export default function Viewer() {
       setLoading(false);
     }
   }
+
+  // Show vocabulary tooltip for 5 seconds
+  function showVocabWord(word, definition) {
+    // Clear existing timer
+    if (vocabTooltipTimer.current) {
+      clearTimeout(vocabTooltipTimer.current);
+    }
+
+    setVocabTooltip({ word, definition });
+
+    // Auto-hide after 5 seconds
+    vocabTooltipTimer.current = setTimeout(() => {
+      setVocabTooltip({ word: null, definition: '' });
+    }, 5000);
+  }
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (vocabTooltipTimer.current) {
+        clearTimeout(vocabTooltipTimer.current);
+      }
+    };
+  }, []);
 
   function handleHighlightClick(e) {
     e.stopPropagation();
@@ -219,9 +256,21 @@ export default function Viewer() {
     }
 
     // Store path and bounding box for saving
+    // Only add stroke-width padding (no extra text padding)
+    const strokeWidth = 3; // SVG stroke-width percentage (matches CSS)
+    const verticalPadding = strokeWidth / 2; // Only stroke coverage, no extra
+
+    const paddedMinY = Math.max(0, minY - verticalPadding);
+    const paddedMaxY = Math.min(100, maxY + verticalPadding);
+
     const selectionData = {
       path: highlightPath,
-      bounds: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+      bounds: {
+        x: minX,
+        y: paddedMinY,
+        width: maxX - minX,
+        height: paddedMaxY - paddedMinY
+      },
       page: currentPage,
     };
 
@@ -247,6 +296,23 @@ export default function Viewer() {
     return points.map((p, i) =>
       `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
     ).join(' ');
+  }
+
+  // Handle minimap click to jump to position
+  function handleMinimapClick(e) {
+    const container = scrollContainerRef.current;
+    const minimap = minimapRef.current;
+    if (!container || !minimap) return;
+
+    const rect = minimap.getBoundingClientRect();
+    const clickY = e.clientY - rect.top;
+    const clickPercent = clickY / rect.height;
+
+    const targetScroll = clickPercent * container.scrollHeight - container.clientHeight / 2;
+    container.scrollTo({
+      top: Math.max(0, targetScroll),
+      behavior: 'smooth',
+    });
   }
 
   const handleTextSelection = useCallback((e) => {
@@ -375,6 +441,41 @@ export default function Viewer() {
     }
   }, [currentPage]);
 
+  // Scroll tracking for minimap viewport indicator
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const totalScrollable = scrollHeight - clientHeight;
+
+      if (totalScrollable <= 0) {
+        setViewportPosition({ top: 0, height: 100 });
+        return;
+      }
+
+      const viewportHeightPercent = (clientHeight / scrollHeight) * 100;
+      const topPercent = (scrollTop / scrollHeight) * 100;
+
+      setViewportPosition({
+        top: topPercent,
+        height: viewportHeightPercent,
+      });
+    };
+
+    // Initial calculation
+    handleScroll();
+
+    container.addEventListener('scroll', handleScroll);
+    window.addEventListener('resize', handleScroll);
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [source, currentPage]);
+
   // Register touch events with { passive: false } to allow preventDefault
   useEffect(() => {
     const container = imageContainerRef.current;
@@ -443,10 +544,11 @@ export default function Viewer() {
 
     // If we have a captured screenshot, show it
     if (displayImage) {
-      return (
-        <div className={`screenshot-viewer ${hasPages ? 'with-sidebar' : ''}`}>
-          {/* Page thumbnail sidebar */}
-          {hasPages && (
+      // PDF/Image with multiple pages - show page thumbnails on left
+      if (hasPages) {
+        return (
+          <div className="screenshot-viewer with-sidebar">
+            {/* Left Page Thumbnail Sidebar */}
             <div className="page-sidebar">
               <div className="page-sidebar-scroll">
                 {pages.map((pageImg, index) => (
@@ -461,111 +563,90 @@ export default function Viewer() {
                 ))}
               </div>
             </div>
-          )}
 
-          {/* Main image area */}
-          <div className="screenshot-main">
-            <div
-              ref={imageContainerRef}
-              className="screenshot-container"
-              onMouseDown={handleImagePointerDown}
-              onMouseMove={handleImagePointerMove}
-              onMouseUp={handleImagePointerUp}
-              onMouseLeave={() => isSelecting && setIsSelecting(false)}
-            >
-              <img
-                src={displayImage}
-                alt={source.title}
-                className="screenshot-image"
-                draggable={false}
-              />
+            {/* Right Main Content */}
+            <div className="screenshot-main">
+              <div
+                ref={imageContainerRef}
+                className="screenshot-container"
+                onMouseDown={handleImagePointerDown}
+                onMouseMove={handleImagePointerMove}
+                onMouseUp={handleImagePointerUp}
+                onMouseLeave={() => isSelecting && setIsSelecting(false)}
+              >
+                <img
+                  src={displayImage}
+                  alt={source.title}
+                  className="screenshot-image"
+                  draggable={false}
+                />
 
-              {/* SVG overlay for highlighter strokes */}
-              <svg className="highlighter-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-                {/* Current drawing stroke */}
-                {isSelecting && highlightPath.length > 1 && (
-                  <path
-                    d={pathToSvg(highlightPath)}
-                    className="highlighter-stroke drawing"
-                  />
-                )}
-
-                {/* Active selection - 형광펜 모양 유지 */}
-                {!isSelecting && contextMenu.isOpen && contextMenu.selectionRect?.path && (
-                  <path
-                    d={pathToSvg(contextMenu.selectionRect.path)}
-                    className="highlighter-stroke active"
-                  />
-                )}
-
-                {/* Saved annotation highlights - 형광펜 모양 유지 */}
-                {annotations
-                  .filter(a => {
-                    if (!a.selection_rect) return false;
-                    const data = JSON.parse(a.selection_rect);
-                    return data.page === currentPage;
-                  })
-                  .map(annotation => {
-                    const data = JSON.parse(annotation.selection_rect);
-                    // New format with path
-                    if (data.path) {
-                      const bounds = data.bounds || { x: 50, y: 50 };
+                {/* SVG overlay for highlighter strokes */}
+                <svg className="highlighter-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  {isSelecting && highlightPath.length > 1 && (
+                    <path d={pathToSvg(highlightPath)} className="highlighter-stroke drawing" />
+                  )}
+                  {!isSelecting && contextMenu.isOpen && contextMenu.selectionRect?.path && (
+                    <path d={pathToSvg(contextMenu.selectionRect.path)} className="highlighter-stroke active" />
+                  )}
+                  {annotations
+                    .filter(a => {
+                      if (!a.selection_rect) return false;
+                      const data = JSON.parse(a.selection_rect);
+                      return data.page === currentPage;
+                    })
+                    .map(annotation => {
+                      const data = JSON.parse(annotation.selection_rect);
+                      if (data.path) {
+                        const bounds = data.bounds || { x: 50, y: 50 };
+                        return (
+                          <path
+                            key={annotation.id}
+                            d={pathToSvg(data.path)}
+                            className="highlighter-stroke saved"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const containerRect = imageContainerRef.current.getBoundingClientRect();
+                              setAnnotationPopover({
+                                isOpen: true,
+                                position: {
+                                  x: containerRect.left + (bounds.x + (bounds.width || 0) / 2) * containerRect.width / 100,
+                                  y: containerRect.top + (bounds.y + (bounds.height || 0)) * containerRect.height / 100 + 10,
+                                },
+                                annotation,
+                              });
+                            }}
+                          />
+                        );
+                      }
                       return (
-                        <path
+                        <rect
                           key={annotation.id}
-                          d={pathToSvg(data.path)}
-                          className="highlighter-stroke saved"
+                          x={data.x} y={data.y} width={data.width} height={data.height}
+                          className="highlighter-rect saved"
                           onClick={(e) => {
                             e.stopPropagation();
                             const containerRect = imageContainerRef.current.getBoundingClientRect();
                             setAnnotationPopover({
                               isOpen: true,
                               position: {
-                                x: containerRect.left + (bounds.x + (bounds.width || 0) / 2) * containerRect.width / 100,
-                                y: containerRect.top + (bounds.y + (bounds.height || 0)) * containerRect.height / 100 + 10,
+                                x: containerRect.left + (data.x + data.width / 2) * containerRect.width / 100,
+                                y: containerRect.top + (data.y + data.height) * containerRect.height / 100 + 10,
                               },
                               annotation,
                             });
                           }}
                         />
                       );
-                    }
-                    // Old rect format fallback
-                    return (
-                      <rect
-                        key={annotation.id}
-                        x={data.x}
-                        y={data.y}
-                        width={data.width}
-                        height={data.height}
-                        className="highlighter-rect saved"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const containerRect = imageContainerRef.current.getBoundingClientRect();
-                          setAnnotationPopover({
-                            isOpen: true,
-                            position: {
-                              x: containerRect.left + (data.x + data.width / 2) * containerRect.width / 100,
-                              y: containerRect.top + (data.y + data.height) * containerRect.height / 100 + 10,
-                            },
-                            annotation,
-                          });
-                        }}
-                      />
-                    );
-                  })}
-              </svg>
-            </div>
+                    })}
+                </svg>
+              </div>
 
-            {/* Page indicator */}
-            {hasPages && (
               <div className="page-indicator-bottom">
                 {currentPage + 1} / {pages.length}
               </div>
-            )}
 
-            {/* Mobile bottom thumbnail navigation */}
-            {hasPages && (
+              {/* Mobile bottom thumbnail navigation */}
               <div className="page-nav-mobile">
                 <div className="page-nav-mobile-scroll" ref={mobileNavRef}>
                   {pages.map((pageImg, index) => (
@@ -580,31 +661,117 @@ export default function Viewer() {
                   ))}
                 </div>
               </div>
+            </div>
+
+            {source.type === 'pdf' && (
+              <a href={source.file_path} target="_blank" rel="noopener noreferrer" className="open-original-btn floating">
+                <TranslatableText textKey="viewer.openPdf">Open PDF</TranslatableText>
+              </a>
             )}
           </div>
+        );
+      }
 
-          {/* Open original link for URL type */}
-          {source.type === 'url' && (
-            <a
-              href={source.file_path}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="open-original-btn"
-            >
-              <TranslatableText textKey="viewer.openOriginal">Open Original</TranslatableText>
-            </a>
-          )}
-          {/* Open PDF for PDF type */}
-          {source.type === 'pdf' && (
-            <a
-              href={source.file_path}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="open-original-btn"
-            >
-              <TranslatableText textKey="viewer.openPdf">Open PDF</TranslatableText>
-            </a>
-          )}
+      // URL screenshot (single long image) - show minimap with viewport indicator
+      return (
+        <div className="screenshot-viewer with-minimap">
+          {/* Left Minimap Navigation */}
+          <div
+            className="minimap-sidebar"
+            ref={minimapRef}
+            onClick={handleMinimapClick}
+          >
+            <div className="minimap-content">
+              <img src={displayImage} alt="Minimap" className="minimap-image" />
+              <div
+                className="minimap-viewport"
+                style={{
+                  top: `${viewportPosition.top}%`,
+                  height: `${viewportPosition.height}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Right Scrollable Content Area */}
+          <div className="screenshot-main">
+            <div ref={scrollContainerRef} className="screenshot-scroll-container">
+              <div
+                ref={imageContainerRef}
+                className="screenshot-container"
+                onMouseDown={handleImagePointerDown}
+                onMouseMove={handleImagePointerMove}
+                onMouseUp={handleImagePointerUp}
+                onMouseLeave={() => isSelecting && setIsSelecting(false)}
+              >
+                <img
+                  src={displayImage}
+                  alt={source.title}
+                  className="screenshot-image"
+                  draggable={false}
+                />
+
+                <svg className="highlighter-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  {isSelecting && highlightPath.length > 1 && (
+                    <path d={pathToSvg(highlightPath)} className="highlighter-stroke drawing" />
+                  )}
+                  {!isSelecting && contextMenu.isOpen && contextMenu.selectionRect?.path && (
+                    <path d={pathToSvg(contextMenu.selectionRect.path)} className="highlighter-stroke active" />
+                  )}
+                  {annotations
+                    .filter(a => a.selection_rect)
+                    .map(annotation => {
+                      const data = JSON.parse(annotation.selection_rect);
+                      if (data.path) {
+                        const bounds = data.bounds || { x: 50, y: 50 };
+                        return (
+                          <path
+                            key={annotation.id}
+                            d={pathToSvg(data.path)}
+                            className="highlighter-stroke saved"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const containerRect = imageContainerRef.current.getBoundingClientRect();
+                              setAnnotationPopover({
+                                isOpen: true,
+                                position: {
+                                  x: containerRect.left + (bounds.x + (bounds.width || 0) / 2) * containerRect.width / 100,
+                                  y: containerRect.top + (bounds.y + (bounds.height || 0)) * containerRect.height / 100 + 10,
+                                },
+                                annotation,
+                              });
+                            }}
+                          />
+                        );
+                      }
+                      return (
+                        <rect
+                          key={annotation.id}
+                          x={data.x} y={data.y} width={data.width} height={data.height}
+                          className="highlighter-rect saved"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const containerRect = imageContainerRef.current.getBoundingClientRect();
+                            setAnnotationPopover({
+                              isOpen: true,
+                              position: {
+                                x: containerRect.left + (data.x + data.width / 2) * containerRect.width / 100,
+                                y: containerRect.top + (data.y + data.height) * containerRect.height / 100 + 10,
+                              },
+                              annotation,
+                            });
+                          }}
+                        />
+                      );
+                    })}
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <a href={source.file_path} target="_blank" rel="noopener noreferrer" className="open-original-btn floating">
+            <TranslatableText textKey="viewer.openOriginal">Open Original</TranslatableText>
+          </a>
         </div>
       );
     }
@@ -748,6 +915,58 @@ export default function Viewer() {
         onClose={closeAnnotationPopover}
         onDelete={handleAnnotationDeleted}
       />
+
+      {/* Vocabulary floating button */}
+      {vocabulary.length > 0 && (
+        <button
+          className="vocab-float-btn"
+          onClick={() => setShowVocabPanel(!showVocabPanel)}
+        >
+          {vocabulary.length}
+        </button>
+      )}
+
+      {/* Vocabulary Panel */}
+      {showVocabPanel && (
+        <div className="vocab-panel-overlay" onClick={() => setShowVocabPanel(false)}>
+          <div className="vocab-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="vocab-panel-header">
+              <h3>My Vocabulary ({vocabulary.length})</h3>
+              <button onClick={() => setShowVocabPanel(false)}>×</button>
+            </div>
+            <div className="vocab-panel-list">
+              {vocabulary.map((item) => {
+                const definition = item.ai_analysis_json
+                  ? JSON.parse(item.ai_analysis_json).definition || ''
+                  : '';
+                return (
+                  <div
+                    key={item.id}
+                    className="vocab-item"
+                    onClick={() => {
+                      showVocabWord(item.selected_text, definition);
+                      setShowVocabPanel(false);
+                    }}
+                  >
+                    <span className="vocab-word">{item.selected_text}</span>
+                    <span className="vocab-preview">
+                      {definition.slice(0, 50)}...
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Vocabulary Tooltip (5 seconds) */}
+      {vocabTooltip.word && (
+        <div className="vocab-tooltip" onClick={() => setVocabTooltip({ word: null, definition: '' })}>
+          <div className="vocab-tooltip-word">{vocabTooltip.word}</div>
+          <pre className="vocab-tooltip-definition">{vocabTooltip.definition}</pre>
+        </div>
+      )}
 
       {/* Delete confirmation modal */}
       {showDeleteConfirm && (

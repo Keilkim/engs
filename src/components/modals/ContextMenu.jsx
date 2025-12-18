@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { analyzeText, analyzeGrammar, extractTextFromImage, cropImageRegion } from '../../services/ai';
-import { createAnnotation } from '../../services/annotation';
+import { analyzeText, analyzeGrammar, analyzeGrammarPatterns, extractTextFromImage, cropImageRegion } from '../../services/ai';
+import { createAnnotation, createVocabularyItem } from '../../services/annotation';
 import GrammarDiagram from '../GrammarDiagram';
 
 export default function ContextMenu({
@@ -17,9 +17,13 @@ export default function ContextMenu({
   const [ocrLoading, setOcrLoading] = useState(false);
   const [extractedText, setExtractedText] = useState(null);
   const [analysisResult, setAnalysisResult] = useState(null);
-  const [grammarData, setGrammarData] = useState(null); // 문법 다이어그램 데이터
+  const [grammarData, setGrammarData] = useState(null); // 문법 다이어그램 데이터 (S-V-O)
+  const [aiPatterns, setAiPatterns] = useState(null); // AI 문법 패턴 데이터
+  const [grammarLoading, setGrammarLoading] = useState(false); // AI 분석 로딩
   const [showMemo, setShowMemo] = useState(false);
   const [memoText, setMemoText] = useState('');
+  const [wordSaved, setWordSaved] = useState(false); // 단어 저장 상태
+  const [savingWord, setSavingWord] = useState(false); // 단어 저장 중
 
   const isImageSelection = selectionRect && selectedText?.startsWith('[Image Selection');
   const displayText = extractedText || selectedText;
@@ -28,11 +32,15 @@ export default function ContextMenu({
   useEffect(() => {
     setAnalysisResult(null);
     setGrammarData(null);
+    setAiPatterns(null);
+    setGrammarLoading(false);
     setShowMemo(false);
     setMemoText('');
     setLoading(false);
     setExtractedText(null);
     setOcrLoading(false);
+    setWordSaved(false);
+    setSavingWord(false);
   }, [selectedText, selectionRect]);
 
   // Auto-OCR when image selection is made
@@ -84,12 +92,24 @@ export default function ContextMenu({
     }
   }
 
-  function handleGrammarAnalysis() {
+  async function handleGrammarAnalysis() {
     if (!displayText || displayText.startsWith('(')) return;
 
-    // Client-side grammar analysis using compromise.js
+    // 1. Client-side grammar analysis using compromise.js (즉시 표시)
     const result = analyzeGrammar(displayText);
     setGrammarData(result);
+    setAiPatterns(null);
+
+    // 2. AI grammar pattern analysis (비동기로 추가 로드)
+    setGrammarLoading(true);
+    try {
+      const patterns = await analyzeGrammarPatterns(displayText);
+      setAiPatterns(patterns);
+    } catch (err) {
+      console.error('AI 문법 패턴 분석 실패:', err);
+    } finally {
+      setGrammarLoading(false);
+    }
   }
 
   async function handleSaveHighlight() {
@@ -108,6 +128,26 @@ export default function ContextMenu({
       handleClose();
     } catch (err) {
       console.error('저장 실패:', err);
+    }
+  }
+
+  async function handleSaveVocabulary() {
+    if (!displayText || wordSaved || savingWord) return;
+
+    setSavingWord(true);
+    try {
+      // 단어와 분석 결과를 vocabulary로 저장
+      await createVocabularyItem(
+        displayText,
+        analysisResult?.content || '',
+        sourceId
+      );
+      setWordSaved(true);
+      onAnnotationCreated?.();
+    } catch (err) {
+      console.error('단어 저장 실패:', err);
+    } finally {
+      setSavingWord(false);
     }
   }
 
@@ -131,9 +171,13 @@ export default function ContextMenu({
   function handleClose() {
     setAnalysisResult(null);
     setGrammarData(null);
+    setAiPatterns(null);
+    setGrammarLoading(false);
     setShowMemo(false);
     setMemoText('');
     setExtractedText(null);
+    setWordSaved(false);
+    setSavingWord(false);
     onClose();
   }
 
@@ -208,6 +252,15 @@ export default function ContextMenu({
               <pre>{analysisResult.content}</pre>
             </div>
             <div className="result-actions">
+              {analysisResult.type === 'word' && (
+                <button
+                  onClick={handleSaveVocabulary}
+                  disabled={wordSaved || savingWord}
+                  className={`add-vocab-btn ${wordSaved ? 'saved' : ''}`}
+                >
+                  {savingWord ? '...' : wordSaved ? 'Added' : '+ Add'}
+                </button>
+              )}
               <button onClick={handleSaveHighlight}>
                 Save to Review
               </button>
@@ -220,7 +273,13 @@ export default function ContextMenu({
       {grammarData && (
         <GrammarDiagram
           grammarData={grammarData}
-          onClose={() => setGrammarData(null)}
+          aiPatterns={aiPatterns}
+          loading={grammarLoading}
+          onClose={() => {
+            setGrammarData(null);
+            setAiPatterns(null);
+            setGrammarLoading(false);
+          }}
         />
       )}
     </div>

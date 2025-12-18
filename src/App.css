@@ -305,6 +305,178 @@
   padding: var(--spacing-xs);
 }
 
+/* Add Vocabulary Button */
+.add-vocab-btn {
+  background-color: var(--color-success) !important;
+  color: var(--color-text) !important;
+}
+
+.add-vocab-btn:hover:not(:disabled) {
+  background-color: #34D860 !important;
+}
+
+.add-vocab-btn.saved {
+  background-color: var(--color-accent) !important;
+  color: var(--color-text-sub) !important;
+}
+
+.result-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+.result-actions button {
+  flex: 1;
+}
+
+/* Vocabulary Panel & Tooltip */
+.vocab-float-btn {
+  position: fixed;
+  bottom: 100px;
+  left: var(--spacing-md);
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--color-success) 0%, #34D860 100%);
+  color: var(--color-text);
+  border: none;
+  font-size: var(--font-lg);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  transition: all var(--transition-fast);
+}
+
+.vocab-float-btn:hover {
+  transform: scale(1.1);
+}
+
+.vocab-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.vocab-panel {
+  width: 100%;
+  max-width: 500px;
+  max-height: 60vh;
+  background: var(--color-base-sub);
+  border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.vocab-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--color-accent);
+}
+
+.vocab-panel-header h3 {
+  margin: 0;
+  font-size: var(--font-md);
+  color: var(--color-text);
+}
+
+.vocab-panel-header button {
+  background: none;
+  border: none;
+  color: var(--color-text-sub);
+  font-size: var(--font-xl);
+  cursor: pointer;
+  padding: var(--spacing-xs);
+}
+
+.vocab-panel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-sm);
+}
+
+.vocab-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.vocab-item:hover {
+  background: var(--color-accent);
+}
+
+.vocab-word {
+  font-size: var(--font-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-success);
+}
+
+.vocab-preview {
+  font-size: var(--font-xs);
+  color: var(--color-text-sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Vocabulary Tooltip (5-second popup) */
+.vocab-tooltip {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--color-base-sub);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-lg);
+  max-width: 90vw;
+  max-height: 70vh;
+  overflow-y: auto;
+  z-index: var(--z-tooltip);
+  box-shadow: 0 0 30px rgba(48, 209, 88, 0.3);
+  animation: vocabFadeIn 0.3s ease;
+}
+
+@keyframes vocabFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.vocab-tooltip-word {
+  font-size: var(--font-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-success);
+  margin-bottom: var(--spacing-md);
+  text-align: center;
+}
+
+.vocab-tooltip-definition {
+  font-size: var(--font-sm);
+  color: var(--color-text);
+  line-height: var(--line-height-relaxed);
+  white-space: pre-wrap;
+  margin: 0;
+  font-family: inherit;
+}
+
 /* Memo Input */
 .memo-input {
   display: flex;
@@ -348,7 +520,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: var(--z-modal);
+  z-index: var(--z-tooltip); /* Above context menu */
   padding: var(--spacing-md);
 }
 
@@ -434,10 +606,122 @@
 }
 
 .grammar-label {
-  font-size: var(--font-xs);
+  font-size: 10px;
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+}
+
+.grammar-word.has-role {
+  border-bottom-width: 3px;
+  border-bottom-style: solid;
+}
+
+.grammar-no-connections {
+  text-align: center;
+  color: var(--color-text-sub);
+  font-size: var(--font-sm);
+  padding: var(--spacing-md);
+  background-color: var(--color-accent);
+  border-radius: var(--radius-md);
+  margin-top: var(--spacing-md);
+}
+
+.grammar-no-connections small {
+  opacity: 0.7;
+}
+
+/* AI Grammar Patterns */
+.grammar-pattern-underline {
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 2px;
+  opacity: 0.8;
+}
+
+.grammar-word-container {
+  position: relative;
+}
+
+.grammar-pattern-arcs {
+  width: 100%;
+  margin-top: var(--spacing-sm);
+}
+
+.grammar-patterns-section {
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-accent);
+}
+
+.grammar-patterns-title {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-sub);
+  margin-bottom: var(--spacing-sm);
+}
+
+.grammar-patterns-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.grammar-pattern-item {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--color-base-dark);
+  border-radius: var(--radius-md);
+  border-left: 3px solid;
+}
+
+.pattern-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.pattern-type {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.pattern-words {
+  font-size: var(--font-sm);
+  color: var(--color-text-sub);
+  font-style: italic;
+}
+
+.pattern-explanation {
+  font-size: var(--font-xs);
+  color: var(--color-text);
+  line-height: var(--line-height-relaxed);
+}
+
+/* Grammar loading state */
+.grammar-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  color: var(--color-text-sub);
+  font-size: var(--font-sm);
+}
+
+.grammar-loading .loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-accent);
+  border-top-color: var(--color-highlight);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 .grammar-legend {
@@ -606,7 +890,92 @@
   height: calc(100vh - 120px);
 }
 
-/* Page thumbnail sidebar */
+/* New Minimap Layout */
+.screenshot-viewer.with-minimap {
+  flex-direction: row;
+  align-items: stretch;
+  gap: var(--spacing-md);
+  height: calc(100vh - 120px);
+  padding: var(--spacing-md);
+}
+
+/* Minimap Sidebar */
+.minimap-sidebar {
+  width: 120px;
+  height: 100%;
+  background-color: var(--color-base-sub);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-accent);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+
+.minimap-content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.minimap-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.minimap-viewport {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background-color: rgba(255, 255, 255, 0.15);
+  border: 2px solid var(--color-highlight);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+  box-shadow: 0 0 10px rgba(255, 214, 10, 0.3);
+  transition: top 0.1s ease-out, height 0.1s ease-out;
+}
+
+.minimap-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: var(--spacing-sm);
+  border-top: 1px solid var(--color-accent);
+  justify-content: center;
+}
+
+.minimap-page-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-sub);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.minimap-page-thumb:hover {
+  background-color: var(--color-text-sub);
+  color: var(--color-text);
+}
+
+.minimap-page-thumb.active {
+  background-color: var(--color-highlight);
+  color: var(--color-text);
+}
+
+/* Page thumbnail sidebar (legacy) */
 .page-sidebar {
   width: 100px;
   height: 100%;
@@ -690,6 +1059,48 @@
   gap: var(--spacing-md);
   min-width: 0;
   height: 100%;
+}
+
+/* Scroll container for viewport-limited view */
+.screenshot-scroll-container {
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-base-sub);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-accent) transparent;
+}
+
+.screenshot-scroll-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.screenshot-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.screenshot-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--color-accent);
+  border-radius: 3px;
+}
+
+.screenshot-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-sub);
+}
+
+.with-minimap .screenshot-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.with-minimap .screenshot-image {
+  max-width: 100%;
+  max-height: none;
+  width: 100%;
+  height: auto;
 }
 
 .page-indicator-bottom {
@@ -776,21 +1187,22 @@
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 
 .highlighter-stroke.drawing {
   stroke: rgba(255, 214, 10, 0.6);
-  stroke-width: 3;
+  stroke-width: 12;
 }
 
 .highlighter-stroke.active {
   stroke: rgba(255, 214, 10, 0.7);
-  stroke-width: 3;
+  stroke-width: 12;
 }
 
 .highlighter-stroke.saved {
   stroke: rgba(255, 214, 10, 0.5);
-  stroke-width: 2.5;
+  stroke-width: 10;
   cursor: pointer;
   pointer-events: stroke;
   transition: stroke var(--transition-fast), stroke-width var(--transition-fast);
@@ -798,24 +1210,26 @@
 
 .highlighter-stroke.saved:hover {
   stroke: rgba(255, 214, 10, 0.8);
-  stroke-width: 3.5;
+  stroke-width: 14;
 }
 
 /* Rectangle highlight styles */
 .highlighter-rect.active {
   fill: rgba(255, 214, 10, 0.3);
   stroke: rgba(255, 214, 10, 0.8);
-  stroke-width: 0.5;
+  stroke-width: 2;
   pointer-events: none;
+  vector-effect: non-scaling-stroke;
 }
 
 .highlighter-rect.saved {
   fill: rgba(255, 214, 10, 0.2);
   stroke: rgba(255, 214, 10, 0.6);
-  stroke-width: 0.3;
+  stroke-width: 2;
   cursor: pointer;
   pointer-events: fill;
   transition: fill var(--transition-fast), stroke var(--transition-fast);
+  vector-effect: non-scaling-stroke;
 }
 
 .highlighter-rect.saved:hover {
@@ -838,6 +1252,14 @@
 .open-original-btn:hover {
   background-color: var(--color-accent);
   border-color: var(--color-accent-light);
+}
+
+.open-original-btn.floating {
+  position: fixed;
+  bottom: var(--spacing-lg);
+  right: var(--spacing-lg);
+  z-index: 50;
+  box-shadow: var(--shadow-lg);
 }
 
 /* Viewer Page Navigation */
@@ -2316,22 +2738,69 @@
  */
 
 @media (max-width: 768px) {
-  /* Viewer - Hide sidebar on mobile */
+  /* Viewer with minimap - keep horizontal layout on mobile */
+  .screenshot-viewer.with-minimap {
+    flex-direction: row;
+    height: calc(100vh - 120px);
+    padding: var(--spacing-sm);
+    gap: var(--spacing-sm);
+  }
+
+  .screenshot-viewer.with-minimap .minimap-sidebar {
+    width: 60px;
+    display: flex;
+  }
+
+  .screenshot-viewer.with-minimap .screenshot-main {
+    flex: 1;
+    height: 100%;
+    min-width: 0;
+  }
+
+  .screenshot-viewer.with-minimap .screenshot-scroll-container {
+    height: 100%;
+    max-height: none;
+  }
+
+  .with-minimap .screenshot-image {
+    max-height: none;
+    width: 100%;
+  }
+
+  /* PDF/Image with pages - keep left sidebar on mobile */
   .screenshot-viewer.with-sidebar {
-    flex-direction: column;
-    height: auto;
+    flex-direction: row;
+    height: calc(100vh - 120px);
+    padding: var(--spacing-sm);
+    gap: var(--spacing-sm);
   }
 
   .screenshot-viewer.with-sidebar .page-sidebar {
-    display: none;
+    width: 60px;
+    display: block;
   }
 
   .screenshot-viewer.with-sidebar .screenshot-main {
-    width: 100%;
-    height: auto;
+    flex: 1;
+    height: 100%;
+    min-width: 0;
   }
 
-  /* Full width image on mobile */
+  .screenshot-viewer.with-sidebar .page-thumbnail {
+    aspect-ratio: 3/4;
+  }
+
+  .screenshot-viewer.with-sidebar .page-thumbnail .page-number {
+    font-size: 8px;
+    padding: 1px 4px;
+  }
+
+  /* Hide mobile bottom nav for sidebar layout */
+  .screenshot-viewer.with-sidebar .page-nav-mobile {
+    display: none;
+  }
+
+  /* Full width image on mobile for non-minimap views */
   .screenshot-container {
     width: 100%;
   }
@@ -2342,11 +2811,23 @@
   }
 
   .with-sidebar .screenshot-image {
-    max-height: 70vh;
+    max-height: none;
+    width: 100%;
   }
 
-  /* Page indicator more prominent on mobile */
-  .page-indicator-bottom {
+  /* Floating button adjustment for mobile */
+  .open-original-btn.floating {
+    bottom: var(--spacing-lg);
+    right: var(--spacing-md);
+  }
+
+  /* Hide mobile bottom nav when minimap is visible */
+  .screenshot-viewer.with-minimap .page-nav-mobile {
+    display: none;
+  }
+
+  /* Page indicator on mobile - only show for non-minimap views */
+  .screenshot-viewer:not(.with-minimap) .page-indicator-bottom {
     position: fixed;
     bottom: 80px;
     left: 50%;
@@ -2358,8 +2839,25 @@
     padding: var(--spacing-sm) var(--spacing-lg);
   }
 
-  /* Swipe hint on mobile */
-  .screenshot-container::after {
+  /* Hide page indicator for minimap layout - pages shown in minimap */
+  .screenshot-viewer.with-minimap .page-indicator-bottom {
+    display: none;
+  }
+
+  /* Minimap adjustments for mobile */
+  .screenshot-viewer.with-minimap .minimap-pages {
+    padding: 4px;
+    gap: 2px;
+  }
+
+  .screenshot-viewer.with-minimap .minimap-page-thumb {
+    width: 18px;
+    height: 18px;
+    font-size: 8px;
+  }
+
+  /* Swipe hint on mobile - only for non-minimap */
+  .screenshot-viewer:not(.with-minimap) .screenshot-container::after {
     content: '← 스와이프 →';
     position: absolute;
     bottom: 10px;

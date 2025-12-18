@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS sources (
   id BIGSERIAL PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   title VARCHAR(255) NOT NULL,
-  type VARCHAR(20) NOT NULL CHECK (type IN ('pdf', 'url', 'image')),
+  type VARCHAR(20) NOT NULL CHECK (type IN ('pdf', 'url', 'image', 'screenshot')),
   content TEXT,
   thumbnail TEXT,
   screenshot TEXT,
@@ -23,6 +23,23 @@ CREATE TABLE IF NOT EXISTS sources (
 
 -- Migration: Add pages column for PDF page images (JSON array of base64 strings)
 -- ALTER TABLE sources ADD COLUMN IF NOT EXISTS pages TEXT;
+
+-- Migration: Update type constraint to include 'screenshot'
+-- Run this if you already have the sources table:
+-- DO $$
+-- DECLARE
+--     constraint_name TEXT;
+-- BEGIN
+--     FOR constraint_name IN
+--         SELECT conname FROM pg_constraint
+--         WHERE conrelid = 'sources'::regclass AND contype = 'c'
+--         AND pg_get_constraintdef(oid) LIKE '%type%'
+--     LOOP
+--         EXECUTE 'ALTER TABLE sources DROP CONSTRAINT ' || constraint_name;
+--     END LOOP;
+-- END $$;
+-- ALTER TABLE sources ADD CONSTRAINT sources_type_check
+--   CHECK (type IN ('pdf', 'url', 'image', 'screenshot'));
 
 -- 2. annotations (어노테이션 - 하이라이트/메모)
 CREATE TABLE IF NOT EXISTS annotations (

@@ -77,3 +77,58 @@ async function createReviewItem(annotationId) {
 
   if (error) throw error;
 }
+
+// 모든 저장된 단어 조회 (vocabulary 타입)
+export async function getVocabulary() {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('annotations')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('type', 'vocabulary')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+// 단어 저장 (vocabulary 타입으로)
+export async function createVocabularyItem(word, definition, sourceId = null) {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('annotations')
+    .insert({
+      user_id: user.id,
+      source_id: sourceId,
+      type: 'vocabulary',
+      selected_text: word,
+      ai_analysis_json: JSON.stringify({ definition }),
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  // 복습 아이템으로도 등록
+  await createReviewItem(data.id);
+
+  return data;
+}
+
+// 단어가 이미 저장되어 있는지 확인
+export async function isWordSaved(word) {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('annotations')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('type', 'vocabulary')
+    .ilike('selected_text', word)
+    .limit(1);
+
+  if (error) throw error;
+  return data && data.length > 0;
+}

@@ -1,4 +1,3 @@
-import Tesseract from 'tesseract.js';
 import nlp from 'compromise';
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
@@ -202,6 +201,96 @@ export function analyzeGrammar(text) {
     connections,
     sentence: sentences[0] || null,
   };
+}
+
+// AI 기반 문법 패턴 분석 (Gemini API)
+export async function analyzeGrammarPatterns(text) {
+  const prompt = `Analyze the following English sentence and identify important grammar patterns.
+
+Sentence: "${text}"
+
+Return a JSON object with this structure:
+{
+  "patterns": [
+    {
+      "type": "pattern name in English (e.g., to-infinitive, passive voice)",
+      "typeKr": "한국어 패턴명 (예: to부정사, 수동태)",
+      "words": ["word1", "word2"],
+      "wordIndices": [0, 2],
+      "explanation": "Brief explanation in Korean (1-2 sentences)",
+      "color": "#hex"
+    }
+  ],
+  "sentence_structure": {
+    "subject": { "text": "subject words", "indices": [0] },
+    "verb": { "text": "verb words", "indices": [1] },
+    "object": { "text": "object words", "indices": [2, 3] }
+  }
+}
+
+Color suggestions:
+- to-infinitive: #60a5fa (blue)
+- gerund (-ing as noun): #f87171 (red)
+- passive voice: #fb923c (orange)
+- perfect tense: #facc15 (yellow)
+- relative clause: #c084fc (purple)
+- conditional: #4ade80 (green)
+- preposition + gerund: #2dd4bf (teal)
+
+Focus on these patterns:
+- to + infinitive (to부정사: 목적, 결과, 형용사적 용법)
+- by/for/without/of + ~ing (전치사+동명사)
+- passive voice (수동태: be + p.p)
+- perfect tense (완료시제: have/has/had + p.p)
+- relative clauses (관계대명사: who, which, that)
+- conditionals (가정법: if, unless, were)
+- participle constructions (분사구문)
+- comparative/superlative (비교급/최상급)
+
+wordIndices should be 0-based indices matching the word positions in the sentence.
+Return ONLY valid JSON, no markdown code blocks or extra text.`;
+
+  try {
+    const response = await fetch(`${API_URL}?key=${GOOGLE_API_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: prompt,
+          }],
+        }],
+        generationConfig: {
+          temperature: 0.3,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('AI 문법 분석에 실패했습니다');
+    }
+
+    const data = await response.json();
+    const responseText = data.candidates[0].content.parts[0].text;
+
+    // JSON 파싱 (마크다운 코드 블록 제거)
+    let jsonText = responseText.trim();
+    if (jsonText.startsWith('```')) {
+      jsonText = jsonText.replace(/```json?\n?/g, '').replace(/```/g, '');
+    }
+
+    const result = JSON.parse(jsonText);
+    return result;
+  } catch (err) {
+    console.error('Grammar pattern analysis failed:', err);
+    // 빈 결과 반환
+    return {
+      patterns: [],
+      sentence_structure: null,
+    };
+  }
 }
 
 // Free Dictionary API lookup
@@ -433,116 +522,50 @@ export async function cropImage(base64Image, region) {
   });
 }
 
-// 이미지 전처리 (OCR 인식률 향상) - 형광펜 제거 포함
-function preprocessImageForOCR(base64Image, scale = 2) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-
-      // 이미지 확대 (scale 배)
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-
-      // 이미지 스무딩 비활성화 (선명하게)
-      ctx.imageSmoothingEnabled = false;
-
-      // 흰색 배경
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // 확대된 이미지 그리기
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-      // 이미지 데이터 가져오기
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-
-      // 형광펜(노란색/밝은색) 제거 + 이진화
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-
-        // 노란색/형광펜 색상 감지 (R과 G가 높고, B가 낮음)
-        // 또는 전체적으로 밝은 색상 (배경/형광펜)
-        const isYellowHighlight = (r > 180 && g > 150 && b < 150);
-        const isBrightBackground = (r > 200 && g > 200 && b > 180);
-
-        if (isYellowHighlight || isBrightBackground) {
-          // 형광펜/배경은 흰색으로
-          data[i] = 255;
-          data[i + 1] = 255;
-          data[i + 2] = 255;
-        } else {
-          // 그레이스케일 변환
-          const gray = r * 0.299 + g * 0.587 + b * 0.114;
-
-          // 대비 강화
-          const contrast = 1.8;
-          const adjusted = ((gray - 128) * contrast) + 128;
-
-          // 이진화 (어두운 부분 = 텍스트)
-          const threshold = 120;
-          const binary = adjusted < threshold ? 0 : 255;
-
-          data[i] = binary;
-          data[i + 1] = binary;
-          data[i + 2] = binary;
-        }
-      }
-
-      ctx.putImageData(imageData, 0, 0);
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.src = base64Image;
-  });
-}
-
-// 이미지에서 텍스트 추출 (OCR) - Tesseract.js
+// 이미지에서 텍스트 추출 (OCR) - Gemini Vision
 export async function extractTextFromImage(base64Image) {
   try {
-    // 이미지 전처리 (확대 + 이진화)
-    const processedImage = await preprocessImageForOCR(base64Image, 3);
+    // base64 데이터에서 prefix 제거
+    const imageData = base64Image.replace(/^data:image\/\w+;base64,/, '');
 
-    const result = await Tesseract.recognize(processedImage, 'eng', {
-      logger: (m) => console.log(m),
+    const response = await fetch(`${API_URL}?key=${GOOGLE_API_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              text: `Extract ALL text from this image exactly as it appears.
+Return ONLY the extracted text, nothing else.
+If there are multiple lines, preserve the line breaks.
+If the image contains no readable text, return empty string.`
+            },
+            {
+              inline_data: {
+                mime_type: 'image/jpeg',
+                data: imageData,
+              },
+            },
+          ],
+        }],
+        generationConfig: {
+          temperature: 0.1,
+        },
+      }),
     });
 
-    // 이미지 높이 가져오기 (전처리에서 3배 확대됨)
-    const imgHeight = result.data.lines?.[0]?.words?.[0]?.bbox
-      ? Math.max(...result.data.words.map(w => w.bbox.y1))
-      : 100;
-
-    // 경계에 잘린 단어 제외 (상단/하단 5% 이내에 닿는 단어)
-    const edgeThreshold = imgHeight * 0.05;
-    const filteredWords = result.data.words?.filter(word => {
-      // 상단 경계에 닿는지 체크
-      const touchesTop = word.bbox.y0 < edgeThreshold;
-      // 하단 경계에 닿는지 체크
-      const touchesBottom = word.bbox.y1 > (imgHeight - edgeThreshold);
-      // 둘 다 아니면 포함
-      return !touchesTop && !touchesBottom;
-    }) || [];
-
-    // 필터링된 단어들로 텍스트 재구성
-    const filteredText = filteredWords.map(w => w.text).join(' ').trim();
-
-    console.log('Tesseract result:', result.data.text?.trim());
-    console.log('Filtered result:', filteredText, 'words:', filteredWords.length);
-
-    if (filteredText && filteredWords.length > 0) {
-      return filteredText;
+    if (!response.ok) {
+      console.error('Gemini Vision OCR failed:', await response.text());
+      return null;
     }
 
-    // 필터링 후 텍스트가 없으면 원본 반환 (단, confidence 체크)
-    const originalText = result.data.text?.trim();
-    if (originalText && result.data.confidence > 50) {
-      return originalText;
-    }
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
-    return null;
+    console.log('Gemini OCR result:', text);
+    return text || null;
   } catch (err) {
     console.error('OCR failed:', err);
     return null;
