@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { detectMainContent, cropImage } from './ai';
 
 // 소스 목록 조회
 export async function getSources() {
@@ -101,4 +102,42 @@ export async function updateSourceScreenshot(id, screenshot) {
 
   if (error) throw error;
   return data;
+}
+
+// Blob을 base64로 변환
+function blobToBase64(blob) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+}
+
+// 웹페이지 Full Page 스크린샷 캡처 (Microlink API)
+export async function captureWebpageScreenshot(url) {
+  // 1. Microlink API 호출 (fullPage=true로 전체 페이지 캡처)
+  const apiUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&screenshot.fullPage=true&meta=false`;
+  const response = await fetch(apiUrl);
+  const data = await response.json();
+
+  if (!data.data?.screenshot?.url) {
+    throw new Error('스크린샷 캡처 실패');
+  }
+
+  // 2. 스크린샷 이미지를 base64로 변환
+  const imgResponse = await fetch(data.data.screenshot.url);
+  const blob = await imgResponse.blob();
+  const base64 = await blobToBase64(blob);
+
+  // 3. Gemini Vision으로 메인 콘텐츠 영역 감지
+  // (헤더, 네비게이션, 사이드바, 푸터 제외)
+  const region = await detectMainContent(base64);
+
+  // 4. 해당 영역만 크롭
+  const croppedImage = await cropImage(base64, region);
+
+  return {
+    image: croppedImage,
+    title: data.data?.title || url,
+  };
 }

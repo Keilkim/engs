@@ -311,7 +311,7 @@ export async function detectMainContent(base64Image) {
   // base64 데이터에서 prefix 제거
   const imageData = base64Image.replace(/^data:image\/\w+;base64,/, '');
 
-  const response = await fetch(`${VISION_API_URL}?key=${GOOGLE_API_KEY}`, {
+  const response = await fetch(`${API_URL}?key=${GOOGLE_API_KEY}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -411,7 +411,7 @@ export async function extractTextFromImage(base64Image) {
   }
 }
 
-// 이미지 영역 크롭 후 base64 반환
+// 이미지 영역 크롭 후 base64 반환 (패딩 추가로 넓게 인식)
 export async function cropImageRegion(pages, page, region) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -419,16 +419,25 @@ export async function cropImageRegion(pages, page, region) {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
+      // 패딩 추가 (상하좌우 3% 여유)
+      const padding = 3;
+      const x = Math.max(0, region.x - padding);
+      const y = Math.max(0, region.y - padding);
+      const right = Math.min(100, region.x + region.width + padding);
+      const bottom = Math.min(100, region.y + region.height + padding);
+      const width = right - x;
+      const height = bottom - y;
+
       // 퍼센트를 픽셀로 변환
-      const x = (region.x / 100) * img.width;
-      const y = (region.y / 100) * img.height;
-      const width = (region.width / 100) * img.width;
-      const height = (region.height / 100) * img.height;
+      const px = (x / 100) * img.width;
+      const py = (y / 100) * img.height;
+      const pwidth = (width / 100) * img.width;
+      const pheight = (height / 100) * img.height;
 
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = pwidth;
+      canvas.height = pheight;
 
-      ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
+      ctx.drawImage(img, px, py, pwidth, pheight, 0, 0, pwidth, pheight);
 
       resolve(canvas.toDataURL('image/jpeg', 0.9));
     };

@@ -450,7 +450,7 @@ export default function Viewer() {
 
               {/* SVG overlay for highlighter strokes */}
               <svg className="highlighter-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-                {/* Current drawing stroke - 그리는 중에는 형광펜 */}
+                {/* Current drawing stroke */}
                 {isSelecting && highlightPath.length > 1 && (
                   <path
                     d={pathToSvg(highlightPath)}
@@ -458,18 +458,15 @@ export default function Viewer() {
                   />
                 )}
 
-                {/* Active selection - 완료 후에는 박스로 표시 */}
-                {!isSelecting && contextMenu.isOpen && contextMenu.selectionRect?.bounds && (
-                  <rect
-                    x={contextMenu.selectionRect.bounds.x}
-                    y={contextMenu.selectionRect.bounds.y}
-                    width={contextMenu.selectionRect.bounds.width}
-                    height={contextMenu.selectionRect.bounds.height}
-                    className="highlighter-rect active"
+                {/* Active selection - 형광펜 모양 유지 */}
+                {!isSelecting && contextMenu.isOpen && contextMenu.selectionRect?.path && (
+                  <path
+                    d={pathToSvg(contextMenu.selectionRect.path)}
+                    className="highlighter-stroke active"
                   />
                 )}
 
-                {/* Saved annotation highlights - 항상 박스로 표시 */}
+                {/* Saved annotation highlights - 형광펜 모양 유지 */}
                 {annotations
                   .filter(a => {
                     if (!a.selection_rect) return false;
@@ -478,15 +475,37 @@ export default function Viewer() {
                   })
                   .map(annotation => {
                     const data = JSON.parse(annotation.selection_rect);
-                    // Use bounds if available (new format), otherwise use direct x,y,width,height (old format)
-                    const bounds = data.bounds || data;
+                    // New format with path
+                    if (data.path) {
+                      const bounds = data.bounds || { x: 50, y: 50 };
+                      return (
+                        <path
+                          key={annotation.id}
+                          d={pathToSvg(data.path)}
+                          className="highlighter-stroke saved"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const containerRect = imageContainerRef.current.getBoundingClientRect();
+                            setAnnotationPopover({
+                              isOpen: true,
+                              position: {
+                                x: containerRect.left + (bounds.x + (bounds.width || 0) / 2) * containerRect.width / 100,
+                                y: containerRect.top + (bounds.y + (bounds.height || 0)) * containerRect.height / 100 + 10,
+                              },
+                              annotation,
+                            });
+                          }}
+                        />
+                      );
+                    }
+                    // Old rect format fallback
                     return (
                       <rect
                         key={annotation.id}
-                        x={bounds.x}
-                        y={bounds.y}
-                        width={bounds.width}
-                        height={bounds.height}
+                        x={data.x}
+                        y={data.y}
+                        width={data.width}
+                        height={data.height}
                         className="highlighter-rect saved"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -494,8 +513,8 @@ export default function Viewer() {
                           setAnnotationPopover({
                             isOpen: true,
                             position: {
-                              x: containerRect.left + (bounds.x + bounds.width / 2) * containerRect.width / 100,
-                              y: containerRect.top + (bounds.y + bounds.height) * containerRect.height / 100 + 10,
+                              x: containerRect.left + (data.x + data.width / 2) * containerRect.width / 100,
+                              y: containerRect.top + (data.y + data.height) * containerRect.height / 100 + 10,
                             },
                             annotation,
                           });
