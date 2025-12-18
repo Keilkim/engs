@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { analyzeText, analyzeGrammar, analyzeGrammarPatterns, extractTextFromImage, cropImageRegion } from '../../services/ai';
+import { analyzeText, analyzeGrammarPatterns, extractTextFromImage, cropImageRegion } from '../../services/ai';
 import { createAnnotation, createVocabularyItem } from '../../services/annotation';
 import GrammarDiagram from '../GrammarDiagram';
 
@@ -24,7 +24,6 @@ export default function ContextMenu({
   const [memoText, setMemoText] = useState('');
   const [wordSaved, setWordSaved] = useState(false);
   const [savingWord, setSavingWord] = useState(false);
-  const analyzedRef = useRef(false); // 분석 완료 여부 추적
 
   const isImageSelection = selectionRect && selectedText?.startsWith('[Image Selection');
   const displayText = extractedText || selectedText;
@@ -50,38 +49,35 @@ export default function ContextMenu({
     setOcrLoading(false);
     setWordSaved(false);
     setSavingWord(false);
-    analyzedRef.current = false;
   }, [selectedText, selectionRect]);
 
-  // 자동 분석 시작
+  // 메뉴 열릴 때 자동 처리
   useEffect(() => {
-    if (!isOpen || !selectedText || analyzedRef.current) return;
+    if (!isOpen || !selectedText) return;
 
     if (isImageSelection) {
-      // 이미지 선택 → OCR 먼저
+      // 이미지 선택 → OCR 시작
       if (pages && !ocrLoading && !extractedText) {
-        handleOCR();
+        runOCR();
       }
     } else {
-      // 텍스트 선택 → 바로 분석
+      // 일반 텍스트 → 바로 분석
       if (!loading && !analysisResult && !grammarData) {
-        analyzedRef.current = true;
-        autoAnalyze(selectedText);
+        runAnalysis(selectedText);
       }
     }
-  }, [isOpen, selectedText, isImageSelection, pages]);
+  }, [isOpen, selectedText, pages]);
 
   // OCR 완료 후 분석
   useEffect(() => {
-    if (extractedText && !extractedText.startsWith('(') && !analyzedRef.current) {
-      analyzedRef.current = true;
-      autoAnalyze(extractedText);
+    if (extractedText && !extractedText.startsWith('(') && !loading && !analysisResult && !grammarData) {
+      runAnalysis(extractedText);
     }
   }, [extractedText]);
 
   if (!isOpen || !selectedText) return null;
 
-  async function handleOCR() {
+  async function runOCR() {
     if (!pages || selectionRect?.page === undefined) return;
 
     setOcrLoading(true);
@@ -89,8 +85,9 @@ export default function ContextMenu({
       const bounds = selectionRect.bounds || selectionRect;
       const croppedImage = await cropImageRegion(pages, selectionRect.page, bounds);
       const text = await extractTextFromImage(croppedImage);
-      if (text) {
-        setExtractedText(text);
+      console.log('OCR 결과:', text);
+      if (text && text.trim()) {
+        setExtractedText(text.trim());
       } else {
         setExtractedText('(텍스트를 찾을 수 없습니다)');
       }
@@ -102,39 +99,33 @@ export default function ContextMenu({
     }
   }
 
-  // 자동 분석
-  async function autoAnalyze(text) {
-    if (!text || text.startsWith('(')) return;
+  // 텍스트 분석 실행
+  async function runAnalysis(text) {
+    if (!text || text.startsWith('(') || text.startsWith('[Image Selection')) return;
 
-    console.log('Auto analyzing:', text, 'isWord:', isWordOrPhrase(text));
+    console.log('분석 시작:', text, '단어여부:', isWordOrPhrase(text));
     setLoading(true);
 
-    if (isWordOrPhrase(text)) {
-      // 단어 → 번역
-      try {
+    try {
+      if (isWordOrPhrase(text)) {
+        // 단어/구 → 번역
         const result = await analyzeText(text, 'word');
         setAnalysisResult({ type: 'word', content: result });
-      } catch (err) {
-        console.error('단어 분석 실패:', err);
-        setAnalysisResult({ type: 'word', content: '분석에 실패했습니다.' });
-      }
-    } else {
-      // 문장 → 문법 분석
-      const result = analyzeGrammar(text);
-      setGrammarData(result);
+      } else {
+        // 문장 → 문법 분석
+        setGrammarData({ originalText: text });
+        setGrammarLoading(true);
 
-      setGrammarLoading(true);
-      try {
         const patterns = await analyzeGrammarPatterns(text);
         setAiPatterns(patterns);
-      } catch (err) {
-        console.error('AI 문법 패턴 분석 실패:', err);
-      } finally {
         setGrammarLoading(false);
       }
+    } catch (err) {
+      console.error('분석 실패:', err);
+      setAnalysisResult({ type: 'word', content: '분석에 실패했습니다.' });
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   async function handleSaveVocabulary() {
@@ -183,7 +174,6 @@ export default function ContextMenu({
     setExtractedText(null);
     setWordSaved(false);
     setSavingWord(false);
-    analyzedRef.current = false;
     onClose();
   }
 

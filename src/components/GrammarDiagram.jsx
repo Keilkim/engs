@@ -8,7 +8,7 @@ export default function GrammarDiagram({
   onSave,  // 저장 콜백
 }) {
   const patterns = aiPatterns?.patterns || [];
-  const originalText = grammarData?.words?.map(w => w.text).join(' ') || '';
+  const originalText = grammarData?.originalText || grammarData?.words?.map(w => w.text).join(' ') || '';
 
   // 선택된 패턴 인덱스
   const [selectedPatterns, setSelectedPatterns] = useState(new Set());

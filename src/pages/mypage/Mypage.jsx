@@ -10,6 +10,7 @@ export default function Mypage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [statsExpanded, setStatsExpanded] = useState(false);
 
   const nickname = user?.user_metadata?.nickname || 'User';
   const email = user?.email || '';
@@ -72,9 +73,15 @@ export default function Mypage() {
           </div>
         </section>
 
-        <section className="stats-section">
-          <h2><TranslatableText textKey="mypage.learningStats">Learning Stats</TranslatableText></h2>
-          <StatsDashboard />
+        <section className={`stats-section ${statsExpanded ? 'expanded' : 'collapsed'}`}>
+          <button
+            className="stats-toggle"
+            onClick={() => setStatsExpanded(!statsExpanded)}
+          >
+            <h2><TranslatableText textKey="mypage.learningStats">Learning Stats</TranslatableText></h2>
+            <span className="toggle-icon">{statsExpanded ? '−' : '+'}</span>
+          </button>
+          {statsExpanded && <StatsDashboard />}
         </section>
 
         <section className="dictionary-section">
