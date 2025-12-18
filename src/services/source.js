@@ -115,15 +115,15 @@ function blobToBase64(blob) {
 // 웹페이지 Full Page 스크린샷 캡처 (Microlink API)
 export async function captureWebpageScreenshot(url) {
   // 1. Microlink API 호출 - 전체 페이지 캡처
-  // waitUntil: 페이지 완전 로드 대기
-  // scroll: 스크롤해서 lazy-load 콘텐츠 로드
+  // viewport.height를 크게 설정해서 더 많은 콘텐츠 캡처
   const params = new URLSearchParams({
     url: url,
     screenshot: 'true',
     'screenshot.fullPage': 'true',
     'screenshot.type': 'png',
-    waitUntil: 'networkidle2',
-    scroll: 'bottom',
+    'viewport.width': '1440',
+    'viewport.height': '8000',
+    waitUntil: 'networkidle0',
     meta: 'false',
   });
 
