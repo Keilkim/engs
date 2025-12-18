@@ -20,6 +20,24 @@ const GRAMMAR_COLORS = {
   Determiner: '#94a3b8',   // 회색 - 관사/한정사
 };
 
+// Helper function to check if tags contains any of the target tags
+// Handles both array and object format from compromise.js
+function hasTag(tags, ...targetTags) {
+  if (!tags) return false;
+
+  // If tags is an array
+  if (Array.isArray(tags)) {
+    return targetTags.some(target => tags.includes(target));
+  }
+
+  // If tags is an object (older compromise.js format)
+  if (typeof tags === 'object') {
+    return targetTags.some(target => tags[target] === true || tags.hasOwnProperty(target));
+  }
+
+  return false;
+}
+
 // Compromise.js로 문법 분석 (API 없이 클라이언트에서 처리)
 export function analyzeGrammar(text) {
   const doc = nlp(text);
@@ -30,61 +48,65 @@ export function analyzeGrammar(text) {
   // 문장 구조 분석
   const sentences = doc.sentences().json();
 
+
   // 각 단어에 역할 부여
   const words = terms.map((term, index) => {
-    const tags = term.tags || [];
+    // compromise.js returns nested structure: term.terms[0].tags
+    const innerTerm = term.terms?.[0] || term;
+    const tags = innerTerm.tags || term.tags || [];
     let role = null;
     let color = null;
     let label = null;
 
-    // 동사 찾기
-    if (tags.includes('Verb')) {
+    // 동사 찾기 (Verb 또는 관련 시제 태그 체크)
+    if (hasTag(tags, 'Verb', 'PresentTense', 'PastTense', 'FutureTense', 'Infinitive', 'Gerund', 'Modal', 'Auxiliary', 'Copula')) {
       role = 'Verb';
       color = GRAMMAR_COLORS.Verb;
-      if (tags.includes('PastTense')) label = 'V (past)';
-      else if (tags.includes('PresentTense')) label = 'V (present)';
-      else if (tags.includes('Gerund')) label = 'V-ing';
-      else if (tags.includes('Infinitive')) label = 'to V';
+      if (hasTag(tags, 'PastTense')) label = 'V (past)';
+      else if (hasTag(tags, 'PresentTense')) label = 'V (present)';
+      else if (hasTag(tags, 'Gerund')) label = 'V-ing';
+      else if (hasTag(tags, 'Infinitive')) label = 'to V';
+      else if (hasTag(tags, 'Modal')) label = 'Modal';
       else label = 'V';
     }
     // 명사 (주어/목적어 후보)
-    else if (tags.includes('Noun') || tags.includes('ProperNoun')) {
+    else if (hasTag(tags, 'Noun', 'ProperNoun', 'Singular', 'Plural', 'Uncountable', 'Possessive')) {
       role = 'Noun';
       color = GRAMMAR_COLORS.Subject; // 기본은 주어색
       label = 'N';
     }
     // 대명사
-    else if (tags.includes('Pronoun')) {
+    else if (hasTag(tags, 'Pronoun', 'PersonalPronoun', 'ReflexivePronoun', 'Possessive')) {
       role = 'Pronoun';
       color = GRAMMAR_COLORS.Subject;
       label = 'Pron';
     }
     // 형용사
-    else if (tags.includes('Adjective')) {
+    else if (hasTag(tags, 'Adjective', 'Comparable', 'Superlative')) {
       role = 'Adjective';
       color = GRAMMAR_COLORS.Adjective;
       label = 'Adj';
     }
     // 부사
-    else if (tags.includes('Adverb')) {
+    else if (hasTag(tags, 'Adverb')) {
       role = 'Adverb';
       color = GRAMMAR_COLORS.Adverb;
       label = 'Adv';
     }
     // 전치사
-    else if (tags.includes('Preposition')) {
+    else if (hasTag(tags, 'Preposition')) {
       role = 'Preposition';
       color = GRAMMAR_COLORS.Preposition;
       label = 'Prep';
     }
     // 접속사
-    else if (tags.includes('Conjunction')) {
+    else if (hasTag(tags, 'Conjunction')) {
       role = 'Conjunction';
       color = GRAMMAR_COLORS.Conjunction;
       label = 'Conj';
     }
     // 관사/한정사
-    else if (tags.includes('Determiner') || tags.includes('Article')) {
+    else if (hasTag(tags, 'Determiner', 'Article')) {
       role = 'Determiner';
       color = GRAMMAR_COLORS.Determiner;
       label = 'Det';
@@ -106,23 +128,40 @@ export function analyzeGrammar(text) {
   let verbIndex = -1;
   let objectIndex = -1;
 
-  // 첫 번째 명사/대명사를 주어로
-  for (let i = 0; i < words.length; i++) {
-    if (words[i].role === 'Noun' || words[i].role === 'Pronoun') {
-      subjectIndex = i;
-      words[i].label = 'S'; // Subject
-      words[i].color = GRAMMAR_COLORS.Subject;
-      break;
-    }
-  }
-
-  // 동사 찾기
+  // 동사 먼저 찾기 (문장 구조 파악의 핵심)
   for (let i = 0; i < words.length; i++) {
     if (words[i].role === 'Verb') {
       verbIndex = i;
       break;
     }
   }
+
+
+  // 동사 앞의 명사/대명사를 주어로 (동사가 있는 경우)
+  if (verbIndex > 0) {
+    // 동사 바로 앞에서 거꾸로 찾기 (가장 가까운 명사가 주어)
+    for (let i = verbIndex - 1; i >= 0; i--) {
+      if (words[i].role === 'Noun' || words[i].role === 'Pronoun') {
+        subjectIndex = i;
+        words[i].label = 'S'; // Subject
+        words[i].color = GRAMMAR_COLORS.Subject;
+        break;
+      }
+    }
+  }
+
+  // 동사가 없으면 첫 번째 명사를 주어로 마킹만
+  if (verbIndex === -1) {
+    for (let i = 0; i < words.length; i++) {
+      if (words[i].role === 'Noun' || words[i].role === 'Pronoun') {
+        subjectIndex = i;
+        words[i].label = 'S'; // Subject
+        words[i].color = GRAMMAR_COLORS.Subject;
+        break;
+      }
+    }
+  }
+
 
   // 동사 뒤의 명사를 목적어로
   if (verbIndex !== -1) {
@@ -136,12 +175,13 @@ export function analyzeGrammar(text) {
     }
   }
 
+
   // 연결 관계 추가
   if (subjectIndex !== -1 && verbIndex !== -1) {
     connections.push({
       from: subjectIndex,
       to: verbIndex,
-      label: 'Subject → Verb',
+      label: 'S → V',
       color: '#60a5fa',
     });
   }
@@ -150,10 +190,11 @@ export function analyzeGrammar(text) {
     connections.push({
       from: verbIndex,
       to: objectIndex,
-      label: 'Verb → Object',
+      label: 'V → O',
       color: '#4ade80',
     });
   }
+
 
   return {
     text,
@@ -320,13 +361,18 @@ export async function detectMainContent(base64Image) {
       contents: [{
         parts: [
           {
-            text: `이 웹페이지 스크린샷에서 메인 콘텐츠 영역(본문)의 위치를 분석해주세요.
-헤더, 네비게이션, 사이드바, 푸터, 광고를 제외한 실제 본문 콘텐츠 영역만 찾아주세요.
+            text: `Analyze this webpage screenshot and find the main content area.
 
-다음 JSON 형식으로만 답변해주세요 (다른 텍스트 없이):
-{"x": 시작X좌표(0-100%), "y": 시작Y좌표(0-100%), "width": 너비(0-100%), "height": 높이(0-100%)}
+IMPORTANT: Be GENEROUS with the selection. Include ALL meaningful content:
+- Include ALL text, images, galleries, videos, cards, and visual elements
+- Include sidebars if they contain useful content (not just ads)
+- ONLY exclude: fixed navigation bars at top, cookie banners, sticky footers, and popup overlays
 
-예시: {"x": 20, "y": 15, "width": 60, "height": 70}`
+Return ONLY a JSON object (no other text):
+{"x": startX(0-100%), "y": startY(0-100%), "width": width(0-100%), "height": height(0-100%)}
+
+For most pages, the result should be close to: {"x": 0, "y": 5, "width": 100, "height": 90}
+Only crop more aggressively if there are obvious ads or empty margins.`
           },
           {
             inline_data: {
@@ -387,40 +433,64 @@ export async function cropImage(base64Image, region) {
   });
 }
 
-// 이미지 전처리 (대비 강화 + 그레이스케일)
-function preprocessImage(base64Image) {
+// 이미지 전처리 (OCR 인식률 향상) - 형광펜 제거 포함
+function preprocessImageForOCR(base64Image, scale = 2) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
-      // 이미지가 작으면 2배 확대
-      const scale = Math.max(1, Math.min(2, 300 / Math.min(img.width, img.height)));
+      // 이미지 확대 (scale 배)
       canvas.width = img.width * scale;
       canvas.height = img.height * scale;
 
-      // 이미지 그리기
+      // 이미지 스무딩 비활성화 (선명하게)
+      ctx.imageSmoothingEnabled = false;
+
+      // 흰색 배경
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 확대된 이미지 그리기
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
       // 이미지 데이터 가져오기
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
-      // 그레이스케일 + 대비 강화
+      // 형광펜(노란색/밝은색) 제거 + 이진화
       for (let i = 0; i < data.length; i += 4) {
-        // 그레이스케일
-        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
 
-        // 대비 강화 (contrast factor 1.5)
-        const contrast = 1.5;
-        const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
-        const enhanced = factor * (gray - 128) + 128;
+        // 노란색/형광펜 색상 감지 (R과 G가 높고, B가 낮음)
+        // 또는 전체적으로 밝은 색상 (배경/형광펜)
+        const isYellowHighlight = (r > 180 && g > 150 && b < 150);
+        const isBrightBackground = (r > 200 && g > 200 && b > 180);
 
-        const value = Math.max(0, Math.min(255, enhanced));
-        data[i] = value;
-        data[i + 1] = value;
-        data[i + 2] = value;
+        if (isYellowHighlight || isBrightBackground) {
+          // 형광펜/배경은 흰색으로
+          data[i] = 255;
+          data[i + 1] = 255;
+          data[i + 2] = 255;
+        } else {
+          // 그레이스케일 변환
+          const gray = r * 0.299 + g * 0.587 + b * 0.114;
+
+          // 대비 강화
+          const contrast = 1.8;
+          const adjusted = ((gray - 128) * contrast) + 128;
+
+          // 이진화 (어두운 부분 = 텍스트)
+          const threshold = 120;
+          const binary = adjusted < threshold ? 0 : 255;
+
+          data[i] = binary;
+          data[i + 1] = binary;
+          data[i + 2] = binary;
+        }
       }
 
       ctx.putImageData(imageData, 0, 0);
@@ -430,52 +500,52 @@ function preprocessImage(base64Image) {
   });
 }
 
-// 이미지에서 텍스트 추출 (OCR) - Tesseract.js 사용 (전처리 + 신뢰도 필터링)
+// 이미지에서 텍스트 추출 (OCR) - Tesseract.js
 export async function extractTextFromImage(base64Image) {
   try {
-    // 이미지 전처리
-    const processedImage = await preprocessImage(base64Image);
+    // 이미지 전처리 (확대 + 이진화)
+    const processedImage = await preprocessImageForOCR(base64Image, 3);
 
-    const result = await Tesseract.recognize(
-      processedImage,
-      'eng',
-      {
-        // logger: m => console.log(m) // Uncomment for debug
-      }
-    );
+    const result = await Tesseract.recognize(processedImage, 'eng', {
+      logger: (m) => console.log(m),
+    });
 
-    // 신뢰도 40% 이상인 단어만 추출 (기존 60%에서 완화)
-    const MIN_CONFIDENCE = 40;
-    const words = result.data.words || [];
+    // 이미지 높이 가져오기 (전처리에서 3배 확대됨)
+    const imgHeight = result.data.lines?.[0]?.words?.[0]?.bbox
+      ? Math.max(...result.data.words.map(w => w.bbox.y1))
+      : 100;
 
-    // 전체 텍스트도 확인 (신뢰도 낮아도 인식된 경우)
-    const fullText = result.data.text?.trim();
+    // 경계에 잘린 단어 제외 (상단/하단 5% 이내에 닿는 단어)
+    const edgeThreshold = imgHeight * 0.05;
+    const filteredWords = result.data.words?.filter(word => {
+      // 상단 경계에 닿는지 체크
+      const touchesTop = word.bbox.y0 < edgeThreshold;
+      // 하단 경계에 닿는지 체크
+      const touchesBottom = word.bbox.y1 > (imgHeight - edgeThreshold);
+      // 둘 다 아니면 포함
+      return !touchesTop && !touchesBottom;
+    }) || [];
 
-    const confidentWords = words
-      .filter(word => word.confidence >= MIN_CONFIDENCE)
-      .map(word => word.text);
+    // 필터링된 단어들로 텍스트 재구성
+    const filteredText = filteredWords.map(w => w.text).join(' ').trim();
 
-    if (confidentWords.length === 0) {
-      // 신뢰도 높은 단어가 없으면 전체 텍스트 반환 시도
-      return fullText || null;
+    console.log('Tesseract result:', result.data.text?.trim());
+    console.log('Filtered result:', filteredText, 'words:', filteredWords.length);
+
+    if (filteredText && filteredWords.length > 0) {
+      return filteredText;
     }
 
-    // 줄바꿈 유지하며 텍스트 조합
-    const lines = result.data.lines || [];
-    const confidentText = lines
-      .map(line => {
-        const lineWords = (line.words || [])
-          .filter(word => word.confidence >= MIN_CONFIDENCE)
-          .map(word => word.text);
-        return lineWords.join(' ');
-      })
-      .filter(line => line.trim().length > 0)
-      .join('\n');
+    // 필터링 후 텍스트가 없으면 원본 반환 (단, confidence 체크)
+    const originalText = result.data.text?.trim();
+    if (originalText && result.data.confidence > 50) {
+      return originalText;
+    }
 
-    return confidentText.trim() || fullText || null;
+    return null;
   } catch (err) {
-    console.error('Tesseract OCR failed:', err);
-    throw new Error('OCR 실패');
+    console.error('OCR failed:', err);
+    return null;
   }
 }
 
