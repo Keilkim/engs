@@ -78,7 +78,7 @@ async function createReviewItem(annotationId) {
   if (error) throw error;
 }
 
-// 모든 저장된 단어 조회 (vocabulary 타입)
+// 모든 저장된 단어 조회 (highlight 타입 중 isVocabulary=true)
 export async function getVocabulary() {
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -86,14 +86,23 @@ export async function getVocabulary() {
     .from('annotations')
     .select('*')
     .eq('user_id', user.id)
-    .eq('type', 'vocabulary')
+    .eq('type', 'highlight')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data;
+
+  // Filter vocabulary items by ai_analysis_json.isVocabulary
+  return (data || []).filter(item => {
+    try {
+      const json = JSON.parse(item.ai_analysis_json || '{}');
+      return json.isVocabulary === true;
+    } catch {
+      return false;
+    }
+  });
 }
 
-// 단어 저장 (vocabulary 타입으로)
+// 단어 저장 (highlight 타입으로, isVocabulary 마커 추가)
 export async function createVocabularyItem(word, definition, sourceId = null) {
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -102,9 +111,9 @@ export async function createVocabularyItem(word, definition, sourceId = null) {
     .insert({
       user_id: user.id,
       source_id: sourceId,
-      type: 'vocabulary',
+      type: 'highlight',
       selected_text: word,
-      ai_analysis_json: JSON.stringify({ definition }),
+      ai_analysis_json: JSON.stringify({ isVocabulary: true, definition }),
     })
     .select()
     .single();
@@ -121,16 +130,25 @@ export async function createVocabularyItem(word, definition, sourceId = null) {
 export async function isWordSaved(word) {
   const { data: { user } } = await supabase.auth.getUser();
 
+  // highlight 타입 중 해당 단어를 가진 것 조회
   const { data, error } = await supabase
     .from('annotations')
-    .select('id')
+    .select('id, ai_analysis_json')
     .eq('user_id', user.id)
-    .eq('type', 'vocabulary')
-    .ilike('selected_text', word)
-    .limit(1);
+    .eq('type', 'highlight')
+    .ilike('selected_text', word);
 
   if (error) throw error;
-  return data && data.length > 0;
+
+  // Filter by isVocabulary marker
+  return (data || []).some(item => {
+    try {
+      const json = JSON.parse(item.ai_analysis_json || '{}');
+      return json.isVocabulary === true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 // 단어 조회 (소스 정보 포함)
@@ -141,11 +159,20 @@ export async function getVocabularyWithSource() {
     .from('annotations')
     .select('*, sources(title)')
     .eq('user_id', user.id)
-    .eq('type', 'vocabulary')
+    .eq('type', 'highlight')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+
+  // Filter vocabulary items
+  return (data || []).filter(item => {
+    try {
+      const json = JSON.parse(item.ai_analysis_json || '{}');
+      return json.isVocabulary === true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 // 문법 패턴 조회 (소스 정보 포함)

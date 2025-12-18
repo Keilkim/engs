@@ -17,16 +17,26 @@ export default function ContextMenu({
   const [ocrLoading, setOcrLoading] = useState(false);
   const [extractedText, setExtractedText] = useState(null);
   const [analysisResult, setAnalysisResult] = useState(null);
-  const [grammarData, setGrammarData] = useState(null); // 문법 다이어그램 데이터 (S-V-O)
-  const [aiPatterns, setAiPatterns] = useState(null); // AI 문법 패턴 데이터
-  const [grammarLoading, setGrammarLoading] = useState(false); // AI 분석 로딩
+  const [grammarData, setGrammarData] = useState(null);
+  const [aiPatterns, setAiPatterns] = useState(null);
+  const [grammarLoading, setGrammarLoading] = useState(false);
   const [showMemo, setShowMemo] = useState(false);
   const [memoText, setMemoText] = useState('');
-  const [wordSaved, setWordSaved] = useState(false); // 단어 저장 상태
-  const [savingWord, setSavingWord] = useState(false); // 단어 저장 중
+  const [wordSaved, setWordSaved] = useState(false);
+  const [savingWord, setSavingWord] = useState(false);
+  const [analysisType, setAnalysisType] = useState(null); // 'word' or 'grammar'
 
   const isImageSelection = selectionRect && selectedText?.startsWith('[Image Selection');
   const displayText = extractedText || selectedText;
+
+  // 단어인지 문장인지 판별
+  function isWordOrPhrase(text) {
+    if (!text) return false;
+    const trimmed = text.trim();
+    const wordCount = trimmed.split(/\s+/).length;
+    // 2단어 이하이고 문장 끝 부호가 없으면 단어로 판단
+    return wordCount <= 2 && !/[.!?]$/.test(trimmed);
+  }
 
   // Reset state when selection changes
   useEffect(() => {
@@ -41,6 +51,7 @@ export default function ContextMenu({
     setOcrLoading(false);
     setWordSaved(false);
     setSavingWord(false);
+    setAnalysisType(null);
   }, [selectedText, selectionRect]);
 
   // Auto-OCR when image selection is made
@@ -50,6 +61,13 @@ export default function ContextMenu({
     }
   }, [isOpen, isImageSelection, pages]);
 
+  // 텍스트가 준비되면 자동 분석
+  useEffect(() => {
+    if (displayText && !displayText.startsWith('(') && !loading && !analysisResult && !grammarData && !ocrLoading) {
+      autoAnalyze(displayText);
+    }
+  }, [displayText, ocrLoading]);
+
   if (!isOpen || !selectedText) return null;
 
   async function handleOCR() {
@@ -57,12 +75,8 @@ export default function ContextMenu({
 
     setOcrLoading(true);
     try {
-      // Get bounds from selection (support both old rect format and new path format)
       const bounds = selectionRect.bounds || selectionRect;
-
-      // Crop the selected region
       const croppedImage = await cropImageRegion(pages, selectionRect.page, bounds);
-      // Extract text with OCR
       const text = await extractTextFromImage(croppedImage);
       if (text) {
         setExtractedText(text);
@@ -77,58 +91,40 @@ export default function ContextMenu({
     }
   }
 
-  async function handleWordAnalysis() {
-    if (!displayText || displayText.startsWith('(')) return;
+  // 자동 분석 - 단어면 번역, 문장이면 문법 분석
+  async function autoAnalyze(text) {
+    if (!text || text.startsWith('(')) return;
 
     setLoading(true);
-    try {
-      const result = await analyzeText(displayText, 'word');
-      setAnalysisResult({ type: 'word', content: result });
-    } catch (err) {
-      console.error('단어 분석 실패:', err);
-      setAnalysisResult({ type: 'word', content: '분석에 실패했습니다. API 키를 확인해주세요.' });
-    } finally {
-      setLoading(false);
+
+    if (isWordOrPhrase(text)) {
+      // 단어/구 → 번역
+      setAnalysisType('word');
+      try {
+        const result = await analyzeText(text, 'word');
+        setAnalysisResult({ type: 'word', content: result });
+      } catch (err) {
+        console.error('단어 분석 실패:', err);
+        setAnalysisResult({ type: 'word', content: '분석에 실패했습니다.' });
+      }
+    } else {
+      // 문장 → 문법 분석
+      setAnalysisType('grammar');
+      const result = analyzeGrammar(text);
+      setGrammarData(result);
+
+      setGrammarLoading(true);
+      try {
+        const patterns = await analyzeGrammarPatterns(text);
+        setAiPatterns(patterns);
+      } catch (err) {
+        console.error('AI 문법 패턴 분석 실패:', err);
+      } finally {
+        setGrammarLoading(false);
+      }
     }
-  }
 
-  async function handleGrammarAnalysis() {
-    if (!displayText || displayText.startsWith('(')) return;
-
-    // 1. Client-side grammar analysis using compromise.js (즉시 표시)
-    const result = analyzeGrammar(displayText);
-    setGrammarData(result);
-    setAiPatterns(null);
-
-    // 2. AI grammar pattern analysis (비동기로 추가 로드)
-    setGrammarLoading(true);
-    try {
-      const patterns = await analyzeGrammarPatterns(displayText);
-      setAiPatterns(patterns);
-    } catch (err) {
-      console.error('AI 문법 패턴 분석 실패:', err);
-    } finally {
-      setGrammarLoading(false);
-    }
-  }
-
-  async function handleSaveHighlight() {
-    try {
-      await createAnnotation({
-        source_id: sourceId,
-        type: 'highlight',
-        selected_text: displayText,
-        ai_analysis_json: analysisResult
-          ? JSON.stringify(analysisResult)
-          : null,
-        coordinates: JSON.stringify(position),
-        selection_rect: selectionRect ? JSON.stringify(selectionRect) : null,
-      });
-      onAnnotationCreated?.();
-      handleClose();
-    } catch (err) {
-      console.error('저장 실패:', err);
-    }
+    setLoading(false);
   }
 
   async function handleSaveVocabulary() {
@@ -136,7 +132,6 @@ export default function ContextMenu({
 
     setSavingWord(true);
     try {
-      // 단어와 분석 결과를 vocabulary로 저장
       await createVocabularyItem(
         displayText,
         analysisResult?.content || '',
@@ -178,6 +173,7 @@ export default function ContextMenu({
     setExtractedText(null);
     setWordSaved(false);
     setSavingWord(false);
+    setAnalysisType(null);
     onClose();
   }
 
@@ -194,40 +190,7 @@ export default function ContextMenu({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {!analysisResult && !showMemo ? (
-          <>
-            <div className="context-menu-header">
-              {ocrLoading ? (
-                <span className="ocr-loading">텍스트 추출 중...</span>
-              ) : (
-                <span className="selected-preview">
-                  "{displayText?.slice(0, 50)}{displayText?.length > 50 ? '...' : ''}"
-                </span>
-              )}
-            </div>
-            <div className="context-menu-buttons">
-              <button
-                onClick={handleWordAnalysis}
-                disabled={loading || ocrLoading || !displayText || displayText.startsWith('(')}
-              >
-                Word
-              </button>
-              <button
-                onClick={handleGrammarAnalysis}
-                disabled={loading || ocrLoading || !displayText || displayText.startsWith('(')}
-              >
-                Grammar
-              </button>
-              <button onClick={() => setShowMemo(true)} disabled={ocrLoading}>
-                Memo
-              </button>
-              <button onClick={handleClose} className="delete-selection-btn">
-                ✕
-              </button>
-            </div>
-            {loading && <div className="loading-indicator">분석 중...</div>}
-          </>
-        ) : showMemo ? (
+        {showMemo ? (
           <div className="memo-input">
             <textarea
               value={memoText}
@@ -242,29 +205,39 @@ export default function ContextMenu({
               </button>
             </div>
           </div>
-        ) : (
+        ) : (loading || ocrLoading) ? (
+          <div className="context-menu-loading">
+            <span className="loading-text">
+              {ocrLoading ? '텍스트 추출 중...' : '분석 중...'}
+            </span>
+          </div>
+        ) : analysisResult ? (
           <div className="analysis-result">
             <div className="result-header">
-              <span>{analysisResult.type === 'word' ? 'Word Analysis' : 'Grammar Analysis'}</span>
-              <button onClick={() => setAnalysisResult(null)}>Back</button>
+              <span className="selected-word">{displayText}</span>
             </div>
             <div className="result-content">
               <pre>{analysisResult.content}</pre>
             </div>
             <div className="result-actions">
-              {analysisResult.type === 'word' && (
-                <button
-                  onClick={handleSaveVocabulary}
-                  disabled={wordSaved || savingWord}
-                  className={`add-vocab-btn ${wordSaved ? 'saved' : ''}`}
-                >
-                  {savingWord ? '...' : wordSaved ? 'Added' : '+ Add'}
-                </button>
-              )}
-              <button onClick={handleSaveHighlight}>
-                Save to Review
+              <button onClick={() => setShowMemo(true)} className="memo-btn">
+                Memo
+              </button>
+              <button onClick={handleClose} className="close-btn">
+                Close
+              </button>
+              <button
+                onClick={handleSaveVocabulary}
+                disabled={wordSaved || savingWord}
+                className={`add-vocab-btn ${wordSaved ? 'saved' : ''}`}
+              >
+                {savingWord ? '...' : wordSaved ? 'Added' : 'Add'}
               </button>
             </div>
+          </div>
+        ) : (
+          <div className="context-menu-loading">
+            <span className="loading-text">분석 중...</span>
           </div>
         )}
       </div>
@@ -279,9 +252,9 @@ export default function ContextMenu({
             setGrammarData(null);
             setAiPatterns(null);
             setGrammarLoading(false);
+            handleClose();
           }}
           onSave={async (data) => {
-            // 선택된 문법 패턴을 annotation으로 저장
             await createAnnotation({
               source_id: sourceId,
               type: 'highlight',

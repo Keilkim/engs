@@ -5,9 +5,6 @@ const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 // Use Gemini 2.0 Flash (available in current API)
 const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
-// Free Dictionary API for word lookup
-const DICTIONARY_API_URL = 'https://api.dictionaryapi.dev/api/v2/entries/en';
-
 // Language name mapping for prompts
 const LANGUAGE_NAMES = {
   Korean: 'Korean (한국어)',
@@ -320,94 +317,30 @@ Return ONLY valid JSON, no markdown code blocks or extra text.`;
   }
 }
 
-// Free Dictionary API lookup
-async function lookupDictionary(word) {
-  // Clean the word - get first word if multiple
-  const cleanWord = word.trim().split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, '');
-
-  if (!cleanWord || cleanWord.length < 2) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(`${DICTIONARY_API_URL}/${encodeURIComponent(cleanWord)}`);
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = await response.json();
-    const entry = data[0];
-
-    if (!entry) return null;
-
-    // Format the dictionary result
-    let result = '';
-
-    // Word and phonetic
-    result += `${entry.word}`;
-    if (entry.phonetic) {
-      result += ` ${entry.phonetic}`;
-    } else if (entry.phonetics?.length > 0) {
-      const phonetic = entry.phonetics.find(p => p.text);
-      if (phonetic?.text) result += ` ${phonetic.text}`;
-    }
-    result += '\n\n';
-
-    // Meanings
-    entry.meanings?.forEach((meaning, idx) => {
-      result += `[${meaning.partOfSpeech}]\n`;
-
-      meaning.definitions?.slice(0, 3).forEach((def, defIdx) => {
-        result += `${defIdx + 1}. ${def.definition}\n`;
-        if (def.example) {
-          result += `   ex) "${def.example}"\n`;
-        }
-      });
-
-      if (meaning.synonyms?.length > 0) {
-        result += `   synonyms: ${meaning.synonyms.slice(0, 5).join(', ')}\n`;
-      }
-      if (meaning.antonyms?.length > 0) {
-        result += `   antonyms: ${meaning.antonyms.slice(0, 3).join(', ')}\n`;
-      }
-      result += '\n';
-    });
-
-    return result.trim();
-  } catch (err) {
-    console.warn('Dictionary lookup failed:', err);
-    return null;
-  }
-}
-
 // NLP 분석 (단어/문법)
 export async function analyzeText(text, type = 'word') {
   // Get user's translation language preference
   const translationLang = getSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, 'Korean');
   const langName = LANGUAGE_NAMES[translationLang] || translationLang;
 
-  // For word analysis, try dictionary first (only for Korean since it has Korean definitions)
-  if (type === 'word' && translationLang === 'Korean') {
-    const dictResult = await lookupDictionary(text);
-    if (dictResult) {
-      return dictResult;
-    }
-    // Fall back to AI if dictionary doesn't have the word
-  }
-
   const prompts = {
-    word: `Analyze this English word/phrase:
+    word: `Translate this English word/phrase to ${langName}:
 "${text}"
 
-IMPORTANT: Provide ALL explanations and translations in ${langName}.
+Rules:
+- Provide ONLY the translations in ${langName}, nothing else
+- Maximum 3 different meanings if the word has multiple meanings
+- Format: one meaning per line, numbered
+- Keep it extremely simple and concise
 
-Format your response as:
-1. Pronunciation (IPA)
-2. Part of speech
-3. Definition (in ${langName})
-4. 2 example sentences (English + ${langName} translation)
-5. Synonyms/Antonyms`,
+Example for "table":
+1. 책상, 테이블
+2. 표, 도표
+
+Example for "run":
+1. 달리다
+2. 운영하다
+3. 작동하다`,
 
     grammar: `Analyze the grammar of this English sentence:
 "${text}"

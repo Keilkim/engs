@@ -305,6 +305,36 @@
   padding: var(--spacing-xs);
 }
 
+/* Context Menu Loading */
+.context-menu-loading {
+  padding: var(--spacing-md);
+  text-align: center;
+}
+
+.context-menu-loading .loading-text {
+  font-size: var(--font-sm);
+  color: var(--color-text-sub);
+}
+
+/* Selected Word Header */
+.result-header {
+  padding-bottom: var(--spacing-xs);
+  border-bottom: 1px solid var(--color-accent);
+  margin-bottom: var(--spacing-sm);
+}
+
+.result-header .selected-word {
+  font-size: var(--font-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+/* Memo Button */
+.memo-btn {
+  background-color: transparent !important;
+  border: 1px solid var(--color-accent) !important;
+}
+
 /* Add Vocabulary Button */
 .add-vocab-btn {
   background-color: var(--color-success) !important;
@@ -328,6 +358,17 @@
 
 .result-actions button {
   flex: 1;
+}
+
+.result-actions .close-btn {
+  background-color: transparent !important;
+  border: 1px solid var(--color-accent) !important;
+  color: var(--color-text-sub) !important;
+}
+
+.result-actions .close-btn:hover {
+  background-color: var(--color-accent) !important;
+  color: var(--color-text) !important;
 }
 
 /* Vocabulary Panel & Tooltip */

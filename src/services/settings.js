@@ -81,23 +81,33 @@ export async function resetAllSources() {
   return true;
 }
 
-// Reset vocabulary only
+// Reset vocabulary only (highlight type with isVocabulary marker)
 export async function resetVocabulary() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('User not authenticated');
 
-  // Get all vocabulary annotation IDs first
-  const { data: vocabItems, error: fetchError } = await supabase
+  // Get all highlight annotations first
+  const { data: allHighlights, error: fetchError } = await supabase
     .from('annotations')
-    .select('id')
+    .select('id, ai_analysis_json')
     .eq('user_id', user.id)
-    .eq('type', 'vocabulary');
+    .eq('type', 'highlight');
 
   if (fetchError) throw fetchError;
 
-  if (vocabItems && vocabItems.length > 0) {
-    const vocabIds = vocabItems.map(item => item.id);
+  // Filter vocabulary items by ai_analysis_json.isVocabulary
+  const vocabIds = (allHighlights || [])
+    .filter(item => {
+      try {
+        const json = JSON.parse(item.ai_analysis_json || '{}');
+        return json.isVocabulary === true;
+      } catch {
+        return false;
+      }
+    })
+    .map(item => item.id);
 
+  if (vocabIds.length > 0) {
     // Delete related review items first
     const { error: reviewError } = await supabase
       .from('review_items')
@@ -110,8 +120,7 @@ export async function resetVocabulary() {
     const { error: vocabError } = await supabase
       .from('annotations')
       .delete()
-      .eq('user_id', user.id)
-      .eq('type', 'vocabulary');
+      .in('id', vocabIds);
 
     if (vocabError) throw vocabError;
   }
