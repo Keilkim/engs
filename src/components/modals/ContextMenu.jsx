@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { analyzeText, analyzeGrammar, analyzeGrammarPatterns, extractTextFromImage, cropImageRegion } from '../../services/ai';
 import { createAnnotation, createVocabularyItem } from '../../services/annotation';
 import GrammarDiagram from '../GrammarDiagram';
@@ -9,7 +9,7 @@ export default function ContextMenu({
   selectedText,
   selectionRect,
   sourceId,
-  pages, // PDF pages for OCR
+  pages,
   onClose,
   onAnnotationCreated,
 }) {
@@ -24,7 +24,7 @@ export default function ContextMenu({
   const [memoText, setMemoText] = useState('');
   const [wordSaved, setWordSaved] = useState(false);
   const [savingWord, setSavingWord] = useState(false);
-  const [analysisType, setAnalysisType] = useState(null); // 'word' or 'grammar'
+  const analyzedRef = useRef(false); // 분석 완료 여부 추적
 
   const isImageSelection = selectionRect && selectedText?.startsWith('[Image Selection');
   const displayText = extractedText || selectedText;
@@ -34,7 +34,6 @@ export default function ContextMenu({
     if (!text) return false;
     const trimmed = text.trim();
     const wordCount = trimmed.split(/\s+/).length;
-    // 2단어 이하이고 문장 끝 부호가 없으면 단어로 판단
     return wordCount <= 2 && !/[.!?]$/.test(trimmed);
   }
 
@@ -51,22 +50,34 @@ export default function ContextMenu({
     setOcrLoading(false);
     setWordSaved(false);
     setSavingWord(false);
-    setAnalysisType(null);
+    analyzedRef.current = false;
   }, [selectedText, selectionRect]);
 
-  // Auto-OCR when image selection is made
+  // 자동 분석 시작
   useEffect(() => {
-    if (isOpen && isImageSelection && pages && !extractedText && !ocrLoading) {
-      handleOCR();
-    }
-  }, [isOpen, isImageSelection, pages]);
+    if (!isOpen || !selectedText || analyzedRef.current) return;
 
-  // 텍스트가 준비되면 자동 분석
-  useEffect(() => {
-    if (displayText && !displayText.startsWith('(') && !loading && !analysisResult && !grammarData && !ocrLoading) {
-      autoAnalyze(displayText);
+    if (isImageSelection) {
+      // 이미지 선택 → OCR 먼저
+      if (pages && !ocrLoading && !extractedText) {
+        handleOCR();
+      }
+    } else {
+      // 텍스트 선택 → 바로 분석
+      if (!loading && !analysisResult && !grammarData) {
+        analyzedRef.current = true;
+        autoAnalyze(selectedText);
+      }
     }
-  }, [displayText, ocrLoading]);
+  }, [isOpen, selectedText, isImageSelection, pages]);
+
+  // OCR 완료 후 분석
+  useEffect(() => {
+    if (extractedText && !extractedText.startsWith('(') && !analyzedRef.current) {
+      analyzedRef.current = true;
+      autoAnalyze(extractedText);
+    }
+  }, [extractedText]);
 
   if (!isOpen || !selectedText) return null;
 
@@ -91,15 +102,15 @@ export default function ContextMenu({
     }
   }
 
-  // 자동 분석 - 단어면 번역, 문장이면 문법 분석
+  // 자동 분석
   async function autoAnalyze(text) {
     if (!text || text.startsWith('(')) return;
 
+    console.log('Auto analyzing:', text, 'isWord:', isWordOrPhrase(text));
     setLoading(true);
 
     if (isWordOrPhrase(text)) {
-      // 단어/구 → 번역
-      setAnalysisType('word');
+      // 단어 → 번역
       try {
         const result = await analyzeText(text, 'word');
         setAnalysisResult({ type: 'word', content: result });
@@ -109,7 +120,6 @@ export default function ContextMenu({
       }
     } else {
       // 문장 → 문법 분석
-      setAnalysisType('grammar');
       const result = analyzeGrammar(text);
       setGrammarData(result);
 
@@ -173,7 +183,7 @@ export default function ContextMenu({
     setExtractedText(null);
     setWordSaved(false);
     setSavingWord(false);
-    setAnalysisType(null);
+    analyzedRef.current = false;
     onClose();
   }
 
