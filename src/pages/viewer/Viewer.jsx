@@ -19,11 +19,11 @@ export default function Viewer() {
   const contentRef = useRef(null);
   const imageContainerRef = useRef(null);
   const mouseDownPos = useRef(null);
+  const touchStartRef = useRef(null); // For swipe detection
 
-  // Image selection state
+  // Image selection state - highlighter style path
   const [isSelecting, setIsSelecting] = useState(false);
-  const [selectionStart, setSelectionStart] = useState(null);
-  const [selectionEnd, setSelectionEnd] = useState(null);
+  const [highlightPath, setHighlightPath] = useState([]); // Array of {x, y} points
 
   const [contextMenu, setContextMenu] = useState({
     isOpen: false,
@@ -121,7 +121,7 @@ export default function Viewer() {
     return { clientX: e.clientX, clientY: e.clientY };
   }, []);
 
-  // Image selection handlers (mouse + touch)
+  // Image selection handlers (mouse + touch) - highlighter style
   const handleImagePointerDown = useCallback((e) => {
     if (!imageContainerRef.current) return;
 
@@ -135,9 +135,11 @@ export default function Viewer() {
     const x = ((clientX - rect.left) / rect.width) * 100;
     const y = ((clientY - rect.top) / rect.height) * 100;
 
+    // Store touch start for swipe detection
+    touchStartRef.current = { clientX, clientY, time: Date.now() };
+
     setIsSelecting(true);
-    setSelectionStart({ x, y });
-    setSelectionEnd({ x, y });
+    setHighlightPath([{ x, y }]);
     setContextMenu(prev => ({ ...prev, isOpen: false }));
   }, [getEventCoords]);
 
@@ -154,64 +156,106 @@ export default function Viewer() {
     const x = Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100));
     const y = Math.min(100, Math.max(0, ((clientY - rect.top) / rect.height) * 100));
 
-    setSelectionEnd({ x, y });
+    // Add point to path (throttle by distance to avoid too many points)
+    setHighlightPath(prev => {
+      if (prev.length === 0) return [{ x, y }];
+      const last = prev[prev.length - 1];
+      const dist = Math.sqrt((x - last.x) ** 2 + (y - last.y) ** 2);
+      if (dist > 0.5) { // Add point only if moved more than 0.5%
+        return [...prev, { x, y }];
+      }
+      return prev;
+    });
   }, [isSelecting, getEventCoords]);
 
-  const handleImagePointerUp = useCallback(() => {
-    if (!isSelecting || !selectionStart || !selectionEnd) {
+  const handleImagePointerUp = useCallback((e) => {
+    // Swipe detection for page navigation (mobile)
+    if (touchStartRef.current && e.type === 'touchend') {
+      const { clientX, clientY } = getEventCoords(e);
+      const deltaX = clientX - touchStartRef.current.clientX;
+      const deltaY = clientY - touchStartRef.current.clientY;
+      const deltaTime = Date.now() - touchStartRef.current.time;
+
+      // Quick horizontal swipe detection
+      const isQuickSwipe = deltaTime < 300;
+      const isHorizontal = Math.abs(deltaX) > Math.abs(deltaY) * 2;
+      const isLongEnough = Math.abs(deltaX) > 50;
+
+      if (isQuickSwipe && isHorizontal && isLongEnough) {
+        const pages = getPages();
+        if (pages && pages.length > 1) {
+          if (deltaX < 0 && currentPage < pages.length - 1) {
+            // Swipe left = next page
+            setCurrentPage(currentPage + 1);
+          } else if (deltaX > 0 && currentPage > 0) {
+            // Swipe right = prev page
+            setCurrentPage(currentPage - 1);
+          }
+        }
+        setIsSelecting(false);
+        setHighlightPath([]);
+        touchStartRef.current = null;
+        return;
+      }
+      touchStartRef.current = null;
+    }
+
+    if (!isSelecting || highlightPath.length < 2) {
       setIsSelecting(false);
+      setHighlightPath([]);
       return;
     }
 
-    const width = Math.abs(selectionEnd.x - selectionStart.x);
-    const height = Math.abs(selectionEnd.y - selectionStart.y);
+    // Calculate bounding box for OCR and menu position
+    const xs = highlightPath.map(p => p.x);
+    const ys = highlightPath.map(p => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
 
-    // Minimum selection size (2% of image)
-    if (width < 2 && height < 2) {
+    // Minimum stroke length check
+    const pathLength = highlightPath.reduce((acc, p, i) => {
+      if (i === 0) return 0;
+      const prev = highlightPath[i - 1];
+      return acc + Math.sqrt((p.x - prev.x) ** 2 + (p.y - prev.y) ** 2);
+    }, 0);
+
+    if (pathLength < 3) { // Too short
       setIsSelecting(false);
-      setSelectionStart(null);
-      setSelectionEnd(null);
+      setHighlightPath([]);
       return;
     }
 
-    // Calculate selection rect for saving
-    const selectionRect = {
-      x: Math.min(selectionStart.x, selectionEnd.x),
-      y: Math.min(selectionStart.y, selectionEnd.y),
-      width,
-      height,
+    // Store path and bounding box for saving
+    const selectionData = {
+      path: highlightPath,
+      bounds: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+      page: currentPage,
     };
 
-    // Show context menu at selection position
+    // Show context menu at end of stroke
+    const lastPoint = highlightPath[highlightPath.length - 1];
     const rect = imageContainerRef.current.getBoundingClientRect();
-    const menuX = rect.left + (selectionRect.x + selectionRect.width / 2) * rect.width / 100;
-    const menuY = rect.top + (selectionRect.y + selectionRect.height) * rect.height / 100 + 10;
+    const menuX = rect.left + lastPoint.x * rect.width / 100;
+    const menuY = rect.top + lastPoint.y * rect.height / 100 + 20;
 
     setContextMenu({
       isOpen: true,
       position: { x: menuX, y: menuY },
       selectedText: `[Image Selection: Page ${currentPage + 1}]`,
-      selectionRect: { ...selectionRect, page: currentPage },
+      selectionRect: selectionData,
     });
 
     setIsSelecting(false);
-  }, [isSelecting, selectionStart, selectionEnd, currentPage]);
+  }, [isSelecting, highlightPath, currentPage, getEventCoords]);
 
-  // Get selection box style
-  function getSelectionStyle() {
-    if (!selectionStart || !selectionEnd) return null;
-
-    const left = Math.min(selectionStart.x, selectionEnd.x);
-    const top = Math.min(selectionStart.y, selectionEnd.y);
-    const width = Math.abs(selectionEnd.x - selectionStart.x);
-    const height = Math.abs(selectionEnd.y - selectionStart.y);
-
-    return {
-      left: `${left}%`,
-      top: `${top}%`,
-      width: `${width}%`,
-      height: `${height}%`,
-    };
+  // Convert path points to SVG path string
+  function pathToSvg(points) {
+    if (!points || points.length < 2) return '';
+    return points.map((p, i) =>
+      `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
+    ).join(' ');
   }
 
   const handleTextSelection = useCallback((e) => {
@@ -260,8 +304,7 @@ export default function Viewer() {
       selectedText: '',
       selectionRect: null,
     });
-    setSelectionStart(null);
-    setSelectionEnd(null);
+    setHighlightPath([]);
     window.getSelection()?.removeAllRanges();
   }
 
@@ -365,8 +408,6 @@ export default function Viewer() {
 
     // If we have a captured screenshot, show it
     if (displayImage) {
-      const selectionStyle = getSelectionStyle();
-
       return (
         <div className={`screenshot-viewer ${hasPages ? 'with-sidebar' : ''}`}>
           {/* Page thumbnail sidebar */}
@@ -407,57 +448,81 @@ export default function Viewer() {
                 draggable={false}
               />
 
-              {/* Selection overlay while dragging */}
-              {isSelecting && selectionStyle && (
-                <div
-                  className="image-selection-overlay"
-                  style={selectionStyle}
-                />
-              )}
+              {/* SVG overlay for highlighter strokes */}
+              <svg className="highlighter-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+                {/* Current drawing stroke */}
+                {isSelecting && highlightPath.length > 1 && (
+                  <path
+                    d={pathToSvg(highlightPath)}
+                    className="highlighter-stroke drawing"
+                  />
+                )}
 
-              {/* Active selection (after drag, before context menu closes) */}
-              {!isSelecting && contextMenu.isOpen && contextMenu.selectionRect && (
-                <div
-                  className="image-selection-highlight"
-                  style={{
-                    left: `${contextMenu.selectionRect.x}%`,
-                    top: `${contextMenu.selectionRect.y}%`,
-                    width: `${contextMenu.selectionRect.width}%`,
-                    height: `${contextMenu.selectionRect.height}%`,
-                  }}
-                />
-              )}
+                {/* Active selection (after drag, before context menu closes) */}
+                {!isSelecting && contextMenu.isOpen && contextMenu.selectionRect?.path && (
+                  <path
+                    d={pathToSvg(contextMenu.selectionRect.path)}
+                    className="highlighter-stroke active"
+                  />
+                )}
 
-              {/* Saved annotation highlights */}
-              {annotations
-                .filter(a => a.selection_rect && JSON.parse(a.selection_rect).page === currentPage)
-                .map(annotation => {
-                  const rect = JSON.parse(annotation.selection_rect);
-                  return (
-                    <div
-                      key={annotation.id}
-                      className="image-annotation-highlight"
-                      style={{
-                        left: `${rect.x}%`,
-                        top: `${rect.y}%`,
-                        width: `${rect.width}%`,
-                        height: `${rect.height}%`,
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const containerRect = imageContainerRef.current.getBoundingClientRect();
-                        setAnnotationPopover({
-                          isOpen: true,
-                          position: {
-                            x: containerRect.left + (rect.x + rect.width / 2) * containerRect.width / 100,
-                            y: containerRect.top + (rect.y + rect.height) * containerRect.height / 100 + 10,
-                          },
-                          annotation,
-                        });
-                      }}
-                    />
-                  );
-                })}
+                {/* Saved annotation highlights */}
+                {annotations
+                  .filter(a => {
+                    if (!a.selection_rect) return false;
+                    const data = JSON.parse(a.selection_rect);
+                    return data.page === currentPage;
+                  })
+                  .map(annotation => {
+                    const data = JSON.parse(annotation.selection_rect);
+                    // Support both old rect format and new path format
+                    if (data.path) {
+                      return (
+                        <path
+                          key={annotation.id}
+                          d={pathToSvg(data.path)}
+                          className="highlighter-stroke saved"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const containerRect = imageContainerRef.current.getBoundingClientRect();
+                            const bounds = data.bounds || { x: 50, y: 50 };
+                            setAnnotationPopover({
+                              isOpen: true,
+                              position: {
+                                x: containerRect.left + bounds.x * containerRect.width / 100,
+                                y: containerRect.top + (bounds.y + (bounds.height || 0)) * containerRect.height / 100 + 10,
+                              },
+                              annotation,
+                            });
+                          }}
+                        />
+                      );
+                    }
+                    // Old rect format fallback
+                    return (
+                      <rect
+                        key={annotation.id}
+                        x={data.x}
+                        y={data.y}
+                        width={data.width}
+                        height={data.height}
+                        className="highlighter-rect saved"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const containerRect = imageContainerRef.current.getBoundingClientRect();
+                          setAnnotationPopover({
+                            isOpen: true,
+                            position: {
+                              x: containerRect.left + (data.x + data.width / 2) * containerRect.width / 100,
+                              y: containerRect.top + (data.y + data.height) * containerRect.height / 100 + 10,
+                            },
+                            annotation,
+                          });
+                        }}
+                      />
+                    );
+                  })}
+              </svg>
             </div>
 
             {/* Page indicator */}

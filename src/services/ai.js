@@ -1,4 +1,5 @@
 import Tesseract from 'tesseract.js';
+import nlp from 'compromise';
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 // Use Gemini 2.0 Flash (available in current API)
@@ -6,6 +7,161 @@ const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-
 
 // Free Dictionary API for word lookup
 const DICTIONARY_API_URL = 'https://api.dictionaryapi.dev/api/v2/entries/en';
+
+// 문법 색상 매핑
+const GRAMMAR_COLORS = {
+  Subject: '#60a5fa',      // 파란색 - 주어
+  Verb: '#f87171',         // 빨간색 - 동사
+  Object: '#4ade80',       // 초록색 - 목적어
+  Adjective: '#c084fc',    // 보라색 - 형용사
+  Adverb: '#fb923c',       // 주황색 - 부사
+  Preposition: '#facc15',  // 노란색 - 전치사
+  Conjunction: '#2dd4bf',  // 청록색 - 접속사
+  Determiner: '#94a3b8',   // 회색 - 관사/한정사
+};
+
+// Compromise.js로 문법 분석 (API 없이 클라이언트에서 처리)
+export function analyzeGrammar(text) {
+  const doc = nlp(text);
+
+  // 모든 단어와 태그 추출
+  const terms = doc.terms().json();
+
+  // 문장 구조 분석
+  const sentences = doc.sentences().json();
+
+  // 각 단어에 역할 부여
+  const words = terms.map((term, index) => {
+    const tags = term.tags || [];
+    let role = null;
+    let color = null;
+    let label = null;
+
+    // 동사 찾기
+    if (tags.includes('Verb')) {
+      role = 'Verb';
+      color = GRAMMAR_COLORS.Verb;
+      if (tags.includes('PastTense')) label = 'V (past)';
+      else if (tags.includes('PresentTense')) label = 'V (present)';
+      else if (tags.includes('Gerund')) label = 'V-ing';
+      else if (tags.includes('Infinitive')) label = 'to V';
+      else label = 'V';
+    }
+    // 명사 (주어/목적어 후보)
+    else if (tags.includes('Noun') || tags.includes('ProperNoun')) {
+      role = 'Noun';
+      color = GRAMMAR_COLORS.Subject; // 기본은 주어색
+      label = 'N';
+    }
+    // 대명사
+    else if (tags.includes('Pronoun')) {
+      role = 'Pronoun';
+      color = GRAMMAR_COLORS.Subject;
+      label = 'Pron';
+    }
+    // 형용사
+    else if (tags.includes('Adjective')) {
+      role = 'Adjective';
+      color = GRAMMAR_COLORS.Adjective;
+      label = 'Adj';
+    }
+    // 부사
+    else if (tags.includes('Adverb')) {
+      role = 'Adverb';
+      color = GRAMMAR_COLORS.Adverb;
+      label = 'Adv';
+    }
+    // 전치사
+    else if (tags.includes('Preposition')) {
+      role = 'Preposition';
+      color = GRAMMAR_COLORS.Preposition;
+      label = 'Prep';
+    }
+    // 접속사
+    else if (tags.includes('Conjunction')) {
+      role = 'Conjunction';
+      color = GRAMMAR_COLORS.Conjunction;
+      label = 'Conj';
+    }
+    // 관사/한정사
+    else if (tags.includes('Determiner') || tags.includes('Article')) {
+      role = 'Determiner';
+      color = GRAMMAR_COLORS.Determiner;
+      label = 'Det';
+    }
+
+    return {
+      text: term.text,
+      index,
+      role,
+      color,
+      label,
+      tags,
+    };
+  });
+
+  // Subject-Verb-Object 관계 찾기
+  const connections = [];
+  let subjectIndex = -1;
+  let verbIndex = -1;
+  let objectIndex = -1;
+
+  // 첫 번째 명사/대명사를 주어로
+  for (let i = 0; i < words.length; i++) {
+    if (words[i].role === 'Noun' || words[i].role === 'Pronoun') {
+      subjectIndex = i;
+      words[i].label = 'S'; // Subject
+      words[i].color = GRAMMAR_COLORS.Subject;
+      break;
+    }
+  }
+
+  // 동사 찾기
+  for (let i = 0; i < words.length; i++) {
+    if (words[i].role === 'Verb') {
+      verbIndex = i;
+      break;
+    }
+  }
+
+  // 동사 뒤의 명사를 목적어로
+  if (verbIndex !== -1) {
+    for (let i = verbIndex + 1; i < words.length; i++) {
+      if (words[i].role === 'Noun' || words[i].role === 'Pronoun') {
+        objectIndex = i;
+        words[i].label = 'O'; // Object
+        words[i].color = GRAMMAR_COLORS.Object;
+        break;
+      }
+    }
+  }
+
+  // 연결 관계 추가
+  if (subjectIndex !== -1 && verbIndex !== -1) {
+    connections.push({
+      from: subjectIndex,
+      to: verbIndex,
+      label: 'Subject → Verb',
+      color: '#60a5fa',
+    });
+  }
+
+  if (verbIndex !== -1 && objectIndex !== -1) {
+    connections.push({
+      from: verbIndex,
+      to: objectIndex,
+      label: 'Verb → Object',
+      color: '#4ade80',
+    });
+  }
+
+  return {
+    text,
+    words,
+    connections,
+    sentence: sentences[0] || null,
+  };
+}
 
 // Free Dictionary API lookup
 async function lookupDictionary(word) {

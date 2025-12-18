@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { analyzeText, extractTextFromImage, cropImageRegion } from '../../services/ai';
+import { analyzeText, analyzeGrammar, extractTextFromImage, cropImageRegion } from '../../services/ai';
 import { createAnnotation } from '../../services/annotation';
+import GrammarDiagram from '../GrammarDiagram';
 
 export default function ContextMenu({
   isOpen,
@@ -16,6 +17,7 @@ export default function ContextMenu({
   const [ocrLoading, setOcrLoading] = useState(false);
   const [extractedText, setExtractedText] = useState(null);
   const [analysisResult, setAnalysisResult] = useState(null);
+  const [grammarData, setGrammarData] = useState(null); // 문법 다이어그램 데이터
   const [showMemo, setShowMemo] = useState(false);
   const [memoText, setMemoText] = useState('');
 
@@ -25,6 +27,7 @@ export default function ContextMenu({
   // Reset state when selection changes
   useEffect(() => {
     setAnalysisResult(null);
+    setGrammarData(null);
     setShowMemo(false);
     setMemoText('');
     setLoading(false);
@@ -78,19 +81,12 @@ export default function ContextMenu({
     }
   }
 
-  async function handleGrammarAnalysis() {
+  function handleGrammarAnalysis() {
     if (!displayText || displayText.startsWith('(')) return;
 
-    setLoading(true);
-    try {
-      const result = await analyzeText(displayText, 'grammar');
-      setAnalysisResult({ type: 'grammar', content: result });
-    } catch (err) {
-      console.error('문법 분석 실패:', err);
-      setAnalysisResult({ type: 'grammar', content: '분석에 실패했습니다. API 키를 확인해주세요.' });
-    } finally {
-      setLoading(false);
-    }
+    // Client-side grammar analysis using compromise.js
+    const result = analyzeGrammar(displayText);
+    setGrammarData(result);
   }
 
   async function handleSaveHighlight() {
@@ -131,6 +127,7 @@ export default function ContextMenu({
 
   function handleClose() {
     setAnalysisResult(null);
+    setGrammarData(null);
     setShowMemo(false);
     setMemoText('');
     setExtractedText(null);
@@ -215,6 +212,14 @@ export default function ContextMenu({
           </div>
         )}
       </div>
+
+      {/* Grammar Diagram Modal */}
+      {grammarData && (
+        <GrammarDiagram
+          grammarData={grammarData}
+          onClose={() => setGrammarData(null)}
+        />
+      )}
     </div>
   );
 }
