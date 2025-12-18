@@ -126,11 +126,6 @@ export default function Viewer() {
   const handleImagePointerDown = useCallback((e) => {
     if (!imageContainerRef.current) return;
 
-    // Prevent scrolling on touch
-    if (e.type === 'touchstart') {
-      e.preventDefault();
-    }
-
     const { clientX, clientY } = getEventCoords(e);
     const rect = imageContainerRef.current.getBoundingClientRect();
     const x = ((clientX - rect.left) / rect.width) * 100;
@@ -146,11 +141,6 @@ export default function Viewer() {
 
   const handleImagePointerMove = useCallback((e) => {
     if (!isSelecting || !imageContainerRef.current) return;
-
-    // Prevent scrolling on touch
-    if (e.type === 'touchmove') {
-      e.preventDefault();
-    }
 
     const { clientX, clientY } = getEventCoords(e);
     const rect = imageContainerRef.current.getBoundingClientRect();
@@ -385,6 +375,36 @@ export default function Viewer() {
     }
   }, [currentPage]);
 
+  // Register touch events with { passive: false } to allow preventDefault
+  useEffect(() => {
+    const container = imageContainerRef.current;
+    if (!container) return;
+
+    const handleTouchStart = (e) => {
+      e.preventDefault();
+      handleImagePointerDown(e);
+    };
+
+    const handleTouchMove = (e) => {
+      e.preventDefault();
+      handleImagePointerMove(e);
+    };
+
+    const handleTouchEnd = (e) => {
+      handleImagePointerUp(e);
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [source, handleImagePointerDown, handleImagePointerMove, handleImagePointerUp]);
+
   // Render captured screenshot viewer
   function renderContent() {
     const displayImage = getDisplayImage();
@@ -452,9 +472,6 @@ export default function Viewer() {
               onMouseMove={handleImagePointerMove}
               onMouseUp={handleImagePointerUp}
               onMouseLeave={() => isSelecting && setIsSelecting(false)}
-              onTouchStart={handleImagePointerDown}
-              onTouchMove={handleImagePointerMove}
-              onTouchEnd={handleImagePointerUp}
             >
               <img
                 src={displayImage}
