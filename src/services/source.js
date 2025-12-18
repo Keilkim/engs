@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { detectMainContent, cropImage } from './ai';
 
 // 소스 목록 조회
 export async function getSources() {
@@ -129,15 +128,9 @@ export async function captureWebpageScreenshot(url) {
   const blob = await imgResponse.blob();
   const base64 = await blobToBase64(blob);
 
-  // 3. Gemini Vision으로 메인 콘텐츠 영역 감지
-  // (헤더, 네비게이션, 사이드바, 푸터 제외)
-  const region = await detectMainContent(base64);
-
-  // 4. 해당 영역만 크롭
-  const croppedImage = await cropImage(base64, region);
-
+  // 전체 페이지 그대로 반환 (AI 크롭 제거 - 불안정함)
   return {
-    image: croppedImage,
+    image: base64,
     title: data.data?.title || url,
   };
 }
