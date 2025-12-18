@@ -796,18 +796,26 @@
   stroke-width: 3.5;
 }
 
-/* Fallback for old rect format */
-.highlighter-rect.saved {
+/* Rectangle highlight styles */
+.highlighter-rect.active {
   fill: rgba(255, 214, 10, 0.3);
-  stroke: rgba(255, 214, 10, 0.6);
+  stroke: rgba(255, 214, 10, 0.8);
   stroke-width: 0.5;
+  pointer-events: none;
+}
+
+.highlighter-rect.saved {
+  fill: rgba(255, 214, 10, 0.2);
+  stroke: rgba(255, 214, 10, 0.6);
+  stroke-width: 0.3;
   cursor: pointer;
   pointer-events: fill;
-  transition: fill var(--transition-fast);
+  transition: fill var(--transition-fast), stroke var(--transition-fast);
 }
 
 .highlighter-rect.saved:hover {
-  fill: rgba(255, 214, 10, 0.5);
+  fill: rgba(255, 214, 10, 0.4);
+  stroke: rgba(255, 214, 10, 0.9);
 }
 
 .open-original-btn {
