@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { createSource, uploadFile, captureScreenshot } from '../../services/source';
+import { createSource, uploadFile, captureScreenshot, captureWebpageScreenshot } from '../../services/source';
 import { TranslatableText } from '../translatable';
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -223,6 +223,48 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
     }
   }
 
+  // 웹페이지 스크린샷 캡처 (메인 콘텐츠만)
+  async function handleScreenshotSubmit(e) {
+    e.preventDefault();
+
+    if (!url.trim()) {
+      setError('Please enter a URL');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      setLoadingStatus('Capturing screenshot...');
+
+      // Microlink API로 Full Page 스크린샷 캡처 후 메인 콘텐츠 크롭
+      const result = await captureWebpageScreenshot(url);
+
+      // 썸네일 생성
+      setLoadingStatus('Generating thumbnail...');
+      const thumbnail = await generateThumbnailFromPage(result.image);
+
+      setLoadingStatus('Saving source...');
+      await createSource({
+        title: title || result.title,
+        type: 'screenshot',
+        file_path: url,
+        pages: JSON.stringify([result.image]),
+        screenshot: thumbnail,
+      });
+
+      onSuccess();
+      handleClose();
+    } catch (err) {
+      console.error(err);
+      setError('Failed to capture screenshot');
+    } finally {
+      setLoading(false);
+      setLoadingStatus('');
+    }
+  }
+
   function handleClose() {
     setUrl('');
     setTitle('');
@@ -254,6 +296,12 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
           >
             <TranslatableText textKey="addSource.addUrl">Add URL</TranslatableText>
           </button>
+          <button
+            className={`tab ${activeTab === 'screenshot' ? 'active' : ''}`}
+            onClick={() => setActiveTab('screenshot')}
+          >
+            <TranslatableText textKey="addSource.screenshot">Screenshot</TranslatableText>
+          </button>
         </div>
 
         {error && <div className="error-message">{error}</div>}
@@ -272,7 +320,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
             />
           </div>
 
-          {activeTab === 'file' ? (
+          {activeTab === 'file' && (
             <div className="file-upload-area">
               <input
                 ref={fileInputRef}
@@ -292,7 +340,9 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                 <TranslatableText textKey="addSource.supportedFormats">Supports PDF, PNG, JPG</TranslatableText>
               </p>
             </div>
-          ) : (
+          )}
+
+          {activeTab === 'url' && (
             <form onSubmit={handleUrlSubmit}>
               <div className="input-group">
                 <label htmlFor="url">URL</label>
@@ -311,6 +361,32 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                 disabled={loading}
               >
                 {loading ? (loadingStatus || 'Adding...') : <TranslatableText textKey="addSource.add">Add</TranslatableText>}
+              </button>
+            </form>
+          )}
+
+          {activeTab === 'screenshot' && (
+            <form onSubmit={handleScreenshotSubmit}>
+              <div className="input-group">
+                <label htmlFor="screenshot-url">URL</label>
+                <input
+                  id="screenshot-url"
+                  type="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://..."
+                  required
+                />
+              </div>
+              <p className="file-hint">
+                <TranslatableText textKey="addSource.screenshotHint">Captures main content as image (excludes header/footer)</TranslatableText>
+              </p>
+              <button
+                type="submit"
+                className="submit-button"
+                disabled={loading}
+              >
+                {loading ? (loadingStatus || 'Capturing...') : <TranslatableText textKey="addSource.capture">Capture</TranslatableText>}
               </button>
             </form>
           )}

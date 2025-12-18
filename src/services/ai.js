@@ -387,7 +387,7 @@ export async function cropImage(base64Image, region) {
   });
 }
 
-// 이미지에서 텍스트 추출 (OCR) - Tesseract.js 사용
+// 이미지에서 텍스트 추출 (OCR) - Tesseract.js 사용 (신뢰도 필터링)
 export async function extractTextFromImage(base64Image) {
   try {
     const result = await Tesseract.recognize(
@@ -398,13 +398,31 @@ export async function extractTextFromImage(base64Image) {
       }
     );
 
-    const text = result.data.text?.trim();
+    // 신뢰도 60% 이상인 단어만 추출
+    const MIN_CONFIDENCE = 60;
+    const words = result.data.words || [];
 
-    if (!text) {
+    const confidentWords = words
+      .filter(word => word.confidence >= MIN_CONFIDENCE)
+      .map(word => word.text);
+
+    if (confidentWords.length === 0) {
       return null;
     }
 
-    return text;
+    // 줄바꿈 유지하며 텍스트 조합
+    const lines = result.data.lines || [];
+    const confidentText = lines
+      .map(line => {
+        const lineWords = (line.words || [])
+          .filter(word => word.confidence >= MIN_CONFIDENCE)
+          .map(word => word.text);
+        return lineWords.join(' ');
+      })
+      .filter(line => line.trim().length > 0)
+      .join('\n');
+
+    return confidentText.trim() || null;
   } catch (err) {
     console.error('Tesseract OCR failed:', err);
     throw new Error('OCR 실패');

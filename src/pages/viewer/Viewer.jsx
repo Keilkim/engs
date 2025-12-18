@@ -20,6 +20,7 @@ export default function Viewer() {
   const imageContainerRef = useRef(null);
   const mouseDownPos = useRef(null);
   const touchStartRef = useRef(null); // For swipe detection
+  const mobileNavRef = useRef(null); // For auto-scrolling mobile nav
 
   // Image selection state - highlighter style path
   const [isSelecting, setIsSelecting] = useState(false);
@@ -370,6 +371,20 @@ export default function Viewer() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentPage, source]);
 
+  // Auto-scroll mobile nav to active page
+  useEffect(() => {
+    if (mobileNavRef.current) {
+      const activeThumb = mobileNavRef.current.querySelector('.page-nav-mobile-thumb.active');
+      if (activeThumb) {
+        activeThumb.scrollIntoView({
+          behavior: 'smooth',
+          inline: 'center',
+          block: 'nearest',
+        });
+      }
+    }
+  }, [currentPage]);
+
   // Render captured screenshot viewer
   function renderContent() {
     const displayImage = getDisplayImage();
@@ -529,6 +544,24 @@ export default function Viewer() {
             {hasPages && (
               <div className="page-indicator-bottom">
                 {currentPage + 1} / {pages.length}
+              </div>
+            )}
+
+            {/* Mobile bottom thumbnail navigation */}
+            {hasPages && (
+              <div className="page-nav-mobile">
+                <div className="page-nav-mobile-scroll" ref={mobileNavRef}>
+                  {pages.map((pageImg, index) => (
+                    <div
+                      key={index}
+                      className={`page-nav-mobile-thumb ${currentPage === index ? 'active' : ''}`}
+                      onClick={() => setCurrentPage(index)}
+                    >
+                      <img src={pageImg} alt={`Page ${index + 1}`} />
+                      <span className="page-nav-number">{index + 1}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

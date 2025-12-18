@@ -676,6 +676,11 @@
   border-radius: var(--radius-sm);
 }
 
+/* Mobile Bottom Page Navigation - Hidden on desktop */
+.page-nav-mobile {
+  display: none;
+}
+
 /* Main image area */
 .screenshot-main {
   flex: 1;
@@ -2385,5 +2390,84 @@
   .viewer-title {
     font-size: var(--font-base);
     max-width: 150px;
+  }
+
+  /* Mobile Bottom Page Navigation */
+  .page-nav-mobile {
+    display: block;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.95));
+    padding: var(--spacing-md) var(--spacing-sm);
+    padding-bottom: max(var(--spacing-md), env(safe-area-inset-bottom));
+    z-index: 90;
+  }
+
+  .page-nav-mobile-scroll {
+    display: flex;
+    gap: var(--spacing-sm);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding: var(--spacing-xs) 0;
+    scrollbar-width: none;
+  }
+
+  .page-nav-mobile-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .page-nav-mobile-thumb {
+    flex-shrink: 0;
+    width: 50px;
+    aspect-ratio: 3/4;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 2px solid transparent;
+    cursor: pointer;
+    scroll-snap-align: center;
+    transition: all var(--transition-fast);
+    position: relative;
+    background: var(--color-base-sub);
+  }
+
+  .page-nav-mobile-thumb:hover {
+    border-color: var(--color-text-sub);
+  }
+
+  .page-nav-mobile-thumb.active {
+    border-color: var(--color-highlight);
+    transform: scale(1.1);
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.3);
+  }
+
+  .page-nav-mobile-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .page-nav-number {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: var(--color-text);
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  /* Adjust page indicator position when mobile nav is visible */
+  .page-indicator-bottom {
+    bottom: 100px;
+  }
+
+  /* Hide swipe hint when we have bottom nav */
+  .screenshot-container::after {
+    display: none;
   }
 }
