@@ -90,15 +90,17 @@
 /* Profile/Mypage button */
 .mypage-button,
 .profile-button {
-  width: 40px;
+  min-width: 40px;
   height: 40px;
+  padding: 0 var(--spacing-md);
   border-radius: var(--radius-full);
   background-color: var(--color-base-sub);
   border: 1px solid var(--color-accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--font-lg);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
   transition: all var(--transition-normal);
   color: var(--color-text);

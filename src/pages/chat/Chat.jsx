@@ -13,9 +13,12 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [sourceContext, setSourceContext] = useState(null);
+  const [vocabContext, setVocabContext] = useState(null);
 
   const initialMessage = location.state?.initialMessage;
   const sourceId = location.state?.sourceId;
+  const vocabItems = location.state?.vocabContext;
+  const contextType = location.state?.contextType;
 
   useEffect(() => {
     loadChatHistory();
@@ -23,6 +26,39 @@ export default function Chat() {
       loadSourceContext();
     }
   }, [sourceId]);
+
+  useEffect(() => {
+    if (vocabItems && vocabItems.length > 0) {
+      const context = buildVocabContext(vocabItems, contextType);
+      setVocabContext(context);
+    }
+  }, [vocabItems, contextType]);
+
+  function buildVocabContext(items, type) {
+    if (type === 'words') {
+      const words = items.map(item => {
+        try {
+          const json = JSON.parse(item.ai_analysis_json || '{}');
+          return `- ${item.selected_text}: ${json.definition || 'No definition'}`;
+        } catch {
+          return `- ${item.selected_text}`;
+        }
+      });
+      return `User's saved vocabulary words:\n${words.join('\n')}`;
+    } else if (type === 'grammar') {
+      const patterns = items.map(item => {
+        try {
+          const json = JSON.parse(item.ai_analysis_json || '{}');
+          const patternNames = json.patterns?.map(p => p.typeKr || p.type).join(', ') || '';
+          return `- "${json.originalText}": ${patternNames}`;
+        } catch {
+          return `- ${item.selected_text}`;
+        }
+      });
+      return `User's saved grammar patterns:\n${patterns.join('\n')}`;
+    }
+    return null;
+  }
 
   useEffect(() => {
     if (initialMessage && messages.length === 0) {
@@ -70,7 +106,8 @@ export default function Chat() {
         )
       );
 
-      const aiResponse = await chat(text, sourceContext);
+      const combinedContext = [sourceContext, vocabContext].filter(Boolean).join('\n\n');
+      const aiResponse = await chat(text, combinedContext || null);
       const savedAiMsg = await saveChatMessage(aiResponse, 'assistant', sourceId);
       setMessages((prev) => [...prev, savedAiMsg]);
     } catch (err) {
@@ -105,6 +142,11 @@ export default function Chat() {
         {sourceContext && (
           <span className="context-badge" title="Learning source connected">
             S
+          </span>
+        )}
+        {vocabContext && (
+          <span className="context-badge vocab-badge" title="Vocabulary context loaded">
+            V
           </span>
         )}
       </header>

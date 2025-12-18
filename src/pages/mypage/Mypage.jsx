@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { signOut } from '../../services/auth';
 import StatsDashboard from '../../containers/stats-dashboard/StatsDashboard';
+import MyDictionary from '../../components/MyDictionary';
 import { TranslatableText } from '../../components/translatable';
 
 export default function Mypage() {
@@ -31,6 +32,15 @@ export default function Mypage() {
     } finally {
       setLoggingOut(false);
     }
+  }
+
+  function handleStartChat(selectedItems, type) {
+    navigate('/chat', {
+      state: {
+        vocabContext: selectedItems,
+        contextType: type,
+      },
+    });
   }
 
   return (
@@ -65,6 +75,11 @@ export default function Mypage() {
         <section className="stats-section">
           <h2><TranslatableText textKey="mypage.learningStats">Learning Stats</TranslatableText></h2>
           <StatsDashboard />
+        </section>
+
+        <section className="dictionary-section">
+          <h2><TranslatableText textKey="mypage.myDictionary">My Dictionary</TranslatableText></h2>
+          <MyDictionary onSelectForChat={handleStartChat} />
         </section>
 
         <section className="menu-section">

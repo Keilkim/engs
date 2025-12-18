@@ -214,16 +214,28 @@ export function analyzeGrammar(text) {
 
 // AI 기반 문법 패턴 분석 (Gemini API)
 export async function analyzeGrammarPatterns(text) {
-  const prompt = `Analyze the following English sentence and identify important grammar patterns.
+  const prompt = `Analyze the following English sentence and identify ONLY intermediate-to-advanced grammar patterns worth studying.
 
 Sentence: "${text}"
+
+IMPORTANT RULES:
+1. ONLY return patterns that are genuinely useful for English learners at intermediate level or above
+2. DO NOT include basic/trivial patterns like:
+   - Compound nouns (e.g., "bus stop", "coffee shop")
+   - Simple modal + verb (e.g., "can be", "will go", "should do")
+   - Basic subject-verb agreement
+   - Simple present/past tense
+   - Basic article usage (a, an, the)
+   - Simple prepositional phrases
+3. If NO meaningful intermediate+ patterns exist, return {"patterns": [], "sentence_structure": null}
+4. Quality over quantity - only include patterns that would actually help a learner
 
 Return a JSON object with this structure:
 {
   "patterns": [
     {
-      "type": "pattern name in English (e.g., to-infinitive, passive voice)",
-      "typeKr": "한국어 패턴명 (예: to부정사, 수동태)",
+      "type": "pattern name in English",
+      "typeKr": "한국어 패턴명",
       "words": ["word1", "word2"],
       "wordIndices": [0, 2],
       "explanation": "Brief explanation in Korean (1-2 sentences)",
@@ -238,23 +250,29 @@ Return a JSON object with this structure:
 }
 
 Color suggestions:
-- to-infinitive: #60a5fa (blue)
-- gerund (-ing as noun): #f87171 (red)
+- to-infinitive (advanced usage): #60a5fa (blue)
+- gerund as subject/object: #f87171 (red)
 - passive voice: #fb923c (orange)
-- perfect tense: #facc15 (yellow)
-- relative clause: #c084fc (purple)
-- conditional: #4ade80 (green)
-- preposition + gerund: #2dd4bf (teal)
+- perfect/perfect continuous: #facc15 (yellow)
+- relative clauses (who/which/that): #c084fc (purple)
+- conditionals (if clauses, subjunctive): #4ade80 (green)
+- participle constructions: #2dd4bf (teal)
+- inversion: #ec4899 (pink)
+- cleft sentences: #8b5cf6 (violet)
 
-Focus on these patterns:
-- to + infinitive (to부정사: 목적, 결과, 형용사적 용법)
-- by/for/without/of + ~ing (전치사+동명사)
-- passive voice (수동태: be + p.p)
-- perfect tense (완료시제: have/has/had + p.p)
-- relative clauses (관계대명사: who, which, that)
-- conditionals (가정법: if, unless, were)
-- participle constructions (분사구문)
-- comparative/superlative (비교급/최상급)
+ONLY include these types of patterns:
+- to-infinitive (목적/결과/형용사적 용법 - NOT simple "to go" but "in order to", "enough to", "too...to")
+- Gerund as subject/object (동명사 주어/목적어)
+- Passive voice (수동태: be + p.p)
+- Perfect/Perfect continuous (완료시제: have been ~ing)
+- Relative clauses (관계대명사절 - especially reduced relatives)
+- Conditionals (가정법: if, unless, were to, should)
+- Participle constructions (분사구문: -ing/-ed starting phrases)
+- Subjunctive mood (가정법 현재/과거)
+- Inversion (도치)
+- Cleft sentences (강조 구문: It is...that)
+- Causative verbs (사역동사: make/have/let + O + V)
+- Reported speech patterns
 
 wordIndices should be 0-based indices matching the word positions in the sentence.
 Return ONLY valid JSON, no markdown code blocks or extra text.`;

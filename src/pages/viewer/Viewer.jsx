@@ -62,21 +62,65 @@ export default function Viewer() {
     loadData();
   }, [id]);
 
+  // Escape special regex characters
+  function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // Highlight vocabulary words in HTML content
+  function highlightVocabularyWords(htmlContent) {
+    if (!vocabulary || vocabulary.length === 0) return htmlContent;
+
+    let result = htmlContent;
+    vocabulary.forEach(item => {
+      const word = item.selected_text;
+      if (!word || word.length < 2) return;
+
+      // Create regex to match whole words (case-insensitive)
+      const regex = new RegExp(`\\b(${escapeRegex(word)})\\b`, 'gi');
+      result = result.replace(regex, `<mark class="vocab-highlight" data-vocab-id="${item.id}">$1</mark>`);
+    });
+    return result;
+  }
+
+  // Handle vocabulary highlight click
+  function handleVocabHighlightClick(e) {
+    const vocabId = e.target.getAttribute('data-vocab-id');
+    const vocabItem = vocabulary.find(v => v.id === vocabId);
+
+    if (vocabItem) {
+      const definition = vocabItem.ai_analysis_json
+        ? JSON.parse(vocabItem.ai_analysis_json).definition || ''
+        : '';
+      showVocabWord(vocabItem.selected_text, definition);
+    }
+  }
+
   // Add click listeners to highlights after render
   useEffect(() => {
     if (contentRef.current) {
+      // Regular annotation highlights
       const highlights = contentRef.current.querySelectorAll('mark.highlight');
       highlights.forEach((mark) => {
         mark.addEventListener('click', handleHighlightClick);
+      });
+
+      // Vocabulary highlights
+      const vocabHighlights = contentRef.current.querySelectorAll('mark.vocab-highlight');
+      vocabHighlights.forEach((mark) => {
+        mark.addEventListener('click', handleVocabHighlightClick);
       });
 
       return () => {
         highlights.forEach((mark) => {
           mark.removeEventListener('click', handleHighlightClick);
         });
+        vocabHighlights.forEach((mark) => {
+          mark.removeEventListener('click', handleVocabHighlightClick);
+        });
       };
     }
-  }, [source, annotations]);
+  }, [source, annotations, vocabulary]);
 
   // Parse pages from source
   function getPages() {
@@ -618,10 +662,10 @@ export default function Viewer() {
             </div>
           )}
 
-          {/* Article content */}
+          {/* Article content with vocabulary highlighting */}
           <div
             className="article-content"
-            dangerouslySetInnerHTML={{ __html: source.content }}
+            dangerouslySetInnerHTML={{ __html: highlightVocabularyWords(source.content) }}
           />
 
           {/* Open original link */}

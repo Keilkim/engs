@@ -132,3 +132,48 @@ export async function isWordSaved(word) {
   if (error) throw error;
   return data && data.length > 0;
 }
+
+// 단어 조회 (소스 정보 포함)
+export async function getVocabularyWithSource() {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('annotations')
+    .select('*, sources(title)')
+    .eq('user_id', user.id)
+    .eq('type', 'vocabulary')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+// 문법 패턴 조회 (소스 정보 포함)
+export async function getGrammarPatterns() {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('annotations')
+    .select('*, sources(title)')
+    .eq('user_id', user.id)
+    .eq('type', 'highlight')
+    .not('ai_analysis_json', 'is', null)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+
+  // grammar 타입만 필터링
+  return (data || []).filter(item => {
+    try {
+      const json = JSON.parse(item.ai_analysis_json || '{}');
+      return json.type === 'grammar';
+    } catch {
+      return false;
+    }
+  });
+}
+
+// 수동 단어 추가
+export async function addManualVocabulary(word, definition) {
+  return createVocabularyItem(word, definition, null);
+}
