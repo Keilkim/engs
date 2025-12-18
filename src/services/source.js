@@ -114,12 +114,25 @@ function blobToBase64(blob) {
 
 // 웹페이지 Full Page 스크린샷 캡처 (Microlink API)
 export async function captureWebpageScreenshot(url) {
-  // 1. Microlink API 호출 (fullPage=true로 전체 페이지 캡처)
-  const apiUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&screenshot.fullPage=true&meta=false`;
+  // 1. Microlink API 호출 - 전체 페이지 캡처
+  // waitUntil: 페이지 완전 로드 대기
+  // scroll: 스크롤해서 lazy-load 콘텐츠 로드
+  const params = new URLSearchParams({
+    url: url,
+    screenshot: 'true',
+    'screenshot.fullPage': 'true',
+    'screenshot.type': 'png',
+    waitUntil: 'networkidle2',
+    scroll: 'bottom',
+    meta: 'false',
+  });
+
+  const apiUrl = `https://api.microlink.io/?${params.toString()}`;
   const response = await fetch(apiUrl);
   const data = await response.json();
 
   if (!data.data?.screenshot?.url) {
+    console.error('Microlink response:', data);
     throw new Error('스크린샷 캡처 실패');
   }
 
@@ -128,7 +141,7 @@ export async function captureWebpageScreenshot(url) {
   const blob = await imgResponse.blob();
   const base64 = await blobToBase64(blob);
 
-  // 전체 페이지 그대로 반환 (AI 크롭 제거 - 불안정함)
+  // 전체 페이지 그대로 반환
   return {
     image: base64,
     title: data.data?.title || url,
