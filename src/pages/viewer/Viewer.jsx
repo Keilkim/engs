@@ -308,20 +308,14 @@ export default function Viewer() {
     }
 
     // Store path and bounding box for saving
-    // Only add stroke-width padding (no extra text padding)
-    const strokeWidth = 3; // SVG stroke-width percentage (matches CSS)
-    const verticalPadding = strokeWidth / 2; // Only stroke coverage, no extra
-
-    const paddedMinY = Math.max(0, minY - verticalPadding);
-    const paddedMaxY = Math.min(100, maxY + verticalPadding);
-
+    // 패딩 없이 정확한 선택 영역만
     const selectionData = {
       path: highlightPath,
       bounds: {
         x: minX,
-        y: paddedMinY,
+        y: minY,
         width: maxX - minX,
-        height: paddedMaxY - paddedMinY
+        height: maxY - minY
       },
       page: currentPage,
     };
