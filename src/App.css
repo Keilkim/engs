@@ -674,10 +674,35 @@
 }
 
 .grammar-pattern-item {
-  padding: var(--spacing-sm) var(--spacing-md);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
   background-color: var(--color-base-dark);
   border-radius: var(--radius-md);
-  border-left: 3px solid;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.grammar-pattern-item:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.grammar-pattern-item.selected {
+  background-color: rgba(96, 165, 250, 0.15);
+}
+
+.grammar-pattern-item .pattern-checkbox {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  accent-color: var(--color-highlight);
+  cursor: pointer;
+  margin-top: 2px;
+}
+
+.grammar-pattern-item .pattern-content {
+  flex: 1;
 }
 
 .pattern-header {
@@ -746,6 +771,121 @@
   width: 12px;
   height: 12px;
   border-radius: 2px;
+}
+
+/* Grammar Save Button */
+.grammar-save-btn {
+  width: 100%;
+  padding: var(--spacing-md);
+  margin-top: var(--spacing-md);
+  background: linear-gradient(135deg, var(--color-highlight), #818cf8);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.grammar-save-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.grammar-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Grammar Arc Styles (Viewer SVG) */
+.grammar-arc-group {
+  cursor: pointer;
+}
+
+.grammar-arc {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.8;
+  transition: stroke-width 0.2s, opacity 0.2s;
+  vector-effect: non-scaling-stroke;
+}
+
+.grammar-arc-group:hover .grammar-arc {
+  stroke-width: 3;
+  opacity: 1;
+}
+
+.grammar-arc-handle {
+  cursor: pointer;
+  transition: r 0.2s;
+}
+
+.grammar-arc-group:hover .grammar-arc-handle {
+  r: 1.5;
+}
+
+/* Grammar Tooltip */
+.grammar-tooltip {
+  position: fixed;
+  background: linear-gradient(145deg, #1e1e2e, #252536);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md) var(--spacing-lg);
+  max-width: 300px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 1100;
+  animation: tooltipFadeIn 0.2s ease;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -90%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%);
+  }
+}
+
+.grammar-tooltip-header {
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--spacing-xs);
+}
+
+.grammar-tooltip-words {
+  font-size: var(--font-sm);
+  color: var(--color-text-sub);
+  font-style: italic;
+  margin-bottom: var(--spacing-sm);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.grammar-tooltip-explanation {
+  font-size: var(--font-sm);
+  color: var(--color-text);
+  line-height: var(--line-height-relaxed);
+}
+
+.grammar-tooltip-close {
+  position: absolute;
+  top: var(--spacing-xs);
+  right: var(--spacing-sm);
+  background: none;
+  border: none;
+  color: var(--color-text-sub);
+  font-size: var(--font-lg);
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+.grammar-tooltip-close:hover {
+  color: var(--color-text);
 }
 
 /* Viewer improvements */

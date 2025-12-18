@@ -280,6 +280,22 @@ export default function ContextMenu({
             setAiPatterns(null);
             setGrammarLoading(false);
           }}
+          onSave={async (data) => {
+            // 선택된 문법 패턴을 annotation으로 저장
+            await createAnnotation({
+              source_id: sourceId,
+              type: 'highlight',
+              selected_text: data.originalText,
+              ai_analysis_json: JSON.stringify({
+                type: 'grammar',
+                patterns: data.patterns,
+                originalText: data.originalText,
+              }),
+              coordinates: JSON.stringify(position),
+              selection_rect: selectionRect ? JSON.stringify(selectionRect) : null,
+            });
+            onAnnotationCreated?.();
+          }}
         />
       )}
     </div>

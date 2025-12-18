@@ -56,7 +56,7 @@ export default function Home() {
           className="mypage-button"
           onClick={() => navigate('/mypage')}
         >
-          <span className="profile-icon">M</span>
+          My
         </button>
       </header>
 

@@ -1,6 +1,49 @@
-export default function GrammarDiagram({ grammarData, aiPatterns, loading, onClose }) {
+import { useState } from 'react';
+
+export default function GrammarDiagram({
+  grammarData,
+  aiPatterns,
+  loading,
+  onClose,
+  onSave,  // 저장 콜백
+}) {
   const patterns = aiPatterns?.patterns || [];
   const originalText = grammarData?.words?.map(w => w.text).join(' ') || '';
+
+  // 선택된 패턴 인덱스
+  const [selectedPatterns, setSelectedPatterns] = useState(new Set());
+  const [saving, setSaving] = useState(false);
+
+  function togglePattern(idx) {
+    setSelectedPatterns(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(idx)) {
+        newSet.delete(idx);
+      } else {
+        newSet.add(idx);
+      }
+      return newSet;
+    });
+  }
+
+  async function handleSave() {
+    if (selectedPatterns.size === 0 || !onSave) return;
+
+    setSaving(true);
+    try {
+      // 선택된 패턴만 추출
+      const selected = patterns.filter((_, idx) => selectedPatterns.has(idx));
+      await onSave({
+        patterns: selected,
+        originalText,
+      });
+      onClose();
+    } catch (err) {
+      console.error('Failed to save patterns:', err);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="grammar-diagram-overlay" onClick={onClose}>
@@ -25,26 +68,46 @@ export default function GrammarDiagram({ grammarData, aiPatterns, loading, onClo
                 {patterns.map((pattern, idx) => (
                   <div
                     key={idx}
-                    className="grammar-pattern-item"
-                    style={{ borderLeftColor: pattern.color }}
+                    className={`grammar-pattern-item ${selectedPatterns.has(idx) ? 'selected' : ''}`}
+                    onClick={() => togglePattern(idx)}
                   >
-                    <div className="pattern-header">
-                      <span
-                        className="pattern-type"
-                        style={{ color: pattern.color }}
-                      >
-                        {pattern.typeKr || pattern.type}
-                      </span>
-                      <span className="pattern-words">
-                        {pattern.words?.join(' ') || ''}
-                      </span>
-                    </div>
-                    <div className="pattern-explanation">
-                      {pattern.explanation}
+                    <input
+                      type="checkbox"
+                      className="pattern-checkbox"
+                      checked={selectedPatterns.has(idx)}
+                      onChange={() => togglePattern(idx)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <div className="pattern-content">
+                      <div className="pattern-header">
+                        <span
+                          className="pattern-type"
+                          style={{ color: pattern.color }}
+                        >
+                          {pattern.typeKr || pattern.type}
+                        </span>
+                        <span className="pattern-words">
+                          {pattern.words?.join(' ') || ''}
+                        </span>
+                      </div>
+                      <div className="pattern-explanation">
+                        {pattern.explanation}
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
+
+              {/* 저장 버튼 */}
+              {onSave && (
+                <button
+                  className="grammar-save-btn"
+                  onClick={handleSave}
+                  disabled={selectedPatterns.size === 0 || saving}
+                >
+                  {saving ? '저장 중...' : `저장하기 (${selectedPatterns.size})`}
+                </button>
+              )}
             </div>
           )}
 

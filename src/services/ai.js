@@ -1,4 +1,5 @@
 import nlp from 'compromise';
+import { getSetting, SETTINGS_KEYS } from './settings';
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 // Use Gemini 2.0 Flash (available in current API)
@@ -6,6 +7,14 @@ const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-
 
 // Free Dictionary API for word lookup
 const DICTIONARY_API_URL = 'https://api.dictionaryapi.dev/api/v2/entries/en';
+
+// Language name mapping for prompts
+const LANGUAGE_NAMES = {
+  Korean: 'Korean (한국어)',
+  Chinese: 'Chinese (中文)',
+  German: 'German (Deutsch)',
+  English: 'English',
+};
 
 // 문법 색상 매핑
 const GRAMMAR_COLORS = {
@@ -356,8 +365,12 @@ async function lookupDictionary(word) {
 
 // NLP 분석 (단어/문법)
 export async function analyzeText(text, type = 'word') {
-  // For word analysis, try dictionary first
-  if (type === 'word') {
+  // Get user's translation language preference
+  const translationLang = getSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, 'Korean');
+  const langName = LANGUAGE_NAMES[translationLang] || translationLang;
+
+  // For word analysis, try dictionary first (only for Korean since it has Korean definitions)
+  if (type === 'word' && translationLang === 'Korean') {
     const dictResult = await lookupDictionary(text);
     if (dictResult) {
       return dictResult;
@@ -369,15 +382,19 @@ export async function analyzeText(text, type = 'word') {
     word: `Analyze this English word/phrase:
 "${text}"
 
+IMPORTANT: Provide ALL explanations and translations in ${langName}.
+
 Format your response as:
 1. Pronunciation (IPA)
 2. Part of speech
-3. Definition (in Korean)
-4. 2 example sentences (English + Korean translation)
+3. Definition (in ${langName})
+4. 2 example sentences (English + ${langName} translation)
 5. Synonyms/Antonyms`,
 
     grammar: `Analyze the grammar of this English sentence:
 "${text}"
+
+IMPORTANT: Provide ALL explanations in ${langName}.
 
 Format your response as:
 1. Sentence structure analysis
@@ -605,9 +622,25 @@ export async function cropImageRegion(pages, page, region) {
 
 // AI 대화
 export async function chat(message, context = '') {
-  const systemPrompt = context
-    ? `당신은 영어 학습을 도와주는 AI 튜터입니다. 다음 학습 자료를 참고하여 답변해주세요:\n\n${context}\n\n`
-    : '당신은 영어 학습을 도와주는 AI 튜터입니다. ';
+  // Get user's AI chat language preference
+  const chatLang = getSetting(SETTINGS_KEYS.AI_CHAT_LANGUAGE, 'Korean');
+
+  const systemPrompts = {
+    Korean: context
+      ? `당신은 영어 학습을 도와주는 AI 튜터입니다. 한국어로 답변해주세요. 다음 학습 자료를 참고하여 답변해주세요:\n\n${context}\n\n`
+      : '당신은 영어 학습을 도와주는 AI 튜터입니다. 한국어로 답변해주세요. ',
+    Chinese: context
+      ? `你是一位帮助英语学习的AI导师。请用中文回答。请参考以下学习材料回答:\n\n${context}\n\n`
+      : '你是一位帮助英语学习的AI导师。请用中文回答。',
+    German: context
+      ? `Sie sind ein KI-Tutor, der beim Englischlernen hilft. Bitte antworten Sie auf Deutsch. Bitte beziehen Sie sich auf das folgende Lernmaterial:\n\n${context}\n\n`
+      : 'Sie sind ein KI-Tutor, der beim Englischlernen hilft. Bitte antworten Sie auf Deutsch. ',
+    English: context
+      ? `You are an AI tutor helping with English learning. Please respond in English. Please refer to the following learning material:\n\n${context}\n\n`
+      : 'You are an AI tutor helping with English learning. Please respond in English. ',
+  };
+
+  const systemPrompt = systemPrompts[chatLang] || systemPrompts.Korean;
 
   const response = await fetch(`${API_URL}?key=${GOOGLE_API_KEY}`, {
     method: 'POST',

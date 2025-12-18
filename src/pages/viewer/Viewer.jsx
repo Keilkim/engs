@@ -4,6 +4,7 @@ import { getSource, deleteSource } from '../../services/source';
 import { getAnnotations, getVocabulary } from '../../services/annotation';
 import ContextMenu from '../../components/modals/ContextMenu';
 import AnnotationPopover from '../../components/modals/AnnotationPopover';
+import GrammarTooltip from '../../components/GrammarTooltip';
 import { TranslatableText } from '../../components/translatable';
 
 export default function Viewer() {
@@ -49,6 +50,13 @@ export default function Viewer() {
   const [showVocabPanel, setShowVocabPanel] = useState(false);
   const [vocabTooltip, setVocabTooltip] = useState({ word: null, definition: '' });
   const vocabTooltipTimer = useRef(null);
+
+  // Grammar tooltip state
+  const [grammarTooltip, setGrammarTooltip] = useState({
+    isOpen: false,
+    pattern: null,
+    position: { x: 0, y: 0 },
+  });
 
   useEffect(() => {
     loadData();
@@ -296,6 +304,93 @@ export default function Viewer() {
     return points.map((p, i) =>
       `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
     ).join(' ');
+  }
+
+  // Create arc path for grammar patterns (Quadratic Bezier curve)
+  function createGrammarArc(x1, y1, x2, y2, arcHeight = 3) {
+    const midX = (x1 + x2) / 2;
+    const controlY = y1 - arcHeight;
+    return `M ${x1} ${y1} Q ${midX} ${controlY} ${x2} ${y2}`;
+  }
+
+  // Get grammar annotations with patterns
+  function getGrammarAnnotations(pageNum = null) {
+    return annotations.filter(a => {
+      if (!a.ai_analysis_json) return false;
+      try {
+        const data = JSON.parse(a.ai_analysis_json);
+        if (data.type !== 'grammar') return false;
+        if (pageNum !== null && a.selection_rect) {
+          const rect = JSON.parse(a.selection_rect);
+          return rect.page === pageNum;
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  // Render grammar arc for a pattern
+  function renderGrammarArc(annotation, pattern, patternIdx, containerRect) {
+    if (!annotation.selection_rect) return null;
+
+    const selectionData = JSON.parse(annotation.selection_rect);
+    const bounds = selectionData.bounds || selectionData;
+
+    // Calculate arc position above the selection
+    const arcY = bounds.y - 2 - (patternIdx * 4); // Stack multiple arcs
+    const startX = bounds.x + 2;
+    const endX = bounds.x + bounds.width - 2;
+    const midX = (startX + endX) / 2;
+    const arcHeight = 3 + patternIdx * 1.5;
+
+    const arcPath = createGrammarArc(startX, arcY, endX, arcY, arcHeight);
+    const labelY = arcY - arcHeight - 1;
+
+    return (
+      <g
+        key={`${annotation.id}-${patternIdx}`}
+        className="grammar-arc-group"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!containerRect) return;
+          setGrammarTooltip({
+            isOpen: true,
+            pattern,
+            position: {
+              x: containerRect.left + midX * containerRect.width / 100,
+              y: containerRect.top + labelY * containerRect.height / 100,
+            },
+          });
+        }}
+      >
+        <path
+          d={arcPath}
+          className="grammar-arc"
+          style={{ stroke: pattern.color || '#60a5fa' }}
+        />
+        <circle
+          cx={startX}
+          cy={arcY}
+          r="0.8"
+          fill={pattern.color || '#60a5fa'}
+        />
+        <circle
+          cx={endX}
+          cy={arcY}
+          r="0.8"
+          fill={pattern.color || '#60a5fa'}
+        />
+        <circle
+          cx={midX}
+          cy={arcY - arcHeight}
+          r="1"
+          fill={pattern.color || '#60a5fa'}
+          className="grammar-arc-handle"
+        />
+      </g>
+    );
   }
 
   // Handle minimap click to jump to position
@@ -639,6 +734,14 @@ export default function Viewer() {
                         />
                       );
                     })}
+                  {/* Grammar pattern arcs */}
+                  {getGrammarAnnotations(currentPage).map(annotation => {
+                    const analysisData = JSON.parse(annotation.ai_analysis_json);
+                    const containerRect = imageContainerRef.current?.getBoundingClientRect();
+                    return analysisData.patterns?.map((pattern, idx) =>
+                      renderGrammarArc(annotation, pattern, idx, containerRect)
+                    );
+                  })}
                 </svg>
               </div>
 
@@ -764,6 +867,14 @@ export default function Viewer() {
                         />
                       );
                     })}
+                  {/* Grammar pattern arcs */}
+                  {getGrammarAnnotations().map(annotation => {
+                    const analysisData = JSON.parse(annotation.ai_analysis_json);
+                    const containerRect = imageContainerRef.current?.getBoundingClientRect();
+                    return analysisData.patterns?.map((pattern, idx) =>
+                      renderGrammarArc(annotation, pattern, idx, containerRect)
+                    );
+                  })}
                 </svg>
               </div>
             </div>
@@ -992,6 +1103,15 @@ export default function Viewer() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Grammar Tooltip */}
+      {grammarTooltip.isOpen && grammarTooltip.pattern && (
+        <GrammarTooltip
+          pattern={grammarTooltip.pattern}
+          position={grammarTooltip.position}
+          onClose={() => setGrammarTooltip({ isOpen: false, pattern: null, position: { x: 0, y: 0 } })}
+        />
       )}
     </div>
   );
