@@ -387,27 +387,77 @@ export async function cropImage(base64Image, region) {
   });
 }
 
-// 이미지에서 텍스트 추출 (OCR) - Tesseract.js 사용 (신뢰도 필터링)
+// 이미지 전처리 (대비 강화 + 그레이스케일)
+function preprocessImage(base64Image) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      // 이미지가 작으면 2배 확대
+      const scale = Math.max(1, Math.min(2, 300 / Math.min(img.width, img.height)));
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+
+      // 이미지 그리기
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      // 이미지 데이터 가져오기
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+
+      // 그레이스케일 + 대비 강화
+      for (let i = 0; i < data.length; i += 4) {
+        // 그레이스케일
+        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+
+        // 대비 강화 (contrast factor 1.5)
+        const contrast = 1.5;
+        const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
+        const enhanced = factor * (gray - 128) + 128;
+
+        const value = Math.max(0, Math.min(255, enhanced));
+        data[i] = value;
+        data[i + 1] = value;
+        data[i + 2] = value;
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.src = base64Image;
+  });
+}
+
+// 이미지에서 텍스트 추출 (OCR) - Tesseract.js 사용 (전처리 + 신뢰도 필터링)
 export async function extractTextFromImage(base64Image) {
   try {
+    // 이미지 전처리
+    const processedImage = await preprocessImage(base64Image);
+
     const result = await Tesseract.recognize(
-      base64Image,
-      'eng', // English
+      processedImage,
+      'eng',
       {
         // logger: m => console.log(m) // Uncomment for debug
       }
     );
 
-    // 신뢰도 60% 이상인 단어만 추출
-    const MIN_CONFIDENCE = 60;
+    // 신뢰도 40% 이상인 단어만 추출 (기존 60%에서 완화)
+    const MIN_CONFIDENCE = 40;
     const words = result.data.words || [];
+
+    // 전체 텍스트도 확인 (신뢰도 낮아도 인식된 경우)
+    const fullText = result.data.text?.trim();
 
     const confidentWords = words
       .filter(word => word.confidence >= MIN_CONFIDENCE)
       .map(word => word.text);
 
     if (confidentWords.length === 0) {
-      return null;
+      // 신뢰도 높은 단어가 없으면 전체 텍스트 반환 시도
+      return fullText || null;
     }
 
     // 줄바꿈 유지하며 텍스트 조합
@@ -422,7 +472,7 @@ export async function extractTextFromImage(base64Image) {
       .filter(line => line.trim().length > 0)
       .join('\n');
 
-    return confidentText.trim() || null;
+    return confidentText.trim() || fullText || null;
   } catch (err) {
     console.error('Tesseract OCR failed:', err);
     throw new Error('OCR 실패');
@@ -437,8 +487,8 @@ export async function cropImageRegion(pages, page, region) {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
-      // 패딩 추가 (상하좌우 3% 여유)
-      const padding = 3;
+      // 패딩 추가 (상하좌우 5% 여유 - 텍스트가 잘리지 않도록)
+      const padding = 5;
       const x = Math.max(0, region.x - padding);
       const y = Math.max(0, region.y - padding);
       const right = Math.min(100, region.x + region.width + padding);
