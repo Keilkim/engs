@@ -49,8 +49,11 @@ export default function ContextMenu({
 
     setOcrLoading(true);
     try {
+      // Get bounds from selection (support both old rect format and new path format)
+      const bounds = selectionRect.bounds || selectionRect;
+
       // Crop the selected region
-      const croppedImage = await cropImageRegion(pages, selectionRect.page, selectionRect);
+      const croppedImage = await cropImageRegion(pages, selectionRect.page, bounds);
       // Extract text with OCR
       const text = await extractTextFromImage(croppedImage);
       if (text) {
