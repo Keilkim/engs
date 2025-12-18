@@ -479,7 +479,7 @@ export async function extractTextFromImage(base64Image) {
   }
 }
 
-// 이미지 영역 크롭 후 base64 반환 (패딩 추가로 넓게 인식)
+// 이미지 영역 크롭 후 base64 반환 (마킹 영역만 정확히 크롭)
 export async function cropImageRegion(pages, page, region) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -487,14 +487,11 @@ export async function cropImageRegion(pages, page, region) {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
-      // 패딩 추가 (상하좌우 5% 여유 - 텍스트가 잘리지 않도록)
-      const padding = 5;
-      const x = Math.max(0, region.x - padding);
-      const y = Math.max(0, region.y - padding);
-      const right = Math.min(100, region.x + region.width + padding);
-      const bottom = Math.min(100, region.y + region.height + padding);
-      const width = right - x;
-      const height = bottom - y;
+      // 패딩 없이 마킹된 영역만 크롭
+      const x = Math.max(0, region.x);
+      const y = Math.max(0, region.y);
+      const width = Math.min(100 - x, region.width);
+      const height = Math.min(100 - y, region.height);
 
       // 퍼센트를 픽셀로 변환
       const px = (x / 100) * img.width;
