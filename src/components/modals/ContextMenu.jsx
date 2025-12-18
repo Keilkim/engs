@@ -103,26 +103,40 @@ export default function ContextMenu({
   async function runAnalysis(text) {
     if (!text || text.startsWith('(') || text.startsWith('[Image Selection')) return;
 
-    console.log('분석 시작:', text, '단어여부:', isWordOrPhrase(text));
+    const isWord = isWordOrPhrase(text);
+    console.log('분석 시작:', text, '단어여부:', isWord);
     setLoading(true);
 
+    // 타임아웃 설정 (10초)
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout')), 10000)
+    );
+
     try {
-      if (isWordOrPhrase(text)) {
+      if (isWord) {
         // 단어/구 → 번역
-        const result = await analyzeText(text, 'word');
+        const result = await Promise.race([analyzeText(text, 'word'), timeout]);
         setAnalysisResult({ type: 'word', content: result });
       } else {
-        // 문장 → 문법 분석
+        // 문장 → 문법 분석 (모달 바로 표시)
+        setLoading(false);
         setGrammarData({ originalText: text });
         setGrammarLoading(true);
 
-        const patterns = await analyzeGrammarPatterns(text);
-        setAiPatterns(patterns);
-        setGrammarLoading(false);
+        try {
+          const patterns = await Promise.race([analyzeGrammarPatterns(text), timeout]);
+          setAiPatterns(patterns);
+        } catch (err) {
+          console.error('문법 분석 실패:', err);
+          setAiPatterns({ patterns: [] });
+        } finally {
+          setGrammarLoading(false);
+        }
+        return; // 문장은 여기서 종료
       }
     } catch (err) {
       console.error('분석 실패:', err);
-      setAnalysisResult({ type: 'word', content: '분석에 실패했습니다.' });
+      setAnalysisResult({ type: 'word', content: '분석 실패 (다시 시도해주세요)' });
     } finally {
       setLoading(false);
     }
