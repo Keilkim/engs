@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { signIn, signInWithGoogle, signInWithKakao } from '../../services/auth';
+import { signIn, signInWithKakao, signInWithGoogle } from '../../services/auth';
 import { TranslatableText } from '../../components/translatable';
 
 export default function Login() {
@@ -9,6 +9,14 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [autoLogin, setAutoLogin] = useState(() => {
+    return localStorage.getItem('autoLogin') === 'true';
+  });
+
+  const handleAutoLoginChange = (checked) => {
+    setAutoLogin(checked);
+    localStorage.setItem('autoLogin', checked.toString());
+  };
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -25,14 +33,6 @@ export default function Login() {
     }
   }
 
-  async function handleGoogleLogin() {
-    try {
-      await signInWithGoogle();
-    } catch (err) {
-      setError('Google sign in failed');
-    }
-  }
-
   async function handleKakaoLogin() {
     try {
       await signInWithKakao();
@@ -41,11 +41,19 @@ export default function Login() {
     }
   }
 
+  async function handleGoogleLogin() {
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setError('Google sign in failed');
+    }
+  }
+
   return (
     <div className="login-screen">
       <div className="login-container">
         <div className="app-logo">
-          <h1>ENGS</h1>
+          <h1>랭버디</h1>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
@@ -78,6 +86,15 @@ export default function Login() {
               required
             />
           </div>
+
+          <label className="auto-login-checkbox">
+            <input
+              type="checkbox"
+              checked={autoLogin}
+              onChange={(e) => handleAutoLoginChange(e.target.checked)}
+            />
+            <span><TranslatableText textKey="login.autoLogin">자동 로그인</TranslatableText></span>
+          </label>
 
           <button
             type="submit"

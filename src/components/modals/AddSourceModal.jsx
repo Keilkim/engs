@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
-import { createSource, uploadFile, captureScreenshot, captureWebpageScreenshot } from '../../services/source';
+import { createSource, uploadFile, captureWebpageScreenshot } from '../../services/source';
+import { extractTextWithWordPositions } from '../../services/ai';
 import { TranslatableText } from '../translatable';
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -25,7 +26,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const maxSize = 300;
+          const maxSize = 800;
           let width = img.width;
           let height = img.height;
 
@@ -85,13 +86,51 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
     return pages;
   }
 
+  // OCR all pages and extract word positions
+  async function ocrAllPages(pages, onProgress) {
+    const ocrData = { pages: [] };
+
+    for (let i = 0; i < pages.length; i++) {
+      onProgress?.(`OCR 처리 중 (${i + 1}/${pages.length})...`);
+
+      try {
+        const result = await extractTextWithWordPositions(pages[i]);
+        console.log(`[Upload-OCR] Page ${i + 1} result:`, result?.words?.length || 0, 'words');
+        if (result && result.words) {
+          ocrData.pages.push({
+            pageIndex: i,
+            words: result.words.map(w => ({
+              text: w.text,
+              bbox: {
+                x: w.bbox.x,
+                y: w.bbox.y,
+                width: w.bbox.width,
+                height: w.bbox.height,
+              },
+            })),
+          });
+          console.log(`[Upload-OCR] Page ${i + 1} saved:`, ocrData.pages[i].words.length, 'words');
+        } else {
+          console.log(`[Upload-OCR] Page ${i + 1} no result, saving empty`);
+          ocrData.pages.push({ pageIndex: i, words: [] });
+        }
+      } catch (err) {
+        console.error(`Page ${i + 1} OCR failed:`, err);
+        ocrData.pages.push({ pageIndex: i, words: [] });
+      }
+    }
+
+    console.log('[Upload-OCR] Final ocrData:', ocrData.pages.map(p => ({ page: p.pageIndex, words: p.words.length })));
+    return ocrData;
+  }
+
   // Generate thumbnail from first page
   function generateThumbnailFromPage(pageImage) {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxSize = 300;
+        const maxSize = 800;
         let width = img.width;
         let height = img.height;
 
@@ -130,13 +169,24 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
       const { url: fileUrl } = await uploadFile(file);
 
       let screenshot = null;
-
       let pages = null;
+      let ocrData = null;
 
       if (fileType === 'image') {
-        // For images, generate thumbnail as screenshot
+        // For images, generate thumbnail and read as base64 for OCR
         setLoadingStatus('Generating preview...');
         screenshot = await generateImageThumbnail(file);
+
+        // Read full image for OCR
+        const fullImage = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.readAsDataURL(file);
+        });
+        pages = [fullImage];
+
+        // OCR the image
+        ocrData = await ocrAllPages(pages, setLoadingStatus);
       } else if (fileType === 'pdf') {
         // For PDFs, convert all pages to images
         try {
@@ -146,6 +196,9 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
             setLoadingStatus('Generating thumbnail...');
             screenshot = await generateThumbnailFromPage(pages[0]);
           }
+
+          // OCR all pages
+          ocrData = await ocrAllPages(pages, setLoadingStatus);
         } catch (captureErr) {
           console.warn('Could not convert PDF pages:', captureErr);
         }
@@ -158,6 +211,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
         file_path: fileUrl,
         screenshot,
         pages: pages ? JSON.stringify(pages) : null,
+        ocr_data: ocrData,
       });
 
       onSuccess();
@@ -165,58 +219,6 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
     } catch (err) {
       console.error(err);
       setError('Failed to upload file');
-    } finally {
-      setLoading(false);
-      setLoadingStatus('');
-    }
-  }
-
-  async function handleUrlSubmit(e) {
-    e.preventDefault();
-
-    if (!url.trim()) {
-      setError('Please enter a URL');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    try {
-      setLoadingStatus('Fetching content...');
-
-      // Capture screenshot and content of the URL
-      let screenshot = null;
-      let content = null;
-      let fetchedTitle = title;
-
-      try {
-        const screenshotData = await captureScreenshot(url, 'url');
-        screenshot = screenshotData.screenshot || null;
-        content = screenshotData.content || null;
-
-        if (!title && screenshotData.title) {
-          fetchedTitle = screenshotData.title;
-        }
-      } catch (captureErr) {
-        console.warn('Could not fetch content:', captureErr);
-        // Continue without content - user can still save the URL
-      }
-
-      setLoadingStatus('Saving source...');
-      await createSource({
-        title: fetchedTitle || url,
-        type: 'url',
-        file_path: url,
-        screenshot,
-        content,
-      });
-
-      onSuccess();
-      handleClose();
-    } catch (err) {
-      console.error(err);
-      setError('Failed to add URL');
     } finally {
       setLoading(false);
       setLoadingStatus('');
@@ -240,18 +242,23 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
 
       // Microlink API로 Full Page 스크린샷 캡처 후 메인 콘텐츠 크롭
       const result = await captureWebpageScreenshot(url);
+      const pages = [result.image];
 
       // 썸네일 생성
       setLoadingStatus('Generating thumbnail...');
       const thumbnail = await generateThumbnailFromPage(result.image);
+
+      // OCR
+      const ocrData = await ocrAllPages(pages, setLoadingStatus);
 
       setLoadingStatus('Saving source...');
       await createSource({
         title: title || result.title,
         type: 'screenshot',
         file_path: url,
-        pages: JSON.stringify([result.image]),
+        pages: JSON.stringify(pages),
         screenshot: thumbnail,
+        ocr_data: ocrData,
       });
 
       onSuccess();
@@ -291,16 +298,10 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
             <TranslatableText textKey="addSource.uploadFile">Upload File</TranslatableText>
           </button>
           <button
-            className={`tab ${activeTab === 'url' ? 'active' : ''}`}
-            onClick={() => setActiveTab('url')}
-          >
-            <TranslatableText textKey="addSource.addUrl">Add URL</TranslatableText>
-          </button>
-          <button
             className={`tab ${activeTab === 'screenshot' ? 'active' : ''}`}
             onClick={() => setActiveTab('screenshot')}
           >
-            <TranslatableText textKey="addSource.screenshot">Screenshot</TranslatableText>
+            Web URL
           </button>
         </div>
 
@@ -340,29 +341,6 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                 <TranslatableText textKey="addSource.supportedFormats">Supports PDF, PNG, JPG</TranslatableText>
               </p>
             </div>
-          )}
-
-          {activeTab === 'url' && (
-            <form onSubmit={handleUrlSubmit}>
-              <div className="input-group">
-                <label htmlFor="url">URL</label>
-                <input
-                  id="url"
-                  type="url"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://..."
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                className="submit-button"
-                disabled={loading}
-              >
-                {loading ? (loadingStatus || 'Adding...') : <TranslatableText textKey="addSource.add">Add</TranslatableText>}
-              </button>
-            </form>
           )}
 
           {activeTab === 'screenshot' && (

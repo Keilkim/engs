@@ -1,5 +1,7 @@
 import nlp from 'compromise';
+import Tesseract from 'tesseract.js';
 import { getSetting, SETTINGS_KEYS } from './settings';
+import { getVocabulary, getGrammarPatterns } from './annotation';
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 // Use Gemini 2.0 Flash (available in current API)
@@ -224,7 +226,7 @@ IMPORTANT RULES:
    - Simple present/past tense
    - Basic article usage (a, an, the)
    - Simple prepositional phrases
-3. If NO meaningful intermediate+ patterns exist, return {"patterns": [], "sentence_structure": null}
+3. If NO meaningful intermediate+ patterns exist, return {"patterns": []}
 4. Quality over quantity - only include patterns that would actually help a learner
 
 Return a JSON object with this structure:
@@ -233,45 +235,55 @@ Return a JSON object with this structure:
     {
       "type": "pattern name in English",
       "typeKr": "한국어 패턴명",
-      "words": ["word1", "word2"],
-      "wordIndices": [0, 2],
+      "keywords": [
+        { "word": "not", "index": 5 },
+        { "word": "but", "index": 9 }
+      ],
+      "parts": [
+        { "label": "A", "text": "with a schedule", "startIndex": 6, "endIndex": 8 },
+        { "label": "B", "text": "with a question", "startIndex": 10, "endIndex": 12 }
+      ],
       "explanation": "Brief explanation in Korean (1-2 sentences)",
       "color": "#hex"
     }
-  ],
-  "sentence_structure": {
-    "subject": { "text": "subject words", "indices": [0] },
-    "verb": { "text": "verb words", "indices": [1] },
-    "object": { "text": "object words", "indices": [2, 3] }
-  }
+  ]
 }
 
+STRUCTURE EXPLANATION:
+- "keywords": The key grammatical markers (e.g., "not", "but", "if", "then", "so...that", "too...to")
+  - These will be highlighted and connected with a dashed arc
+- "parts": The meaningful segments of the pattern (e.g., A/B in "not A but B", condition/result in conditionals)
+  - These will be underlined with labels when user clicks the pattern
+- "index", "startIndex", "endIndex" are 0-based word positions in the sentence
+
 Color suggestions:
-- to-infinitive (advanced usage): #60a5fa (blue)
-- gerund as subject/object: #f87171 (red)
-- passive voice: #fb923c (orange)
-- perfect/perfect continuous: #facc15 (yellow)
-- relative clauses (who/which/that): #c084fc (purple)
-- conditionals (if clauses, subjunctive): #4ade80 (green)
-- participle constructions: #2dd4bf (teal)
-- inversion: #ec4899 (pink)
-- cleft sentences: #8b5cf6 (violet)
+- not A but B / either...or / neither...nor: #60a5fa (blue)
+- so...that / such...that: #f87171 (red)
+- too...to / enough to: #fb923c (orange)
+- the more...the more: #facc15 (yellow)
+- not only...but also: #c084fc (purple)
+- conditionals (if...then): #4ade80 (green)
+- as...as: #2dd4bf (teal)
+- whether...or: #ec4899 (pink)
+- both...and: #8b5cf6 (violet)
 
-ONLY include these types of patterns:
-- to-infinitive (목적/결과/형용사적 용법 - NOT simple "to go" but "in order to", "enough to", "too...to")
-- Gerund as subject/object (동명사 주어/목적어)
-- Passive voice (수동태: be + p.p)
-- Perfect/Perfect continuous (완료시제: have been ~ing)
-- Relative clauses (관계대명사절 - especially reduced relatives)
-- Conditionals (가정법: if, unless, were to, should)
-- Participle constructions (분사구문: -ing/-ed starting phrases)
-- Subjunctive mood (가정법 현재/과거)
-- Inversion (도치)
-- Cleft sentences (강조 구문: It is...that)
-- Causative verbs (사역동사: make/have/let + O + V)
-- Reported speech patterns
+ONLY include these types of correlative/paired patterns:
+- not A but B (A가 아니라 B)
+- not only A but also B (A뿐만 아니라 B도)
+- either A or B (A 또는 B)
+- neither A nor B (A도 B도 아닌)
+- both A and B (A와 B 둘 다)
+- so + adj/adv + that (너무 ~해서 ~하다)
+- such + noun + that (너무 ~해서 ~하다)
+- too + adj + to V (너무 ~해서 V할 수 없다)
+- adj + enough + to V (~하기에 충분히 ~하다)
+- the + 비교급, the + 비교급 (~할수록 더 ~하다)
+- as + adj + as (~만큼 ~한)
+- whether A or B (A이든 B이든)
+- if/when conditionals with clear condition-result structure
+- Passive voice with clear agent (수동태: be + p.p + by)
+- Relative clauses (관계대명사절)
 
-wordIndices should be 0-based indices matching the word positions in the sentence.
 Return ONLY valid JSON, no markdown code blocks or extra text.`;
 
   try {
@@ -490,54 +502,128 @@ export async function cropImage(base64Image, region) {
   });
 }
 
-// 이미지에서 텍스트 추출 (OCR) - Gemini Vision
-export async function extractTextFromImage(base64Image) {
+// 이미지에서 텍스트 추출 (OCR) - Tesseract.js (무료, 클라이언트)
+export async function extractTextFromImage(base64Image, wordBag = null) {
   try {
-    // base64 데이터에서 prefix 제거
-    const imageData = base64Image.replace(/^data:image\/\w+;base64,/, '');
-
-    const response = await fetch(`${API_URL}?key=${GOOGLE_API_KEY}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const result = await Tesseract.recognize(base64Image, 'eng', {
+      logger: (m) => {
+        if (m.status === 'recognizing text') {
+          console.log('Tesseract:', Math.round(m.progress * 100) + '%');
+        }
       },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            {
-              text: `Extract ALL text from this image exactly as it appears.
-Return ONLY the extracted text, nothing else.
-If there are multiple lines, preserve the line breaks.
-If the image contains no readable text, return empty string.`
-            },
-            {
-              inline_data: {
-                mime_type: 'image/jpeg',
-                data: imageData,
-              },
-            },
-          ],
-        }],
-        generationConfig: {
-          temperature: 0.1,
-        },
-      }),
     });
 
-    if (!response.ok) {
-      console.error('Gemini Vision OCR failed:', await response.text());
-      return null;
+    let text = result.data.text?.trim();
+    console.log('Tesseract OCR result:', text);
+
+    // 단어 주머니가 있으면 오타 보정
+    if (text && wordBag && wordBag.size > 0) {
+      text = correctTextWithWordBag(text, wordBag);
+      console.log('Corrected text:', text);
     }
 
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-
-    console.log('Gemini OCR result:', text);
     return text || null;
   } catch (err) {
-    console.error('OCR failed:', err);
+    console.error('Tesseract OCR failed:', err);
     return null;
   }
+}
+
+// 전체 문서에서 단어 주머니 추출 (한번만 실행)
+export async function extractWordBagFromImages(images) {
+  const wordSet = new Set();
+
+  for (let i = 0; i < images.length; i++) {
+    try {
+      console.log(`OCR processing page ${i + 1}/${images.length}...`);
+      const result = await Tesseract.recognize(images[i], 'eng', {
+        logger: (m) => {
+          if (m.status === 'recognizing text' && m.progress === 1) {
+            console.log(`Page ${i + 1} OCR complete`);
+          }
+        },
+      });
+
+      // 단어 추출 (소문자로 정규화)
+      const words = result.data.text
+        .split(/\s+/)
+        .map(w => w.replace(/[^a-zA-Z'-]/g, '').toLowerCase())
+        .filter(w => w.length >= 2);
+
+      words.forEach(w => wordSet.add(w));
+    } catch (err) {
+      console.error(`Page ${i + 1} OCR failed:`, err);
+    }
+  }
+
+  console.log(`Word bag extracted: ${wordSet.size} unique words`);
+  return wordSet;
+}
+
+// 레벤슈타인 거리 계산
+function levenshteinDistance(a, b) {
+  const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
+
+  for (let i = 0; i <= a.length; i++) matrix[0][i] = i;
+  for (let j = 0; j <= b.length; j++) matrix[j][0] = j;
+
+  for (let j = 1; j <= b.length; j++) {
+    for (let i = 1; i <= a.length; i++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[j][i] = Math.min(
+        matrix[j][i - 1] + 1,
+        matrix[j - 1][i] + 1,
+        matrix[j - 1][i - 1] + cost
+      );
+    }
+  }
+
+  return matrix[b.length][a.length];
+}
+
+// 단어 주머니로 OCR 오타 보정
+function correctTextWithWordBag(text, wordBag) {
+  const words = text.split(/\s+/);
+
+  const corrected = words.map(word => {
+    // 특수문자 제거한 순수 단어
+    const cleanWord = word.replace(/[^a-zA-Z'-]/g, '').toLowerCase();
+    if (cleanWord.length < 2) return word;
+
+    // 이미 단어 주머니에 있으면 그대로
+    if (wordBag.has(cleanWord)) return word;
+
+    // 가장 유사한 단어 찾기
+    let bestMatch = null;
+    let bestDistance = Infinity;
+
+    for (const bagWord of wordBag) {
+      // 길이 차이가 너무 크면 스킵
+      if (Math.abs(bagWord.length - cleanWord.length) > 2) continue;
+
+      const dist = levenshteinDistance(cleanWord, bagWord);
+
+      // 거리가 2 이하이고 더 가까우면 교체 후보
+      if (dist <= 2 && dist < bestDistance) {
+        bestDistance = dist;
+        bestMatch = bagWord;
+      }
+    }
+
+    if (bestMatch) {
+      // 원래 대소문자 패턴 유지
+      const isCapitalized = word[0] === word[0].toUpperCase();
+      const isAllCaps = word === word.toUpperCase();
+
+      if (isAllCaps) return bestMatch.toUpperCase();
+      if (isCapitalized) return bestMatch.charAt(0).toUpperCase() + bestMatch.slice(1);
+      return bestMatch;
+    }
+
+    return word;
+  });
+
+  return corrected.join(' ');
 }
 
 // 이미지 영역 크롭 후 base64 반환 (마킹 영역만 정확히 크롭)
@@ -571,27 +657,364 @@ export async function cropImageRegion(pages, page, region) {
   });
 }
 
-// AI 대화
-export async function chat(message, context = '') {
+// OCR로 텍스트와 단어 위치 추출 (Tesseract.js v7)
+export async function extractTextWithWordPositions(base64Image) {
+  try {
+    // Get image dimensions first
+    const img = new Image();
+    const imgLoadPromise = new Promise((resolve) => {
+      img.onload = () => resolve({ width: img.width, height: img.height });
+      img.onerror = () => resolve({ width: 1, height: 1 });
+      img.src = base64Image;
+    });
+    const { width: imageWidth, height: imageHeight } = await imgLoadPromise;
+    console.log('[OCR-Extract] Image dimensions:', imageWidth, 'x', imageHeight);
+
+    // Create worker (no progress logging)
+    const worker = await Tesseract.createWorker('eng', 1);
+
+    // v7: MUST explicitly request 'blocks' output to get word-level bbox data
+    // Default only returns 'text'
+    const result = await worker.recognize(base64Image, {}, {
+      text: true,
+      blocks: true,  // This is required for word-level bounding boxes
+    });
+
+    console.log('[OCR-Extract] result.data keys:', Object.keys(result.data || {}));
+    console.log('[OCR-Extract] text length:', result.data.text?.length);
+
+    const data = result.data;
+    const allWords = [];
+
+    // v7: blocks contains the hierarchical structure: blocks > paragraphs > lines > words
+    if (data.blocks) {
+      console.log('[OCR-Extract] blocks type:', typeof data.blocks);
+      console.log('[OCR-Extract] blocks is array:', Array.isArray(data.blocks));
+
+      // If blocks is an object, log its structure
+      if (typeof data.blocks === 'object' && !Array.isArray(data.blocks)) {
+        console.log('[OCR-Extract] blocks keys:', Object.keys(data.blocks));
+        console.log('[OCR-Extract] blocks sample:', JSON.stringify(data.blocks).substring(0, 500));
+      }
+
+      // Parse blocks hierarchy
+      const blocksArray = Array.isArray(data.blocks) ? data.blocks : [data.blocks];
+      for (const block of blocksArray) {
+        if (!block) continue;
+
+        // Try direct words on block
+        if (block.words && Array.isArray(block.words)) {
+          for (const word of block.words) {
+            if (word.text && word.bbox) {
+              allWords.push({ text: word.text.trim(), confidence: word.confidence || 90, bbox: word.bbox });
+            }
+          }
+        }
+
+        // Try paragraphs > lines > words
+        for (const para of (block.paragraphs || [])) {
+          for (const line of (para.lines || [])) {
+            for (const word of (line.words || [])) {
+              if (word.text && word.bbox) {
+                allWords.push({ text: word.text.trim(), confidence: word.confidence || 90, bbox: word.bbox });
+              }
+            }
+          }
+        }
+      }
+      console.log('[OCR-Extract] Extracted from blocks:', allWords.length, 'words');
+    }
+
+    // Alternative: try data.words directly (some versions)
+    if (allWords.length === 0 && data.words && Array.isArray(data.words)) {
+      console.log('[OCR-Extract] Trying data.words:', data.words.length);
+      for (const word of data.words) {
+        if (word.text && word.bbox) {
+          allWords.push({ text: word.text.trim(), confidence: word.confidence || 90, bbox: word.bbox });
+        }
+      }
+    }
+
+    // Terminate worker
+    await worker.terminate();
+
+    // Debug: If no words found, show what we have
+    if (allWords.length === 0) {
+      console.log('[OCR-Extract] NO WORDS FOUND!');
+      console.log('[OCR-Extract] data.blocks:', data.blocks);
+      console.log('[OCR-Extract] data.words:', data.words);
+
+      return {
+        text: data.text || '',
+        words: [],
+        imageSize: { width: imageWidth, height: imageHeight },
+      };
+    }
+
+    // 단어별 위치를 퍼센트로 변환
+    const wordPositions = allWords.map((word) => ({
+      text: word.text,
+      confidence: word.confidence,
+      bbox: {
+        x: (word.bbox.x0 / imageWidth) * 100,
+        y: (word.bbox.y0 / imageHeight) * 100,
+        width: ((word.bbox.x1 - word.bbox.x0) / imageWidth) * 100,
+        height: ((word.bbox.y1 - word.bbox.y0) / imageHeight) * 100,
+      },
+    }));
+
+    console.log('[OCR-Extract] SUCCESS:', wordPositions.length, 'words');
+    console.log('[OCR-Extract] Sample:', wordPositions.slice(0, 3).map(w => ({
+      text: w.text,
+      bbox: `x:${w.bbox.x.toFixed(1)}% y:${w.bbox.y.toFixed(1)}%`
+    })));
+
+    return {
+      text: data.text,
+      words: wordPositions,
+      imageSize: { width: imageWidth, height: imageHeight },
+    };
+  } catch (err) {
+    console.error('Tesseract OCR failed:', err);
+    return null;
+  }
+}
+
+// 특정 단어들의 위치 찾기 (OCR 결과에서)
+export function findWordPositions(ocrResult, targetWords) {
+  if (!ocrResult || !ocrResult.words) return [];
+
+  const positions = [];
+
+  targetWords.forEach((target) => {
+    const targetLower = target.word.toLowerCase();
+
+    // OCR 결과에서 해당 단어 찾기
+    const found = ocrResult.words.find((w) =>
+      w.text.toLowerCase().includes(targetLower) ||
+      targetLower.includes(w.text.toLowerCase())
+    );
+
+    if (found) {
+      positions.push({
+        word: target.word,
+        index: target.index,
+        bbox: found.bbox,
+        confidence: found.confidence,
+      });
+    }
+  });
+
+  return positions;
+}
+
+// Google Translate 언어 코드 매핑
+const LANG_CODES = {
+  Korean: 'ko',
+  Chinese: 'zh-CN',
+  German: 'de',
+  English: 'en',
+};
+
+// Google Translate 비공식 API (빠름)
+async function googleTranslate(text, targetLang = 'ko') {
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Translation failed');
+  const data = await response.json();
+  // 결과는 [[["번역문","원문",...],...],...]  형태
+  return data[0]?.map(item => item[0]).join('') || text;
+}
+
+// 단어 뜻 빠른 검색 (Free Dictionary API + Google Translate)
+export async function lookupWord(word) {
+  const cleanWord = word.replace(/[.,;:!?"'()[\]{}]/g, '').trim();
+  if (!cleanWord) {
+    return { word, phonetic: '', definition: '단어를 인식할 수 없습니다' };
+  }
+
+  const translationLang = getSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, 'Korean');
+  const langCode = LANG_CODES[translationLang] || 'ko';
+
+  try {
+    // Free Dictionary API로 영어 정의 가져오기
+    const dictResponse = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleanWord)}`);
+
+    if (dictResponse.ok) {
+      const dictData = await dictResponse.json();
+      const entry = dictData[0];
+      const phonetic = entry.phonetic || entry.phonetics?.[0]?.text || '';
+
+      // 정의 추출 (최대 3개)
+      const definitions = [];
+      for (const meaning of entry.meanings || []) {
+        for (const def of meaning.definitions || []) {
+          if (definitions.length < 3) {
+            definitions.push(`[${meaning.partOfSpeech}] ${def.definition}`);
+          }
+        }
+      }
+
+      // Google Translate로 빠르게 번역
+      const translated = await googleTranslate(definitions.join('\n'), langCode);
+
+      return {
+        word: cleanWord,
+        phonetic,
+        definition: translated,
+      };
+    }
+  } catch (err) {
+    console.log('Dictionary lookup failed:', err);
+  }
+
+  // Fallback: 단어만 직접 번역
+  try {
+    const translated = await googleTranslate(cleanWord, langCode);
+    return {
+      word: cleanWord,
+      phonetic: '',
+      definition: translated,
+    };
+  } catch (err) {
+    console.error('Word lookup failed:', err);
+  }
+
+  return {
+    word: cleanWord,
+    phonetic: '',
+    definition: '정의를 찾을 수 없습니다',
+  };
+}
+
+// 마이 딕셔너리에서 대화 주제와 관련된 단어/문법 컨텍스트 빌드
+async function buildMyDictionaryContext(chatLang) {
+  try {
+    const [vocabItems, grammarItems] = await Promise.all([
+      getVocabulary(),
+      getGrammarPatterns(),
+    ]);
+
+    if (vocabItems.length === 0 && grammarItems.length === 0) {
+      return '';
+    }
+
+    // 단어 목록 빌드
+    const vocabList = vocabItems.slice(0, 30).map(item => {
+      try {
+        const json = JSON.parse(item.ai_analysis_json || '{}');
+        return `${item.selected_text}: ${json.definition || ''}`;
+      } catch {
+        return item.selected_text;
+      }
+    });
+
+    // 문법 패턴 목록 빌드
+    const grammarList = grammarItems.slice(0, 15).map(item => {
+      try {
+        const json = JSON.parse(item.ai_analysis_json || '{}');
+        const patternNames = json.patterns?.map(p => p.typeKr || p.type).join(', ') || '';
+        return `"${json.originalText}": ${patternNames}`;
+      } catch {
+        return '';
+      }
+    }).filter(Boolean);
+
+    const contextByLang = {
+      Korean: `\n\n[사용자의 마이 딕셔너리]
+다음은 사용자가 학습 중인 단어와 문법 패턴입니다. 대화 주제와 관련이 있다면 이 단어와 문법을 우선적으로 활용하여 설명하거나 예문을 만들어주세요.
+
+저장된 단어: ${vocabList.join(', ') || '없음'}
+
+저장된 문법 패턴: ${grammarList.join(' / ') || '없음'}
+`,
+      Chinese: `\n\n[用户的我的词典]
+以下是用户正在学习的单词和语法模式。如果与对话主题相关，请优先使用这些单词和语法进行解释或造句。
+
+保存的单词: ${vocabList.join(', ') || '无'}
+
+保存的语法模式: ${grammarList.join(' / ') || '无'}
+`,
+      German: `\n\n[Mein Wörterbuch des Benutzers]
+Dies sind die Wörter und Grammatikmuster, die der Benutzer lernt. Wenn sie zum Gesprächsthema passen, verwenden Sie diese Wörter und Grammatik bevorzugt für Erklärungen oder Beispielsätze.
+
+Gespeicherte Wörter: ${vocabList.join(', ') || 'Keine'}
+
+Gespeicherte Grammatikmuster: ${grammarList.join(' / ') || 'Keine'}
+`,
+      English: `\n\n[User's My Dictionary]
+These are the words and grammar patterns the user is learning. If relevant to the conversation topic, prioritize using these words and grammar for explanations or example sentences.
+
+Saved words: ${vocabList.join(', ') || 'None'}
+
+Saved grammar patterns: ${grammarList.join(' / ') || 'None'}
+`,
+    };
+
+    return contextByLang[chatLang] || contextByLang.Korean;
+  } catch (err) {
+    console.error('Failed to load My Dictionary context:', err);
+    return '';
+  }
+}
+
+// Build conversation history for multi-turn chat
+function buildConversationHistory(messages, maxTurns = 6) {
+  if (!messages || messages.length === 0) return [];
+
+  // 최근 N개 턴만 사용 (메모리/토큰 절약)
+  const recentMessages = messages.slice(-maxTurns * 2);
+
+  return recentMessages.map(msg => ({
+    role: msg.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: msg.message }],
+  }));
+}
+
+// AI 대화 (대화 히스토리 지원)
+export async function chat(message, context = '', conversationHistory = []) {
   // Get user's AI chat language preference
   const chatLang = getSetting(SETTINGS_KEYS.AI_CHAT_LANGUAGE, 'Korean');
 
+  // 마이 딕셔너리 컨텍스트 로드
+  const myDictContext = await buildMyDictionaryContext(chatLang);
+
   const systemPrompts = {
-    Korean: context
-      ? `당신은 영어 학습을 도와주는 AI 튜터입니다. 한국어로 답변해주세요. 다음 학습 자료를 참고하여 답변해주세요:\n\n${context}\n\n`
-      : '당신은 영어 학습을 도와주는 AI 튜터입니다. 한국어로 답변해주세요. ',
-    Chinese: context
-      ? `你是一位帮助英语学习的AI导师。请用中文回答。请参考以下学习材料回答:\n\n${context}\n\n`
-      : '你是一位帮助英语学习的AI导师。请用中文回答。',
-    German: context
-      ? `Sie sind ein KI-Tutor, der beim Englischlernen hilft. Bitte antworten Sie auf Deutsch. Bitte beziehen Sie sich auf das folgende Lernmaterial:\n\n${context}\n\n`
-      : 'Sie sind ein KI-Tutor, der beim Englischlernen hilft. Bitte antworten Sie auf Deutsch. ',
-    English: context
-      ? `You are an AI tutor helping with English learning. Please respond in English. Please refer to the following learning material:\n\n${context}\n\n`
-      : 'You are an AI tutor helping with English learning. Please respond in English. ',
+    Korean: `당신은 친근하고 도움이 되는 영어 학습 AI 튜터입니다.
+- 반드시 한국어로만 답변해주세요
+- 자연스럽고 대화체로 답변하세요
+- 필요한 경우 이전 대화 내용을 참고하세요
+- 답변은 간결하고 핵심적으로 해주세요${context ? `\n\n[학습 자료]\n${context}` : ''}`,
+    Chinese: `你是一位友好且乐于助人的英语学习AI导师。
+- 必须用中文回答
+- 用自然的对话方式回答
+- 必要时参考之前的对话内容
+- 回答要简洁明了${context ? `\n\n[学习材料]\n${context}` : ''}`,
+    German: `Sie sind ein freundlicher und hilfreicher KI-Tutor für das Englischlernen.
+- Antworten Sie ausschließlich auf Deutsch
+- Antworten Sie in natürlicher Konversationsweise
+- Beziehen Sie sich bei Bedarf auf frühere Gespräche
+- Halten Sie Ihre Antworten kurz und prägnant${context ? `\n\n[Lernmaterial]\n${context}` : ''}`,
+    English: `You are a friendly and helpful English learning AI tutor.
+- You must respond only in English
+- Answer in a natural conversational tone
+- Refer to previous conversation when relevant
+- Keep your answers concise and focused${context ? `\n\n[Learning Material]\n${context}` : ''}`,
   };
 
-  const systemPrompt = systemPrompts[chatLang] || systemPrompts.Korean;
+  const systemPrompt = (systemPrompts[chatLang] || systemPrompts.Korean) + myDictContext;
+
+  // 대화 히스토리 빌드
+  const history = buildConversationHistory(conversationHistory);
+
+  // 첫 메시지에 시스템 프롬프트 포함
+  const contents = history.length > 0
+    ? [
+        { role: 'user', parts: [{ text: systemPrompt + '\n\n---\n\n' + history[0]?.parts?.[0]?.text || '' }] },
+        ...history.slice(1),
+        { role: 'user', parts: [{ text: message }] },
+      ]
+    : [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + message }] }];
 
   const response = await fetch(`${API_URL}?key=${GOOGLE_API_KEY}`, {
     method: 'POST',
@@ -599,11 +1022,11 @@ export async function chat(message, context = '') {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      contents: [{
-        parts: [{
-          text: systemPrompt + message,
-        }],
-      }],
+      contents,
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1024,
+      },
     }),
   });
 
@@ -613,4 +1036,103 @@ export async function chat(message, context = '') {
 
   const data = await response.json();
   return data.candidates[0].content.parts[0].text;
+}
+
+// 스트리밍 AI 대화 (실시간 타이핑 효과)
+export async function chatStream(message, context = '', conversationHistory = [], onChunk) {
+  const chatLang = getSetting(SETTINGS_KEYS.AI_CHAT_LANGUAGE, 'Korean');
+  const myDictContext = await buildMyDictionaryContext(chatLang);
+
+  const systemPrompts = {
+    Korean: `당신은 친근하고 도움이 되는 영어 학습 AI 튜터입니다.
+- 반드시 한국어로만 답변해주세요
+- 자연스럽고 대화체로 답변하세요
+- 필요한 경우 이전 대화 내용을 참고하세요
+- 답변은 간결하고 핵심적으로 해주세요${context ? `\n\n[학습 자료]\n${context}` : ''}`,
+    Chinese: `你是一位友好且乐于助人的英语学习AI导师。
+- 必须用中文回答
+- 用自然的对话方式回答
+- 必要时参考之前的对话内容
+- 回答要简洁明了${context ? `\n\n[学习材料]\n${context}` : ''}`,
+    German: `Sie sind ein freundlicher und hilfreicher KI-Tutor für das Englischlernen.
+- Antworten Sie ausschließlich auf Deutsch
+- Antworten Sie in natürlicher Konversationsweise
+- Beziehen Sie sich bei Bedarf auf frühere Gespräche
+- Halten Sie Ihre Antworten kurz und prägnant${context ? `\n\n[Lernmaterial]\n${context}` : ''}`,
+    English: `You are a friendly and helpful English learning AI tutor.
+- You must respond only in English
+- Answer in a natural conversational tone
+- Refer to previous conversation when relevant
+- Keep your answers concise and focused${context ? `\n\n[Learning Material]\n${context}` : ''}`,
+  };
+
+  const systemPrompt = (systemPrompts[chatLang] || systemPrompts.Korean) + myDictContext;
+
+  const history = buildConversationHistory(conversationHistory);
+
+  const contents = history.length > 0
+    ? [
+        { role: 'user', parts: [{ text: systemPrompt + '\n\n---\n\n' + history[0]?.parts?.[0]?.text || '' }] },
+        ...history.slice(1),
+        { role: 'user', parts: [{ text: message }] },
+      ]
+    : [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + message }] }];
+
+  // 스트리밍 API 엔드포인트
+  const streamUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${GOOGLE_API_KEY}`;
+
+  const response = await fetch(streamUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents,
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1024,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('AI 응답에 실패했습니다');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const jsonStr = line.slice(6);
+            if (jsonStr.trim() === '[DONE]') continue;
+
+            const data = JSON.parse(jsonStr);
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+            if (text) {
+              fullText += text;
+              onChunk?.(text, fullText);
+            }
+          } catch {
+            // JSON 파싱 실패 무시
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return fullText;
 }

@@ -10,6 +10,7 @@ import Home from './pages/home/Home';
 import Viewer from './pages/viewer/Viewer';
 import Review from './pages/review/Review';
 import Chat from './pages/chat/Chat';
+import LiveChat from './pages/live-chat/LiveChat';
 import Mypage from './pages/mypage/Mypage';
 import Settings from './pages/settings/Settings';
 import Onboarding from './pages/onboarding/Onboarding';
@@ -54,6 +55,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Chat />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/live-chat"
+            element={
+              <ProtectedRoute>
+                <LiveChat />
               </ProtectedRoute>
             }
           />

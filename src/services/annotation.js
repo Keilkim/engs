@@ -103,7 +103,7 @@ export async function getVocabulary() {
 }
 
 // 단어 저장 (highlight 타입으로, isVocabulary 마커 추가)
-export async function createVocabularyItem(word, definition, sourceId = null) {
+export async function createVocabularyItem(word, definition, sourceId = null, selectionRect = null) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const { data, error } = await supabase
@@ -114,6 +114,7 @@ export async function createVocabularyItem(word, definition, sourceId = null) {
       type: 'highlight',
       selected_text: word,
       ai_analysis_json: JSON.stringify({ isVocabulary: true, definition }),
+      selection_rect: selectionRect ? JSON.stringify(selectionRect) : null,
     })
     .select()
     .single();
@@ -203,4 +204,91 @@ export async function getGrammarPatterns() {
 // 수동 단어 추가
 export async function addManualVocabulary(word, definition) {
   return createVocabularyItem(word, definition, null);
+}
+
+// ============ 펜 스트로크 관련 함수 ============
+
+// 펜 스트로크 조회
+export async function getPenStrokes(sourceId) {
+  const { data, error } = await supabase
+    .from('annotations')
+    .select('*')
+    .eq('source_id', sourceId)
+    .eq('type', 'highlight')
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+
+  // pen_stroke 타입만 필터링
+  return (data || []).filter((item) => {
+    try {
+      const rect = JSON.parse(item.selection_rect || '{}');
+      return rect.type === 'pen_stroke';
+    } catch {
+      return false;
+    }
+  }).map((item) => {
+    const rect = JSON.parse(item.selection_rect);
+    return {
+      id: item.id,
+      points: rect.points,
+      color: rect.color,
+      strokeWidth: rect.strokeWidth,
+      bounds: rect.bounds,
+      page: rect.page,
+      createdAt: item.created_at,
+    };
+  });
+}
+
+// 펜 스트로크 저장
+export async function createPenStroke(sourceId, strokeData) {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const selectionRect = JSON.stringify({
+    type: 'pen_stroke',
+    points: strokeData.points,
+    color: strokeData.color,
+    strokeWidth: strokeData.strokeWidth,
+    bounds: strokeData.bounds,
+    page: strokeData.page,
+  });
+
+  const { data, error } = await supabase
+    .from('annotations')
+    .insert({
+      user_id: user.id,
+      source_id: sourceId,
+      type: 'highlight',
+      selected_text: null,
+      ai_analysis_json: null,
+      selection_rect: selectionRect,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  const rect = JSON.parse(data.selection_rect);
+  return {
+    id: data.id,
+    points: rect.points,
+    color: rect.color,
+    strokeWidth: rect.strokeWidth,
+    bounds: rect.bounds,
+    page: rect.page,
+    createdAt: data.created_at,
+  };
+}
+
+// 여러 펜 스트로크 삭제
+export async function deletePenStrokes(strokeIds) {
+  if (!strokeIds || strokeIds.length === 0) return;
+
+  const { error } = await supabase
+    .from('annotations')
+    .delete()
+    .in('id', strokeIds);
+
+  if (error) throw error;
 }

@@ -14,21 +14,29 @@
 .login-screen,
 .register-screen {
   min-height: 100vh;
+  min-height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
   background-color: var(--color-base);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: var(--spacing-lg);
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .login-container,
 .register-container {
   width: 100%;
   max-width: 400px;
+  max-height: calc(100dvh - var(--spacing-lg) * 2);
   background-color: var(--color-base-sub);
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-2xl);
   padding: var(--spacing-xl);
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .app-logo {
@@ -80,6 +88,27 @@
 
 .input-group input::placeholder {
   color: var(--color-text-light);
+}
+
+.auto-login-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: var(--font-sm);
+  margin-top: var(--spacing-xs);
+}
+
+.auto-login-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-highlight);
+  cursor: pointer;
+}
+
+.auto-login-checkbox span {
+  user-select: none;
 }
 
 .login-button,
@@ -217,7 +246,7 @@
 
 .viewer-content {
   flex: 1;
-  padding: var(--spacing-md);
+  padding: var(--spacing-xs);
   overflow-y: auto;
 }
 
@@ -238,19 +267,23 @@
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  padding: var(--spacing-sm);
+  padding: var(--spacing-md);
   z-index: var(--z-popup);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
-  min-width: 200px;
+  min-width: min(220px, 85vw);
+  max-width: min(94vw, 420px);
+  width: clamp(220px, 88vw, 420px);
   transform: translateX(-50%);
+  pointer-events: auto; /* 모달 자체는 클릭 가능 */
 }
 
 .context-menu-overlay {
   position: fixed;
   inset: 0;
   z-index: var(--z-modal);
+  pointer-events: none; /* 터치/클릭이 아래로 통과 */
 }
 
 .context-menu button {
@@ -318,6 +351,10 @@
 
 /* Selected Word Header */
 .result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
   padding-bottom: var(--spacing-xs);
   border-bottom: 1px solid var(--color-accent);
   margin-bottom: var(--spacing-sm);
@@ -326,7 +363,23 @@
 .result-header .selected-word {
   font-size: var(--font-base);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-text);
+  color: var(--color-highlight);
+}
+
+/* Speak Button */
+.speak-btn {
+  background: transparent !important;
+  border: none !important;
+  font-size: var(--font-md);
+  cursor: pointer;
+  padding: 4px 8px !important;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.speak-btn:hover {
+  background: var(--color-accent) !important;
 }
 
 /* Memo Button */
@@ -446,8 +499,10 @@
 
 .vocab-item {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -461,7 +516,17 @@
 .vocab-word {
   font-size: var(--font-base);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-success);
+  color: var(--color-highlight);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vocab-page {
+  font-size: var(--font-xs);
+  color: var(--color-text-sub);
+  flex-shrink: 0;
 }
 
 .vocab-preview {
@@ -472,41 +537,88 @@
   white-space: nowrap;
 }
 
-/* Vocabulary Tooltip (5-second popup) */
+/* Vocabulary Tooltip Overlay (for click-outside dismiss) */
+.vocab-tooltip-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-tooltip) - 1);
+  background: transparent;
+  pointer-events: none; /* 터치/클릭이 아래로 통과 */
+}
+
+/* Vocabulary Tooltip (positioned near marker) */
 .vocab-tooltip {
   position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   background: var(--color-base-sub);
-  border: 1px solid var(--color-success);
+  border: 1px solid var(--color-highlight);
   border-radius: var(--radius-xl);
   padding: var(--spacing-lg);
-  max-width: 90vw;
-  max-height: 70vh;
-  overflow-y: auto;
+  max-width: min(90vw, 320px);
   z-index: var(--z-tooltip);
-  box-shadow: 0 0 30px rgba(48, 209, 88, 0.3);
-  animation: vocabFadeIn 0.3s ease;
+  box-shadow: 0 4px 24px rgba(10, 132, 255, 0.25), 0 0 0 1px rgba(10, 132, 255, 0.1);
+  animation: vocabFadeIn 0.2s ease;
+  pointer-events: auto; /* 모달 자체는 클릭 가능 */
+}
+
+/* Tooltip arrow indicator */
+.vocab-tooltip::before {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--color-base-sub);
+  border: 1px solid var(--color-highlight);
+  border-right: none;
+  border-bottom: none;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.vocab-tooltip.below::before {
+  top: -7px;
+}
+
+.vocab-tooltip.above::before {
+  bottom: -7px;
+  transform: translateX(-50%) rotate(-135deg);
 }
 
 @keyframes vocabFadeIn {
   from {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.9);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
   }
+}
+
+.vocab-tooltip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
 }
 
 .vocab-tooltip-word {
   font-size: var(--font-xl);
   font-weight: var(--font-weight-bold);
-  color: var(--color-success);
-  margin-bottom: var(--spacing-md);
-  text-align: center;
+  color: var(--color-highlight);
+}
+
+.vocab-tooltip-header .listen-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--color-base);
+  border: 1px solid var(--color-accent);
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.vocab-tooltip-header .listen-btn:hover {
+  background: var(--color-base-sub-light);
 }
 
 .vocab-tooltip-definition {
@@ -516,6 +628,43 @@
   white-space: pre-wrap;
   margin: 0;
   font-family: inherit;
+}
+
+.vocab-tooltip-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-accent);
+}
+
+.vocab-tooltip-actions button {
+  flex: 1;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  border: none;
+}
+
+.vocab-tooltip-actions .delete-btn {
+  background: var(--color-error);
+  color: white;
+}
+
+.vocab-tooltip-actions .delete-btn:hover {
+  opacity: 0.9;
+}
+
+.vocab-tooltip-actions .close-btn {
+  background: var(--color-base);
+  border: 1px solid var(--color-accent);
+  color: var(--color-text);
+}
+
+.vocab-tooltip-actions .close-btn:hover {
+  background: var(--color-base-sub-light);
 }
 
 /* Memo Input */
@@ -563,6 +712,7 @@
   justify-content: center;
   z-index: var(--z-tooltip); /* Above context menu */
   padding: var(--spacing-md);
+  pointer-events: none; /* 터치/클릭이 아래로 통과 */
 }
 
 .grammar-diagram-modal {
@@ -570,10 +720,12 @@
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
-  max-width: 90vw;
-  min-width: 300px;
-  max-height: 80vh;
+  width: clamp(300px, 92vw, 500px);
+  min-width: min(300px, 90vw);
+  max-width: 94vw;
+  max-height: 85vh;
   overflow: auto;
+  pointer-events: auto; /* 모달 자체는 클릭 가능 */
 }
 
 .grammar-diagram-header {
@@ -614,6 +766,20 @@
 .grammar-diagram-content {
   position: relative;
   padding-top: var(--spacing-sm);
+}
+
+.grammar-original-text {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  font-size: var(--font-md);
+  color: var(--color-text);
+  font-style: italic;
+  padding: var(--spacing-sm);
+  background: var(--color-accent);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
 }
 
 .grammar-arcs {
@@ -853,9 +1019,19 @@
   vector-effect: non-scaling-stroke;
 }
 
+/* Dashed arc connecting keywords */
+.grammar-arc.dashed {
+  stroke-dasharray: 4 2;
+  stroke-width: 1.5;
+}
+
 .grammar-arc-group:hover .grammar-arc {
   stroke-width: 3;
   opacity: 1;
+}
+
+.grammar-arc-group:hover .grammar-arc.dashed {
+  stroke-width: 2;
 }
 
 .grammar-arc-handle {
@@ -867,66 +1043,225 @@
   r: 1.5;
 }
 
+/* Keyword markers */
+.grammar-keyword {
+  opacity: 0.9;
+  transition: r 0.2s, opacity 0.2s;
+}
+
+.grammar-arc-group:hover .grammar-keyword {
+  r: 1.5;
+  opacity: 1;
+}
+
+/* Part underlines (shown when expanded) */
+.grammar-part {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.grammar-arc-group.expanded .grammar-part {
+  opacity: 1;
+}
+
+.grammar-part-label {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* Grammar Tooltip Overlay (for click-outside dismiss) */
+.grammar-tooltip-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1099;
+  background: transparent;
+  pointer-events: none; /* 터치/클릭이 아래로 통과 */
+}
+
 /* Grammar Tooltip */
 .grammar-tooltip {
   position: fixed;
-  background: linear-gradient(145deg, #1e1e2e, #252536);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-lg);
+  background: var(--color-base-sub);
+  border: 1px solid var(--color-highlight);
+  border-radius: var(--radius-xl);
   padding: var(--spacing-md) var(--spacing-lg);
-  max-width: 300px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  max-width: min(90vw, 320px);
+  box-shadow: var(--shadow-lg);
   z-index: 1100;
+  transform: translateX(-50%);
   animation: tooltipFadeIn 0.2s ease;
+  pointer-events: auto; /* 모달 자체는 클릭 가능 */
+}
+
+.grammar-tooltip::before {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--color-base-sub);
+  border: 1px solid var(--color-highlight);
+  border-right: none;
+  border-bottom: none;
+  transform: translateX(-50%) rotate(45deg);
+  left: 50%;
+  top: -7px;
 }
 
 @keyframes tooltipFadeIn {
   from {
     opacity: 0;
-    transform: translate(-50%, -90%);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -100%);
   }
 }
 
 .grammar-tooltip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
   font-size: var(--font-md);
   font-weight: var(--font-weight-bold);
+  color: var(--color-highlight);
   margin-bottom: var(--spacing-xs);
+}
+
+.grammar-tooltip-header .listen-btn {
+  background: none;
+  border: none;
+  font-size: var(--font-md);
+  cursor: pointer;
+  padding: 4px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.grammar-tooltip-header .listen-btn:hover {
+  opacity: 1;
 }
 
 .grammar-tooltip-words {
   font-size: var(--font-sm);
-  color: var(--color-text-sub);
+  color: var(--color-text);
   font-style: italic;
   margin-bottom: var(--spacing-sm);
   padding-bottom: var(--spacing-sm);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--color-accent);
 }
 
 .grammar-tooltip-explanation {
   font-size: var(--font-sm);
   color: var(--color-text);
   line-height: var(--line-height-relaxed);
+  margin-bottom: var(--spacing-sm);
 }
 
-.grammar-tooltip-close {
-  position: absolute;
-  top: var(--spacing-xs);
-  right: var(--spacing-sm);
-  background: none;
-  border: none;
-  color: var(--color-text-sub);
-  font-size: var(--font-lg);
+.grammar-tooltip-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-accent);
+}
+
+.grammar-tooltip-actions button {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-sm);
   cursor: pointer;
-  padding: 4px;
-  line-height: 1;
+  transition: all 0.2s;
 }
 
-.grammar-tooltip-close:hover {
+.grammar-tooltip-actions .delete-btn {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+.grammar-tooltip-actions .delete-btn:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+.grammar-tooltip-actions .close-btn {
+  background: var(--color-base-sub);
+  border: 1px solid var(--color-accent);
   color: var(--color-text);
+}
+
+.grammar-tooltip-actions .close-btn:hover {
+  background: var(--color-base-sub-light);
+}
+
+/* Saved grammar tooltip with all patterns */
+.grammar-tooltip.saved-grammar {
+  max-width: min(90vw, 360px);
+}
+
+.grammar-tooltip .grammar-original-text {
+  font-size: var(--font-sm);
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grammar-tooltip .grammar-translation {
+  font-size: var(--font-sm);
+  color: var(--color-text-sub);
+  margin-bottom: var(--spacing-sm);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-accent);
+}
+
+.grammar-patterns-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.saved-grammar .grammar-pattern-item {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: flex-start;
+  padding: 0;
+  background-color: transparent;
+}
+
+.grammar-pattern-item .pattern-color-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+
+.grammar-pattern-item .pattern-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.grammar-pattern-item .pattern-type {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.grammar-pattern-item .pattern-words {
+  font-size: var(--font-xs);
+  color: var(--color-text);
+  font-style: italic;
+}
+
+.grammar-pattern-item .pattern-explanation {
+  font-size: var(--font-xs);
+  color: var(--color-text);
+  line-height: 1.4;
 }
 
 /* Viewer improvements */
@@ -1060,52 +1395,104 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-lg);
-  padding: var(--spacing-md);
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs);
 }
 
 .screenshot-viewer.with-sidebar {
   flex-direction: row;
   align-items: flex-start;
-  gap: var(--spacing-md);
-  height: calc(100vh - 120px);
+  gap: var(--spacing-xs);
+  height: calc(100vh - 80px);
 }
 
 /* New Minimap Layout */
 .screenshot-viewer.with-minimap {
   flex-direction: row;
   align-items: stretch;
-  gap: var(--spacing-md);
-  height: calc(100vh - 120px);
+  gap: var(--spacing-xs);
+  height: calc(100vh - 80px);
+  padding: var(--spacing-xs);
+}
+
+/* Single Image View (gallery images) - no minimap */
+.screenshot-viewer.single-image {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: calc(100vh - 80px);
   padding: var(--spacing-md);
+}
+
+.screenshot-viewer.single-image .screenshot-main {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.screenshot-viewer.single-image .screenshot-container {
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+.screenshot-viewer.single-image .screenshot-image {
+  max-width: 100%;
+  max-height: calc(100vh - 120px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 
 /* Minimap Sidebar */
 .minimap-sidebar {
-  width: 120px;
-  height: 100%;
+  width: 80px;
+  align-self: flex-start;
   background-color: var(--color-base-sub);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   border: 1px solid var(--color-accent);
   overflow: hidden;
   flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
+  touch-action: none; /* Prevent page scroll when dragging minimap */
+}
+
+.minimap-sidebar:active {
+  cursor: grabbing;
 }
 
 .minimap-content {
-  flex: 1;
   position: relative;
-  overflow: hidden;
-  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 100%;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+  font-size: 0; /* Remove inline-block whitespace */
+  line-height: 0;
+}
+
+.minimap-content::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+.minimap-image-wrapper {
+  position: relative;
+  width: 100%;
+  display: inline-block;
 }
 
 .minimap-image {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: top;
+  height: auto;
+  display: block;
   opacity: 0.6;
   pointer-events: none;
 }
@@ -1158,10 +1545,10 @@
 
 /* Page thumbnail sidebar (legacy) */
 .page-sidebar {
-  width: 100px;
+  width: 70px;
   height: 100%;
   background-color: var(--color-base-sub);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   border: 1px solid var(--color-accent);
   overflow: hidden;
   flex-shrink: 0;
@@ -1170,10 +1557,10 @@
 .page-sidebar-scroll {
   height: 100%;
   overflow-y: auto;
-  padding: var(--spacing-sm);
+  padding: var(--spacing-xs);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
 }
 
 .page-sidebar-scroll::-webkit-scrollbar {
@@ -1212,7 +1599,7 @@
 .page-thumbnail img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .page-thumbnail .page-number {
@@ -1237,7 +1624,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-xs);
   min-width: 0;
   height: 100%;
 }
@@ -1298,20 +1685,63 @@
   display: inline-block;
   cursor: crosshair;
   user-select: none;
+  overflow: hidden;
+  /* Default: allow vertical scroll and pinch zoom for single-page */
+  touch-action: pan-y pinch-zoom;
+}
+
+/* Multi-page (PDF): disable touch-action for custom swipe handling */
+.screenshot-container.multi-page {
+  touch-action: none;
+}
+
+/* Allow pan when zoomed */
+.screenshot-container.zoomed {
+  overflow: visible;
+  touch-action: none; /* Custom pan handling when zoomed */
+}
+
+.screenshot-container.shake {
+  animation: boundaryShake 0.3s ease-in-out;
+}
+
+/* Panning cursor styles */
+.screenshot-container.panning {
+  cursor: grabbing !important;
+}
+
+.screenshot-container.pan-ready {
+  cursor: grab !important;
+}
+
+@keyframes boundaryShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+
+/* Zoom wrapper - contains image and SVG overlay together for pinch zoom */
+.zoom-wrapper {
+  position: relative;
+  display: inline-block;
+  transition: transform 0.1s ease-out;
 }
 
 .screenshot-image {
   max-width: 100%;
-  max-height: calc(100vh - 200px);
+  max-height: calc(100vh - 100px);
   object-fit: contain;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   background-color: var(--color-base-sub);
   pointer-events: none;
+  transition: transform 0.1s ease-out;
 }
 
 .with-sidebar .screenshot-image {
-  max-height: calc(100vh - 180px);
+  max-height: calc(100vh - 100px);
 }
 
 /* Image selection overlay (while dragging) */
@@ -1323,13 +1753,26 @@
   z-index: 10;
 }
 
-/* Active selection highlight (after drag, menu open) */
+/* Active selection highlight (after drag, menu open) - 점멸 애니메이션 */
 .image-selection-highlight {
   position: absolute;
-  background-color: rgba(255, 214, 10, 0.4);
-  border: 2px solid #ffd60a;
+  background-color: transparent;
+  border: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.8), 0 0 12px rgba(59, 130, 246, 0.5);
   pointer-events: none;
   z-index: 10;
+  animation: selectionPulse 1s ease-in-out infinite;
+}
+
+@keyframes selectionPulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.8), 0 0 12px rgba(59, 130, 246, 0.5);
+  }
+  50% {
+    opacity: 0.5;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4), 0 0 8px rgba(59, 130, 246, 0.3);
+  }
 }
 
 /* Saved annotation highlight */
@@ -1394,6 +1837,25 @@
   stroke-width: 14;
 }
 
+/* Word highlight styles (OCR-based real-time selection) */
+.word-highlight {
+  fill: rgba(100, 200, 255, 0.4);
+  stroke: rgba(100, 200, 255, 0.8);
+  stroke-width: 0.3;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+  animation: wordHighlightPulse 0.3s ease-out;
+}
+
+@keyframes wordHighlightPulse {
+  0% {
+    fill: rgba(100, 200, 255, 0.6);
+  }
+  100% {
+    fill: rgba(100, 200, 255, 0.4);
+  }
+}
+
 /* Rectangle highlight styles */
 .highlighter-rect.active {
   fill: rgba(255, 214, 10, 0.3);
@@ -1416,6 +1878,119 @@
 .highlighter-rect.saved:hover {
   fill: rgba(255, 214, 10, 0.4);
   stroke: rgba(255, 214, 10, 0.9);
+}
+
+/* Vocabulary marker styles (green - highlighter style) */
+.highlighter-stroke.vocab {
+  stroke: rgba(134, 239, 172, 0.7);
+  stroke-width: 18;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  cursor: pointer;
+  pointer-events: stroke;
+  transition: stroke var(--transition-fast), stroke-width var(--transition-fast), filter var(--transition-fast);
+  filter: blur(0.3px);
+}
+
+.highlighter-stroke.vocab:hover {
+  stroke: rgba(134, 239, 172, 0.9);
+  stroke-width: 20;
+  filter: blur(0px);
+}
+
+/* Vocabulary rect marker (box style - cleaner look) */
+.highlighter-rect.vocab {
+  fill: transparent;
+  stroke: none;
+  rx: 2;
+  ry: 2;
+  cursor: pointer;
+  pointer-events: fill;
+  filter: drop-shadow(0 0 3px rgba(59, 130, 246, 0.8)) drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+  transition: filter var(--transition-fast);
+}
+
+.highlighter-rect.vocab:hover {
+  filter: drop-shadow(0 0 4px rgba(59, 130, 246, 1)) drop-shadow(0 0 12px rgba(59, 130, 246, 0.7));
+}
+
+/* Vocabulary underline marker (alternative clean style) */
+.vocab-underline {
+  stroke: rgba(59, 130, 246, 0.9);
+  stroke-width: 3;
+  stroke-linecap: round;
+  cursor: pointer;
+  pointer-events: stroke;
+  transition: stroke var(--transition-fast), stroke-width var(--transition-fast);
+}
+
+.vocab-underline:hover {
+  stroke: rgba(59, 130, 246, 1);
+  stroke-width: 4;
+}
+
+/* Vocabulary delete confirmation */
+.vocab-delete-confirm {
+  z-index: 2000;
+  background: var(--color-base);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  padding: var(--spacing-md);
+  min-width: 200px;
+}
+
+.vocab-delete-content p {
+  margin: 0 0 var(--spacing-sm);
+  text-align: center;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.vocab-delete-content .vocab-delete-question {
+  font-size: var(--font-sm);
+  color: var(--color-text-sub);
+}
+
+.vocab-delete-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: center;
+  margin-top: var(--spacing-md);
+}
+
+.vocab-delete-actions .cancel-btn {
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: transparent;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.vocab-delete-actions .cancel-btn:hover {
+  background: var(--color-base-sub);
+}
+
+.vocab-delete-actions .delete-btn {
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: #ef4444;
+  border: none;
+  border-radius: var(--radius-md);
+  color: white;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.vocab-delete-actions .delete-btn:hover {
+  background: #dc2626;
+}
+
+.vocab-delete-actions .delete-btn:disabled,
+.vocab-delete-actions .cancel-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .open-original-btn {
@@ -2277,6 +2852,79 @@
   margin-left: 4px;
 }
 
+/* Chat header actions */
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.clear-chat-btn {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: transparent;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  font-size: var(--font-xs);
+  color: var(--color-text-sub);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.clear-chat-btn:hover {
+  background-color: var(--color-danger);
+  border-color: var(--color-danger);
+  color: var(--color-text);
+}
+
+/* Live call button */
+.live-call-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  background-color: var(--color-success);
+  border: none;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  color: var(--color-text);
+}
+
+.live-call-btn:hover {
+  background-color: #34D860;
+  transform: scale(1.05);
+}
+
+.live-call-btn:active {
+  transform: scale(0.95);
+}
+
+.live-call-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Streaming message styles */
+.chat-message.streaming .message-text {
+  background-color: var(--color-base-sub);
+  border: 1px solid var(--color-highlight);
+}
+
+.typing-cursor {
+  display: inline-block;
+  animation: blink 1s infinite;
+  color: var(--color-highlight);
+  font-weight: bold;
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
 /*
  * ===========================================
  * Mypage Screen
@@ -2926,19 +3574,121 @@
 
 .onboarding-screen {
   min-height: 100vh;
+  min-height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
   background-color: var(--color-base);
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.onboarding-header {
+  padding: var(--spacing-md) var(--spacing-lg);
+  display: flex;
+  justify-content: center;
+}
+
+.step-indicator {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent);
+  transition: all var(--transition-normal);
+}
+
+.step-dot.active {
+  width: 24px;
+  background-color: var(--color-highlight);
+}
+
+.step-dot.completed {
+  background-color: var(--color-highlight);
+}
+
+.step-number {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-highlight);
+  color: var(--color-text);
+  font-size: var(--font-lg);
+  font-weight: var(--font-weight-bold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.step-title {
+  font-size: var(--font-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  margin: 0 0 var(--spacing-sm);
+}
+
+.step-subtitle {
+  font-size: var(--font-base);
+  color: var(--color-text-sub);
+  margin: 0 0 var(--spacing-lg);
+}
+
+.step-description {
+  font-size: var(--font-base);
+  color: var(--color-text-light);
+  margin: 0;
+  line-height: var(--line-height-relaxed);
+}
+
+.step-tips {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  width: 100%;
+  max-width: 280px;
+}
+
+.step-tips li {
+  font-size: var(--font-sm);
+  color: var(--color-text-light);
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--color-accent);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.step-tips li::before {
+  content: "✓";
+  color: var(--color-highlight);
+  font-weight: var(--font-weight-bold);
+}
+
+.step-tips li:last-child {
+  border-bottom: none;
+}
+
+.click-hint {
+  font-size: var(--font-xs);
+  color: var(--color-text-sub);
+  margin-top: var(--spacing-lg);
 }
 
 .onboarding-content {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: var(--spacing-xl);
+  padding: var(--spacing-lg);
   text-align: center;
+  overflow-y: auto;
 }
 
 .onboarding-slide {
@@ -2986,26 +3736,34 @@
   padding: var(--spacing-lg);
   display: flex;
   gap: var(--spacing-md);
+  flex-shrink: 0;
+  margin-top: auto;
 }
 
-.onboarding-footer button {
+.onboarding-footer .skip-button,
+.onboarding-footer .back-button {
   flex: 1;
-}
-
-.skip-button {
   background-color: transparent;
-  color: var(--color-text-sub);
+  color: var(--color-highlight);
   border: none;
   padding: var(--spacing-md);
   font-size: var(--font-base);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
+  transition: all var(--transition-normal);
+  text-align: left;
+  height: 44px;
+  display: flex;
+  align-items: center;
 }
 
-.skip-button:hover {
-  color: var(--color-text);
+.onboarding-footer .skip-button:hover,
+.onboarding-footer .back-button:hover {
+  color: var(--color-highlight-light);
 }
 
-.next-button {
+.onboarding-footer .next-button {
+  flex: 1;
   background-color: var(--color-highlight);
   color: var(--color-text);
   border: none;
@@ -3015,9 +3773,13 @@
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
   transition: all var(--transition-normal);
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.next-button:hover {
+.onboarding-footer .next-button:hover {
   background-color: var(--color-highlight-light);
 }
 
@@ -3163,13 +3925,13 @@
   /* Viewer with minimap - keep horizontal layout on mobile */
   .screenshot-viewer.with-minimap {
     flex-direction: row;
-    height: calc(100vh - 120px);
-    padding: var(--spacing-sm);
-    gap: var(--spacing-sm);
+    height: calc(100vh - 60px);
+    padding: var(--spacing-xs);
+    gap: var(--spacing-xs);
   }
 
   .screenshot-viewer.with-minimap .minimap-sidebar {
-    width: 60px;
+    width: 50px;
     display: flex;
   }
 
@@ -3189,16 +3951,26 @@
     width: 100%;
   }
 
+  /* Single image view on mobile */
+  .screenshot-viewer.single-image {
+    height: calc(100vh - 60px);
+    padding: var(--spacing-sm);
+  }
+
+  .screenshot-viewer.single-image .screenshot-image {
+    max-height: calc(100vh - 100px);
+  }
+
   /* PDF/Image with pages - keep left sidebar on mobile */
   .screenshot-viewer.with-sidebar {
     flex-direction: row;
-    height: calc(100vh - 120px);
-    padding: var(--spacing-sm);
-    gap: var(--spacing-sm);
+    height: calc(100vh - 60px);
+    padding: var(--spacing-xs);
+    gap: var(--spacing-xs);
   }
 
   .screenshot-viewer.with-sidebar .page-sidebar {
-    width: 60px;
+    width: 50px;
     display: block;
   }
 
@@ -3383,7 +4155,7 @@
 
   /* Adjust page indicator position when mobile nav is visible */
   .page-indicator-bottom {
-    bottom: 100px;
+    bottom: 80px;
   }
 
   /* Hide swipe hint when we have bottom nav */
@@ -3424,11 +4196,32 @@
   margin-bottom: var(--spacing-lg);
 }
 
-.dictionary-section h2 {
-  font-size: var(--font-lg);
+.dictionary-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: var(--spacing-xs) 0;
+}
+
+.dictionary-toggle h2 {
+  font-size: var(--font-base);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
-  margin-bottom: var(--spacing-md);
+  margin: 0;
+}
+
+.dictionary-toggle .toggle-icon {
+  font-size: var(--font-lg);
+  color: var(--color-text-light);
+  font-weight: var(--font-weight-bold);
+}
+
+.dictionary-section.expanded .my-dictionary {
+  margin-top: var(--spacing-md);
 }
 
 .my-dictionary {
@@ -3702,4 +4495,284 @@
 .add-word-modal .modal-buttons button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/*
+ * ===========================================
+ * Word Quick Menu (Tap/Long-press)
+ * ===========================================
+ */
+
+.word-menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 999;
+  pointer-events: none; /* 터치/클릭이 아래로 통과 */
+}
+
+.word-quick-menu {
+  background-color: var(--color-base-sub);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-md);
+  width: clamp(200px, 88vw, 340px);
+  min-width: min(200px, 85vw);
+  max-width: min(94vw, 340px);
+  max-height: 70vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  animation: menuFadeIn 0.15s ease-out;
+  pointer-events: auto; /* 모달 자체는 클릭 가능 */
+}
+
+/* 화살표 (위쪽) - 마킹을 가리킴 */
+.word-quick-menu::before {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--color-base-sub);
+  border: 1px solid var(--color-accent);
+  border-right: none;
+  border-bottom: none;
+  transform: translateX(-50%) rotate(45deg);
+  left: 50%;
+  top: -7px;
+}
+
+/* Grammar mode: wider for sentences */
+.word-quick-menu.grammar {
+  width: clamp(280px, 92vw, 420px);
+  min-width: min(280px, 88vw);
+  max-width: min(94vw, 420px);
+  max-height: 75vh;
+  transform: translateX(-50%);
+}
+
+@keyframes menuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.word-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.word-text {
+  font-size: var(--font-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-highlight);
+}
+
+.sentence-text {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  line-height: 1.4;
+}
+
+.listen-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-base-dark);
+  border: 1px solid var(--color-accent);
+  color: var(--color-text);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.listen-btn:hover {
+  background-color: var(--color-highlight);
+  border-color: var(--color-highlight);
+}
+
+.listen-btn.speaking {
+  background-color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.word-definition {
+  font-size: var(--font-sm);
+  color: var(--color-text-light);
+  line-height: 1.5;
+  margin-bottom: var(--spacing-md);
+  white-space: pre-wrap;
+}
+
+.word-menu-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+}
+
+.word-menu-actions button {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.word-menu-actions .save-btn {
+  background-color: var(--color-highlight);
+  border: none;
+  color: var(--color-text);
+}
+
+.word-menu-actions .save-btn:hover {
+  background-color: var(--color-highlight-light);
+}
+
+.word-menu-actions .close-btn {
+  background-color: transparent;
+  border: 1px solid var(--color-accent);
+  color: var(--color-text-light);
+}
+
+.word-menu-actions .close-btn:hover {
+  background-color: var(--color-base-sub-light);
+}
+
+.word-menu-actions .delete-btn {
+  background-color: var(--color-error);
+  border: none;
+  color: var(--color-text);
+}
+
+.grammar-patterns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
+}
+
+.pattern-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.pattern-checkbox:hover {
+  background-color: var(--color-base-dark);
+}
+
+.pattern-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-highlight);
+}
+
+.pattern-color {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.pattern-name {
+  font-size: var(--font-sm);
+  color: var(--color-text);
+}
+
+.pattern-item.saved {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.loading-state,
+.error-state {
+  text-align: center;
+  padding: var(--spacing-lg);
+  color: var(--color-text-sub);
+  font-size: var(--font-sm);
+}
+
+/*
+ * ===========================================
+ * Updated Marker Styles
+ * ===========================================
+ */
+
+/* Vocabulary marker - shadow + rounded (transparent fill) */
+.highlighter-stroke.vocab,
+.highlighter-rect.vocab {
+  fill: transparent;
+  stroke: none;
+  filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.6)) drop-shadow(0 0 8px rgba(59, 130, 246, 0.3));
+}
+
+.vocab-marker-bg {
+  fill: #2a6fd736;
+  stroke: none;
+  cursor: pointer;
+}
+
+/* 하이라이트된 vocab marker - 깜빡이는 애니메이션 (5초) */
+.vocab-marker-bg.highlighted {
+  fill: rgba(59, 130, 246, 0.6);
+  animation: vocabHighlightBlink 0.5s ease-in-out 10;
+}
+
+@keyframes vocabHighlightBlink {
+  0%, 100% {
+    fill: rgba(59, 130, 246, 0.6);
+  }
+  50% {
+    fill: rgba(59, 130, 246, 0.15);
+  }
+}
+
+/* Active selection highlight - 점멸 애니메이션 */
+.selection-highlight {
+  fill: rgba(59, 130, 246, 0.35);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  animation: svgSelectionPulse 1s ease-in-out infinite;
+}
+
+@keyframes svgSelectionPulse {
+  0%, 100% {
+    opacity: 1;
+    fill: rgba(59, 130, 246, 0.35);
+  }
+  50% {
+    opacity: 0.4;
+    fill: rgba(59, 130, 246, 0.2);
+  }
+}
+
+/* Grammar marker - dotted underline (얇게) */
+.grammar-underline {
+  stroke: rgba(59, 130, 246, 0.5);
+  stroke-width: 0.5px;
+  stroke-dasharray: 1 1;
+  fill: none;
+  pointer-events: stroke;
+  vector-effect: non-scaling-stroke;
+}
+
+/* 롱프레스 영역 */
+.grammar-pattern-group {
+  pointer-events: bounding-box;
 }

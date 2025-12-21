@@ -50,14 +50,6 @@ export default function Review() {
     }
   }
 
-  function handleViewSource() {
-    const currentItem = items[currentIndex];
-    const sourceId = currentItem.annotation?.source_id;
-    if (sourceId) {
-      navigate(`/viewer/${sourceId}`);
-    }
-  }
-
   if (loading) {
     return (
       <div className="review-screen">
@@ -142,32 +134,24 @@ export default function Review() {
       <main className="review-content">
         <Flashcard
           item={currentItem}
-          onShowAnswer={() => setShowAnswer(true)}
+          showAnswer={showAnswer}
+          onReveal={() => setShowAnswer(true)}
         />
 
-        <button
-          className="view-source-button"
-          onClick={handleViewSource}
-        >
-          <TranslatableText textKey="review.viewContext">View original context</TranslatableText>
-        </button>
-
-        {showAnswer && (
-          <div className="evaluation-buttons">
-            <button
-              className="eval-button incorrect"
-              onClick={() => handleEvaluation(false)}
-            >
-              <TranslatableText textKey="review.dontKnow">Don't know</TranslatableText>
-            </button>
-            <button
-              className="eval-button correct"
-              onClick={() => handleEvaluation(true)}
-            >
-              <TranslatableText textKey="review.iKnow">I know</TranslatableText>
-            </button>
-          </div>
-        )}
+        <div className="evaluation-buttons">
+          <button
+            className="eval-button incorrect"
+            onClick={() => handleEvaluation(false)}
+          >
+            <TranslatableText textKey="review.dontKnow">I don't know</TranslatableText>
+          </button>
+          <button
+            className="eval-button correct"
+            onClick={() => handleEvaluation(true)}
+          >
+            <TranslatableText textKey="review.iKnow">I know</TranslatableText>
+          </button>
+        </div>
       </main>
     </div>
   );

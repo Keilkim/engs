@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { scrapMessage, unscrapMessage } from '../../services/chat';
 
-export default function ChatLog({ messages, onScrapToggle }) {
+export default function ChatLog({ messages, onScrapToggle, streamingText = '' }) {
   const bottomRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, streamingText]);
 
   async function handleScrapToggle(message) {
     try {
@@ -21,7 +21,7 @@ export default function ChatLog({ messages, onScrapToggle }) {
     }
   }
 
-  if (!messages || messages.length === 0) {
+  if ((!messages || messages.length === 0) && !streamingText) {
     return (
       <div className="chat-log-empty">
         <p>AI와 대화를 시작해보세요!</p>
@@ -56,6 +56,20 @@ export default function ChatLog({ messages, onScrapToggle }) {
           </div>
         </div>
       ))}
+
+      {/* 실시간 스트리밍 응답 표시 */}
+      {streamingText && (
+        <div className="chat-message assistant streaming">
+          <div className="message-avatar">AI</div>
+          <div className="message-content">
+            <div className="message-text">
+              {streamingText}
+              <span className="typing-cursor">|</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div ref={bottomRef} />
     </div>
   );

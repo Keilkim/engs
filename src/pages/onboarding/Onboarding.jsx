@@ -7,7 +7,7 @@ const STEPS = [
     id: 'welcome',
     step: 1,
     titleKey: 'onboarding.welcome.title',
-    titleFallback: 'Welcome to ENGS!',
+    titleFallback: 'Welcome to LangBuddy!',
     subtitleKey: 'onboarding.welcome.subtitle',
     subtitleFallback: 'Your personal English learning companion',
     descriptionKey: 'onboarding.welcome.description',
@@ -110,11 +110,6 @@ export default function Onboarding() {
             />
           ))}
         </div>
-        {!isLast && (
-          <button className="skip-button" onClick={handleSkip}>
-            <TranslatableText textKey="onboarding.buttons.skip">Skip</TranslatableText>
-          </button>
-        )}
       </div>
 
       <main className="onboarding-content">
@@ -152,7 +147,11 @@ export default function Onboarding() {
       </main>
 
       <footer className="onboarding-footer">
-        {!isFirst && (
+        {isFirst ? (
+          <button className="skip-button" onClick={handleSkip}>
+            <TranslatableText textKey="onboarding.buttons.skip">Skip</TranslatableText>
+          </button>
+        ) : (
           <button className="back-button" onClick={handleBack}>
             <TranslatableText textKey="onboarding.buttons.back">Back</TranslatableText>
           </button>

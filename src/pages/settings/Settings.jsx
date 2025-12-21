@@ -338,7 +338,7 @@ export default function Settings() {
           {activeSection === 'info' && (
             <div className="section-content info-content">
               <p><strong><TranslatableText textKey="settings.version">Version:</TranslatableText></strong> 1.0.0</p>
-              <p><strong><TranslatableText textKey="settings.developedBy">Developed by:</TranslatableText></strong> ENGS Team</p>
+              <p><strong><TranslatableText textKey="settings.developedBy">Developed by:</TranslatableText></strong> LangBuddy Team</p>
               <a href="/terms" target="_blank">
                 <TranslatableText textKey="settings.termsOfService">Terms of Service</TranslatableText>
               </a>

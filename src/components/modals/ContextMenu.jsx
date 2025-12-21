@@ -1,21 +1,60 @@
 import { useState, useEffect, useRef } from 'react';
-import { analyzeText, analyzeGrammarPatterns, extractTextFromImage, cropImageRegion } from '../../services/ai';
+import { analyzeText, analyzeGrammarPatterns } from '../../services/ai';
 import { createAnnotation, createVocabularyItem } from '../../services/annotation';
 import GrammarDiagram from '../GrammarDiagram';
+
+// TTS 함수 - 자연스러운 원어민 영어 발음
+function speakText(text) {
+  if (!text || !window.speechSynthesis) return;
+
+  window.speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'en-US';
+  utterance.rate = 1.0; // 자연스러운 속도
+  utterance.pitch = 1.0;
+  utterance.volume = 1.0;
+
+  // 고품질 영어 음성 선택 (우선순위: Premium > Enhanced > 기본)
+  const voices = window.speechSynthesis.getVoices();
+  const preferredVoices = [
+    'Samantha', 'Karen', 'Daniel', 'Moira', // macOS 고품질
+    'Google US English', 'Google UK English Female', // Chrome
+    'Microsoft Zira', 'Microsoft David', // Windows
+  ];
+
+  let selectedVoice = null;
+  for (const name of preferredVoices) {
+    selectedVoice = voices.find(v => v.name.includes(name) && v.lang.startsWith('en'));
+    if (selectedVoice) break;
+  }
+
+  // 폴백: 아무 영어 음성
+  if (!selectedVoice) {
+    selectedVoice = voices.find(v => v.lang.startsWith('en-US')) ||
+                    voices.find(v => v.lang.startsWith('en'));
+  }
+
+  if (selectedVoice) {
+    utterance.voice = selectedVoice;
+  }
+
+  window.speechSynthesis.speak(utterance);
+}
 
 export default function ContextMenu({
   isOpen,
   position,
   selectedText,
   selectionRect,
+  selectedWords = [],
   sourceId,
   pages,
+  zoomScale = 1,
   onClose,
   onAnnotationCreated,
 }) {
   const [loading, setLoading] = useState(false);
-  const [ocrLoading, setOcrLoading] = useState(false);
-  const [extractedText, setExtractedText] = useState(null);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [grammarData, setGrammarData] = useState(null);
   const [aiPatterns, setAiPatterns] = useState(null);
@@ -24,9 +63,14 @@ export default function ContextMenu({
   const [memoText, setMemoText] = useState('');
   const [wordSaved, setWordSaved] = useState(false);
   const [savingWord, setSavingWord] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  const menuRef = useRef(null);
 
-  const isImageSelection = selectionRect && selectedText?.startsWith('[Image Selection');
-  const displayText = extractedText || selectedText;
+  // Get text from selectedWords (OCR-based) or fallback to selectedText
+  const hasOcrWords = selectedWords && selectedWords.length > 0;
+  const displayText = hasOcrWords
+    ? selectedWords.map(w => w.text).join(' ')
+    : selectedText;
 
   // 단어인지 문장인지 판별
   function isWordOrPhrase(text) {
@@ -45,59 +89,67 @@ export default function ContextMenu({
     setShowMemo(false);
     setMemoText('');
     setLoading(false);
-    setExtractedText(null);
-    setOcrLoading(false);
     setWordSaved(false);
     setSavingWord(false);
-  }, [selectedText, selectionRect]);
+  }, [selectedText, selectionRect, selectedWords]);
 
-  // 메뉴 열릴 때 자동 처리
+  // 메뉴 열릴 때 자동 분석 시작
   useEffect(() => {
-    if (!isOpen || !selectedText) return;
+    if (!isOpen || !displayText) return;
+    if (loading || analysisResult || grammarData) return;
 
-    if (isImageSelection) {
-      // 이미지 선택 → OCR 시작
-      if (pages && !ocrLoading && !extractedText) {
-        runOCR();
-      }
-    } else {
-      // 일반 텍스트 → 바로 분석
-      if (!loading && !analysisResult && !grammarData) {
-        runAnalysis(selectedText);
-      }
-    }
-  }, [isOpen, selectedText, pages]);
+    runAnalysis(displayText);
+  }, [isOpen, displayText]);
 
-  // OCR 완료 후 분석
+  // 화면 경계 내에서 메뉴 위치 계산
   useEffect(() => {
-    if (extractedText && !extractedText.startsWith('(') && !loading && !analysisResult && !grammarData) {
-      runAnalysis(extractedText);
+    if (!isOpen || !menuRef.current) return;
+
+    const menu = menuRef.current;
+    const rect = menu.getBoundingClientRect();
+    const padding = 16; // 화면 가장자리 여백
+
+    let x = position.x;
+    let y = position.y;
+
+    // 오른쪽 경계 체크
+    const rightEdge = x + rect.width / 2;
+    if (rightEdge > window.innerWidth - padding) {
+      x = window.innerWidth - padding - rect.width / 2;
     }
-  }, [extractedText]);
 
-  if (!isOpen || !selectedText) return null;
+    // 왼쪽 경계 체크
+    const leftEdge = x - rect.width / 2;
+    if (leftEdge < padding) {
+      x = padding + rect.width / 2;
+    }
 
-  async function runOCR() {
-    if (!pages || selectionRect?.page === undefined) return;
+    // 아래쪽 경계 체크
+    if (y + rect.height > window.innerHeight - padding) {
+      y = window.innerHeight - padding - rect.height;
+    }
 
-    setOcrLoading(true);
-    try {
-      const bounds = selectionRect.bounds || selectionRect;
-      const croppedImage = await cropImageRegion(pages, selectionRect.page, bounds);
-      const text = await extractTextFromImage(croppedImage);
-      console.log('OCR 결과:', text);
-      if (text && text.trim()) {
-        setExtractedText(text.trim());
+    // 위쪽 경계 체크
+    if (y < padding) {
+      y = padding;
+    }
+
+    setMenuPosition({ x, y });
+  }, [isOpen, position, analysisResult, loading, showMemo]);
+
+  // 텍스트가 표시되면 자동으로 읽기
+  useEffect(() => {
+    if (isOpen && displayText && !loading) {
+      // 음성 목록 로드 대기 후 발음
+      if (window.speechSynthesis.getVoices().length === 0) {
+        window.speechSynthesis.onvoiceschanged = () => speakText(displayText);
       } else {
-        setExtractedText('(텍스트를 찾을 수 없습니다)');
+        speakText(displayText);
       }
-    } catch (err) {
-      console.error('OCR 실패:', err);
-      setExtractedText('(OCR 실패)');
-    } finally {
-      setOcrLoading(false);
     }
-  }
+  }, [isOpen, displayText, loading]);
+
+  if (!isOpen || !displayText) return null;
 
   // 텍스트 분석 실행
   async function runAnalysis(text) {
@@ -150,10 +202,12 @@ export default function ContextMenu({
       await createVocabularyItem(
         displayText,
         analysisResult?.content || '',
-        sourceId
+        sourceId,
+        selectionRect // 위치 정보도 함께 저장
       );
       setWordSaved(true);
       onAnnotationCreated?.();
+      handleClose(); // 저장 후 메뉴 닫기
     } catch (err) {
       console.error('단어 저장 실패:', err);
     } finally {
@@ -185,22 +239,28 @@ export default function ContextMenu({
     setGrammarLoading(false);
     setShowMemo(false);
     setMemoText('');
-    setExtractedText(null);
     setWordSaved(false);
     setSavingWord(false);
     onClose();
   }
 
+  // 줌 스케일에 따라 동적으로 메뉴 크기 계산
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 375;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 667;
+  const scaleFactor = Math.max(1, zoomScale * 0.8);
+  const menuWidth = Math.min(Math.max(220, vw * 0.88) * scaleFactor, vw * 0.94);
+  const menuMaxHeight = Math.min(vh * 0.7 * scaleFactor, vh * 0.85);
+
   return (
-    <div
-      className="context-menu-overlay"
-      onClick={handleClose}
-    >
+    <div className="context-menu-overlay">
       <div
+        ref={menuRef}
         className="context-menu"
         style={{
-          top: position.y,
-          left: position.x,
+          top: menuPosition.y || position.y,
+          left: menuPosition.x || position.x,
+          width: menuWidth,
+          maxHeight: menuMaxHeight,
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -219,16 +279,21 @@ export default function ContextMenu({
               </button>
             </div>
           </div>
-        ) : (loading || ocrLoading) ? (
+        ) : loading ? (
           <div className="context-menu-loading">
-            <span className="loading-text">
-              {ocrLoading ? '텍스트 추출 중...' : '분석 중...'}
-            </span>
+            <span className="loading-text">분석 중...</span>
           </div>
         ) : analysisResult ? (
           <div className="analysis-result">
             <div className="result-header">
               <span className="selected-word">{displayText}</span>
+              <button
+                className="speak-btn"
+                onClick={() => speakText(displayText)}
+                title="다시 듣기"
+              >
+                🔊
+              </button>
             </div>
             <div className="result-content">
               <pre>{analysisResult.content}</pre>
@@ -262,6 +327,7 @@ export default function ContextMenu({
           grammarData={grammarData}
           aiPatterns={aiPatterns}
           loading={grammarLoading}
+          zoomScale={zoomScale}
           onClose={() => {
             setGrammarData(null);
             setAiPatterns(null);

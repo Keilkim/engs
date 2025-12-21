@@ -1,10 +1,10 @@
 import { supabase } from './supabase';
 
-// 소스 목록 조회
+// 소스 목록 조회 (홈 그리드용 - 필요한 컬럼만)
 export async function getSources() {
   const { data, error } = await supabase
     .from('sources')
-    .select('*')
+    .select('id, title, type, pinned, created_at, last_accessed, thumbnail, screenshot')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -20,12 +20,21 @@ export async function getSource(id) {
     .single();
 
   if (error) throw error;
+
+  console.log('[DB] getSource returned ocr_data:', data.ocr_data ?
+    `${data.ocr_data.pages?.length} pages, first page: ${data.ocr_data.pages?.[0]?.words?.length || 0} words` :
+    'null or undefined');
+
   return data;
 }
 
 // 소스 추가
 export async function createSource(source) {
   const { data: { user } } = await supabase.auth.getUser();
+
+  console.log('[DB] Creating source with ocr_data:', source.ocr_data ?
+    `${source.ocr_data.pages?.length} pages, first page words: ${source.ocr_data.pages?.[0]?.words?.length || 0}` :
+    'null');
 
   const { data, error } = await supabase
     .from('sources')
@@ -36,7 +45,14 @@ export async function createSource(source) {
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error('[DB] Error creating source:', error);
+    throw error;
+  }
+
+  console.log('[DB] Source created, returned ocr_data:', data.ocr_data ?
+    `${data.ocr_data.pages?.length} pages` : 'null');
+
   return data;
 }
 
@@ -48,6 +64,19 @@ export async function deleteSource(id) {
     .eq('id', id);
 
   if (error) throw error;
+}
+
+// 소스 업데이트 (pinned, to_read 등)
+export async function updateSource(id, updates) {
+  const { data, error } = await supabase
+    .from('sources')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
 }
 
 // 파일 업로드 (PDF, 이미지)
@@ -112,38 +141,39 @@ function blobToBase64(blob) {
   });
 }
 
-// 웹페이지 Full Page 스크린샷 캡처 (Microlink API)
+// 웹페이지 Full Page 스크린샷 캡처 (ApiFlash API)
 export async function captureWebpageScreenshot(url) {
-  // 1. Microlink API 호출 - 전체 페이지 캡처
-  // viewport.height를 크게 설정해서 더 많은 콘텐츠 캡처
+  // ApiFlash API 호출 - 전체 페이지 캡처
   const params = new URLSearchParams({
+    access_key: import.meta.env.VITE_APIFLASH_KEY,
     url: url,
-    screenshot: 'true',
-    'screenshot.fullPage': 'true',
-    'screenshot.type': 'png',
-    'viewport.width': '1440',
-    'viewport.height': '8000',
-    waitUntil: 'networkidle0',
-    meta: 'false',
+    full_page: 'true',
+    width: '1920',
+    format: 'png',
+    response_type: 'json',
+    fresh: 'true',
+    scroll_delay: '500',
+    delay: '3',
+    scale_factor: '2',
   });
 
-  const apiUrl = `https://api.microlink.io/?${params.toString()}`;
+  const apiUrl = `https://api.apiflash.com/v1/urltoimage?${params.toString()}`;
   const response = await fetch(apiUrl);
   const data = await response.json();
 
-  if (!data.data?.screenshot?.url) {
-    console.error('Microlink response:', data);
+  if (!data.url) {
+    console.error('ApiFlash response:', data);
     throw new Error('스크린샷 캡처 실패');
   }
 
-  // 2. 스크린샷 이미지를 base64로 변환
-  const imgResponse = await fetch(data.data.screenshot.url);
+  // 스크린샷 이미지를 base64로 변환
+  const imgResponse = await fetch(data.url);
   const blob = await imgResponse.blob();
   const base64 = await blobToBase64(blob);
 
   // 전체 페이지 그대로 반환
   return {
     image: base64,
-    title: data.data?.title || url,
+    title: url,
   };
 }

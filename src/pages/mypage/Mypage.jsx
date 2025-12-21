@@ -11,6 +11,7 @@ export default function Mypage() {
   const { user } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(false);
+  const [dictionaryExpanded, setDictionaryExpanded] = useState(false);
 
   const nickname = user?.user_metadata?.nickname || 'User';
   const email = user?.email || '';
@@ -84,9 +85,15 @@ export default function Mypage() {
           {statsExpanded && <StatsDashboard />}
         </section>
 
-        <section className="dictionary-section">
-          <h2><TranslatableText textKey="mypage.myDictionary">My Dictionary</TranslatableText></h2>
-          <MyDictionary onSelectForChat={handleStartChat} />
+        <section className={`dictionary-section ${dictionaryExpanded ? 'expanded' : 'collapsed'}`}>
+          <button
+            className="dictionary-toggle"
+            onClick={() => setDictionaryExpanded(!dictionaryExpanded)}
+          >
+            <h2><TranslatableText textKey="mypage.myDictionary">My Dictionary</TranslatableText></h2>
+            <span className="toggle-icon">{dictionaryExpanded ? '−' : '+'}</span>
+          </button>
+          {dictionaryExpanded && <MyDictionary onSelectForChat={handleStartChat} />}
         </section>
 
         <section className="menu-section">

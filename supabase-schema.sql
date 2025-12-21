@@ -13,9 +13,12 @@ CREATE TABLE IF NOT EXISTS sources (
   thumbnail TEXT,
   screenshot TEXT,
   pages TEXT,
+  ocr_data JSONB,
   file_path TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  last_accessed TIMESTAMP WITH TIME ZONE
+  last_accessed TIMESTAMP WITH TIME ZONE,
+  pinned BOOLEAN DEFAULT FALSE,
+  to_read BOOLEAN DEFAULT FALSE
 );
 
 -- Migration: Add screenshot column if not exists
@@ -23,6 +26,19 @@ CREATE TABLE IF NOT EXISTS sources (
 
 -- Migration: Add pages column for PDF page images (JSON array of base64 strings)
 -- ALTER TABLE sources ADD COLUMN IF NOT EXISTS pages TEXT;
+
+-- Migration: Add ocr_data column for pre-computed word positions (JSONB)
+-- ALTER TABLE sources ADD COLUMN IF NOT EXISTS ocr_data JSONB;
+-- ocr_data structure:
+-- {
+--   "pages": [
+--     { "pageIndex": 0, "words": [{ "text": "Hello", "bbox": { "x": 10.5, "y": 5.2, "width": 8.3, "height": 2.1 } }] }
+--   ]
+-- }
+
+-- Migration: Add pinned and to_read columns
+-- ALTER TABLE sources ADD COLUMN IF NOT EXISTS pinned BOOLEAN DEFAULT FALSE;
+-- ALTER TABLE sources ADD COLUMN IF NOT EXISTS to_read BOOLEAN DEFAULT FALSE;
 
 -- Migration: Update type constraint to include 'screenshot'
 -- Run this if you already have the sources table:
@@ -59,6 +75,8 @@ CREATE TABLE IF NOT EXISTS annotations (
 -- ALTER TABLE annotations ADD COLUMN IF NOT EXISTS selection_rect TEXT;
 
 -- 3. review_items (복습 아이템)
+-- stack: 모르면 +1, 알면 -1. -10이면 완전히 외움 (더 이상 출현 안함)
+-- stack이 높을수록 자주 등장 (가중치)
 CREATE TABLE IF NOT EXISTS review_items (
   id BIGSERIAL PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -67,9 +85,13 @@ CREATE TABLE IF NOT EXISTS review_items (
   interval_days INTEGER DEFAULT 1,
   ease_factor REAL DEFAULT 2.5,
   repetitions INTEGER DEFAULT 0,
+  stack INTEGER DEFAULT 0,
   last_reviewed TIMESTAMP WITH TIME ZONE,
   status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'completed', 'suspended'))
 );
+
+-- Migration: Add stack column if not exists
+-- ALTER TABLE review_items ADD COLUMN IF NOT EXISTS stack INTEGER DEFAULT 0;
 
 -- 4. chat_logs (채팅 로그)
 CREATE TABLE IF NOT EXISTS chat_logs (
@@ -121,6 +143,8 @@ CREATE TABLE IF NOT EXISTS push_tokens (
 
 CREATE INDEX IF NOT EXISTS idx_sources_user_id ON sources(user_id);
 CREATE INDEX IF NOT EXISTS idx_sources_created_at ON sources(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sources_pinned ON sources(user_id, pinned) WHERE pinned = TRUE;
+CREATE INDEX IF NOT EXISTS idx_sources_to_read ON sources(user_id, to_read) WHERE to_read = TRUE;
 
 CREATE INDEX IF NOT EXISTS idx_annotations_user_id ON annotations(user_id);
 CREATE INDEX IF NOT EXISTS idx_annotations_source_id ON annotations(source_id);

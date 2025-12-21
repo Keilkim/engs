@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { chat } from '../../services/ai';
-import { saveChatMessage, getChatLogs } from '../../services/chat';
+import { chatStream } from '../../services/ai';
+import { saveChatMessage, getChatLogs, clearChatLogs } from '../../services/chat';
 import { getSource } from '../../services/source';
 import ChatLog from '../../containers/chat-log/ChatLog';
 import { TranslatableText } from '../../components/translatable';
@@ -12,8 +12,11 @@ export default function Chat() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [streamingText, setStreamingText] = useState(''); // 실시간 타이핑 텍스트
   const [sourceContext, setSourceContext] = useState(null);
   const [vocabContext, setVocabContext] = useState(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const abortControllerRef = useRef(null);
 
   const initialMessage = location.state?.initialMessage;
   const sourceId = location.state?.sourceId;
@@ -90,6 +93,7 @@ export default function Chat() {
 
     setInput('');
     setLoading(true);
+    setStreamingText('');
 
     const userMessage = {
       tempId: Date.now(),
@@ -107,21 +111,45 @@ export default function Chat() {
       );
 
       const combinedContext = [sourceContext, vocabContext].filter(Boolean).join('\n\n');
-      const aiResponse = await chat(text, combinedContext || null);
+
+      // 대화 히스토리를 포함하여 스트리밍 요청
+      const currentMessages = [...messages, savedUserMsg];
+      const aiResponse = await chatStream(
+        text,
+        combinedContext || null,
+        currentMessages,
+        (chunk, fullText) => {
+          // 실시간으로 타이핑 효과 표시
+          setStreamingText(fullText);
+        }
+      );
+
+      setStreamingText('');
       const savedAiMsg = await saveChatMessage(aiResponse, 'assistant', sourceId);
       setMessages((prev) => [...prev, savedAiMsg]);
     } catch (err) {
       console.error('Failed to send message:', err);
+      setStreamingText('');
       setMessages((prev) => [
         ...prev,
         {
           tempId: Date.now(),
           role: 'assistant',
-          message: 'AI response failed. Please try again.',
+          message: '응답에 실패했습니다. 다시 시도해주세요.',
         },
       ]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleClearChat() {
+    try {
+      await clearChatLogs(sourceId);
+      setMessages([]);
+      setShowClearConfirm(false);
+    } catch (err) {
+      console.error('Failed to clear chat:', err);
     }
   }
 
@@ -139,25 +167,37 @@ export default function Chat() {
           <TranslatableText textKey="nav.back">Back</TranslatableText>
         </button>
         <h1><TranslatableText textKey="chat.aiChat">AI Chat</TranslatableText></h1>
-        {sourceContext && (
-          <span className="context-badge" title="Learning source connected">
-            S
-          </span>
-        )}
-        {vocabContext && (
-          <span className="context-badge vocab-badge" title="Vocabulary context loaded">
-            V
-          </span>
-        )}
+        <div className="chat-header-actions">
+          {sourceContext && (
+            <span className="context-badge" title="Learning source connected">
+              S
+            </span>
+          )}
+          {vocabContext && (
+            <span className="context-badge vocab-badge" title="Vocabulary context loaded">
+              V
+            </span>
+          )}
+          {messages.length > 0 && (
+            <button
+              className="clear-chat-btn"
+              onClick={() => setShowClearConfirm(true)}
+              title="Clear chat"
+            >
+              <TranslatableText textKey="chat.clear">Clear</TranslatableText>
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="chat-content">
         <ChatLog
           messages={messages}
           onScrapToggle={loadChatHistory}
+          streamingText={streamingText}
         />
 
-        {loading && (
+        {loading && !streamingText && (
           <div className="typing-indicator">
             <span></span>
             <span></span>
@@ -184,6 +224,30 @@ export default function Chat() {
           {loading ? '...' : <TranslatableText textKey="chat.send">Send</TranslatableText>}
         </button>
       </footer>
+
+      {/* Clear chat confirmation modal */}
+      {showClearConfirm && (
+        <div className="modal-overlay" onClick={() => setShowClearConfirm(false)}>
+          <div className="delete-modal" onClick={(e) => e.stopPropagation()}>
+            <h3><TranslatableText textKey="chat.clearTitle">Clear Chat</TranslatableText></h3>
+            <p><TranslatableText textKey="chat.clearMessage">대화 기록을 삭제하시겠습니까? 스크랩된 메시지도 함께 삭제됩니다.</TranslatableText></p>
+            <div className="delete-modal-actions">
+              <button
+                className="cancel-btn"
+                onClick={() => setShowClearConfirm(false)}
+              >
+                <TranslatableText textKey="common.cancel">Cancel</TranslatableText>
+              </button>
+              <button
+                className="confirm-delete-btn"
+                onClick={handleClearChat}
+              >
+                <TranslatableText textKey="common.delete">Delete</TranslatableText>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,41 +1,21 @@
-import { useState } from 'react';
-import { speakText } from '../../services/ai';
 import { TranslatableText } from '../../components/translatable';
 
-export default function Flashcard({ item, onShowAnswer }) {
-  const [isFlipped, setIsFlipped] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
-
+export default function Flashcard({ item, showAnswer, onReveal }) {
   const annotation = item.annotation;
   const analysisData = annotation?.ai_analysis_json
     ? JSON.parse(annotation.ai_analysis_json)
     : null;
 
-  function handleFlip() {
-    setIsFlipped(!isFlipped);
-    if (!isFlipped) {
-      onShowAnswer?.();
-    }
-  }
-
-  async function handleSpeak(e) {
-    e.stopPropagation();
-    if (speaking) return;
-
-    setSpeaking(true);
-    try {
-      await speakText(annotation.selected_text);
-    } catch (err) {
-      console.error('Text-to-speech failed:', err);
-    } finally {
-      setSpeaking(false);
+  function handleClick() {
+    if (!showAnswer) {
+      onReveal?.();
     }
   }
 
   return (
     <div
-      className={`flashcard ${isFlipped ? 'flipped' : ''}`}
-      onClick={handleFlip}
+      className={`flashcard ${showAnswer ? 'flipped' : ''}`}
+      onClick={handleClick}
     >
       <div className="flashcard-inner">
         <div className="flashcard-front">
@@ -45,13 +25,6 @@ export default function Flashcard({ item, onShowAnswer }) {
           <div className="card-content">
             <p className="question-text">{annotation.selected_text}</p>
           </div>
-          <button
-            className="speak-button"
-            onClick={handleSpeak}
-            disabled={speaking}
-          >
-            {speaking ? '...' : 'Speak'}
-          </button>
         </div>
 
         <div className="flashcard-back">

@@ -81,3 +81,24 @@ export async function getScrappedMessages() {
   if (error) throw error;
   return data;
 }
+
+// 채팅 로그 삭제 (전체 또는 특정 소스)
+export async function clearChatLogs(sourceId = null) {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  let query = supabase
+    .from('chat_logs')
+    .delete()
+    .eq('user_id', user.id);
+
+  if (sourceId) {
+    query = query.eq('source_id', sourceId);
+  } else {
+    query = query.is('source_id', null);
+  }
+
+  const { error } = await query;
+
+  if (error) throw error;
+  return true;
+}

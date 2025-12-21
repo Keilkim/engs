@@ -1,6 +1,6 @@
 {
   "welcome": {
-    "title": { "en": "Welcome to ENGS!", "ko": "ENGS에 오신 것을 환영합니다!" },
+    "title": { "en": "Welcome to LangBuddy!", "ko": "랭버디에 오신 것을 환영합니다!" },
     "subtitle": { "en": "Your personal English learning companion", "ko": "당신만의 영어 학습 도우미" },
     "description": { "en": "Learn English naturally from any content you love.", "ko": "좋아하는 콘텐츠로 자연스럽게 영어를 배우세요." }
   },

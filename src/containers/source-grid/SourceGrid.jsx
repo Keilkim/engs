@@ -3,11 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { deleteSource } from '../../services/source';
 import { TranslatableText } from '../../components/translatable';
 
-export default function SourceGrid({ sources, loading, onSourceDeleted }) {
+export default function SourceGrid({ sources, loading, onSourceDeleted, onSourceUpdated }) {
   const navigate = useNavigate();
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const [pageIndexes, setPageIndexes] = useState({}); // Track current page for each source
+
+  // 즐겨찾기 토글
+  function handlePinToggle(e, source) {
+    e.stopPropagation();
+    if (onSourceUpdated) {
+      onSourceUpdated(source.id, { pinned: !source.pinned });
+    }
+  }
 
   if (loading) {
     return (
@@ -15,10 +22,6 @@ export default function SourceGrid({ sources, loading, onSourceDeleted }) {
         {[...Array(6)].map((_, i) => (
           <div key={i} className="source-card source-card-skeleton">
             <div className="source-thumbnail skeleton-shimmer" />
-            <div className="source-info">
-              <div className="skeleton-text skeleton-shimmer" />
-              <div className="skeleton-text-sm skeleton-shimmer" />
-            </div>
           </div>
         ))}
       </div>
@@ -65,62 +68,18 @@ export default function SourceGrid({ sources, loading, onSourceDeleted }) {
     setDeleteConfirm(null);
   }
 
-  // Parse pages JSON
-  function getPages(source) {
-    if (source.pages) {
-      try {
-        return JSON.parse(source.pages);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-
-  // Get current page index for source
-  function getCurrentPageIndex(sourceId) {
-    return pageIndexes[sourceId] || 0;
-  }
-
-  // Navigate to previous page
-  function handlePrevPage(e, source, pages) {
-    e.stopPropagation();
-    const currentIndex = getCurrentPageIndex(source.id);
-    if (currentIndex > 0) {
-      setPageIndexes(prev => ({ ...prev, [source.id]: currentIndex - 1 }));
-    }
-  }
-
-  // Navigate to next page
-  function handleNextPage(e, source, pages) {
-    e.stopPropagation();
-    const currentIndex = getCurrentPageIndex(source.id);
-    if (currentIndex < pages.length - 1) {
-      setPageIndexes(prev => ({ ...prev, [source.id]: currentIndex + 1 }));
-    }
-  }
-
-  // Get preview image (with page support for PDFs)
+  // Get preview image (thumbnail or screenshot)
   function getPreviewImage(source) {
-    const pages = getPages(source);
-    if (pages && pages.length > 0) {
-      const currentIndex = getCurrentPageIndex(source.id);
-      return pages[currentIndex];
-    }
     if (source.screenshot) return source.screenshot;
     if (source.thumbnail) return source.thumbnail;
-    if (source.type === 'image') return source.file_path;
     return null;
   }
 
   return (
     <div className="source-grid">
       {sources.map((source) => {
-        const pages = getPages(source);
         const previewImage = getPreviewImage(source);
         const isConfirming = deleteConfirm === source.id;
-        const currentPageIndex = getCurrentPageIndex(source.id);
-        const hasPages = pages && pages.length > 1;
 
         return (
           <div
@@ -133,6 +92,7 @@ export default function SourceGrid({ sources, loading, onSourceDeleted }) {
                 <img
                   src={previewImage}
                   alt={source.title}
+                  loading="lazy"
                   onError={(e) => {
                     e.target.style.display = 'none';
                     e.target.nextSibling.style.display = 'flex';
@@ -146,30 +106,20 @@ export default function SourceGrid({ sources, loading, onSourceDeleted }) {
                 {source.type.toUpperCase().charAt(0)}
               </span>
 
-              {/* Page navigation for PDFs */}
-              {hasPages && !isConfirming && (
-                <>
-                  <button
-                    className="page-nav-btn page-nav-prev"
-                    onClick={(e) => handlePrevPage(e, source, pages)}
-                    disabled={currentPageIndex === 0}
-                  >
-                    ‹
-                  </button>
-                  <button
-                    className="page-nav-btn page-nav-next"
-                    onClick={(e) => handleNextPage(e, source, pages)}
-                    disabled={currentPageIndex === pages.length - 1}
-                  >
-                    ›
-                  </button>
-                  <div className="page-indicator">
-                    {currentPageIndex + 1} / {pages.length}
-                  </div>
-                </>
+              {/* 즐겨찾기 버튼 (좌상단) */}
+              {!isConfirming && (
+                <button
+                  className={`source-pin-btn ${source.pinned ? 'active' : ''}`}
+                  onClick={(e) => handlePinToggle(e, source)}
+                  title={source.pinned ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                  </svg>
+                </button>
               )}
 
-              {/* Delete button */}
+              {/* Delete button (우상단) */}
               <button
                 className="source-delete-btn"
                 onClick={(e) => handleDeleteClick(e, source)}
@@ -200,13 +150,6 @@ export default function SourceGrid({ sources, loading, onSourceDeleted }) {
                   </div>
                 </div>
               )}
-            </div>
-            <div className="source-info">
-              <h3 className="source-title">{source.title}</h3>
-              <span className="source-type">
-                {source.type.toUpperCase()}
-                {hasPages && ` • ${pages.length} pages`}
-              </span>
             </div>
           </div>
         );

@@ -1,6 +1,6 @@
-# ENGS - 영어 학습 앱
+# 랭버디 (LangBuddy) - 영어 학습 앱
 
-React + Vite + Supabase + Vercel 기반 영어 학습 앱
+React + Vite + Supabase + Vercel 기반 AI 영어 학습 튜터 앱
 
 ## 🚀 시작하기
 

@@ -87,7 +87,8 @@ export default function Viewer() {
   const [highlightedVocabId, setHighlightedVocabId] = useState(null); // 파란 글로우 효과용
   const highlightTimer = useRef(null);
 
-  // 단어 삭제 상태
+  // Long press for vocabulary delete
+  const longPressTimer = useRef(null);
   const [deletingVocab, setDeletingVocab] = useState(false);
 
   // OCR word data from source (pre-computed on upload)
@@ -135,7 +136,48 @@ export default function Viewer() {
     });
   }
 
-  // 단어 마킹 터치 핸들러는 이미지 레벨에서 통합 처리 - 제거됨
+  // Long press handlers for vocabulary markers
+  function handleVocabMarkerPointerDown(e, annotation, containerRect) {
+    e.stopPropagation();
+    const data = JSON.parse(annotation.selection_rect);
+    const bounds = data.bounds || data;
+
+    longPressTimer.current = setTimeout(() => {
+      // Long press - show delete confirmation
+      openModal('vocabDeleteConfirm', {
+        annotation,
+        position: {
+          x: containerRect.left + (bounds.x + (bounds.width || 0) / 2) * containerRect.width / 100,
+          y: containerRect.top + (bounds.y + (bounds.height || 0) / 2) * containerRect.height / 100,
+        },
+      });
+    }, 500); // 500ms for long press
+  }
+
+  function handleVocabMarkerPointerUp(e, annotation) {
+    e.stopPropagation();
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+
+      // If not a long press (timer was cleared before firing), show tooltip with delete option
+      if (activeModal.type !== 'vocabDeleteConfirm') {
+        const definition = annotation.ai_analysis_json
+          ? JSON.parse(annotation.ai_analysis_json).definition || ''
+          : '';
+        // Get marker's screen position for smart tooltip placement
+        const markerRect = e.target.getBoundingClientRect();
+        showVocabWord(annotation.selected_text, definition, markerRect, annotation);
+      }
+    }
+  }
+
+  function handleVocabMarkerPointerLeave() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }
 
   // Delete vocabulary annotation
   async function handleDeleteVocabAnnotation() {
@@ -795,12 +837,6 @@ export default function Viewer() {
   const handleWordTap = useCallback((clientX, clientY, isLongPress = false) => {
     console.log(`[handleWordTap] ${isLongPress ? 'LONG PRESS' : 'SHORT TAP'} at (${clientX}, ${clientY})`);
 
-    // 모달이 열려있으면 닫기만 하고 return
-    if (activeModal.type === 'wordMenu' || activeModal.type === 'grammarTooltip') {
-      closeModal();
-      return;
-    }
-
     // 펜 모드가 활성화되면 단어 탭 무시
     if (penModeActive) return;
     if (!imageContainerRef.current) return;
@@ -949,7 +985,7 @@ export default function Viewer() {
         bottom: mainBounds.bottom,
       } : null,
     });
-  }, [penModeActive, findWordAtPoint, findAnnotationAtPoint, findSentenceFromWord, openModal, activeModal, closeModal]);
+  }, [penModeActive, findWordAtPoint, findAnnotationAtPoint, findSentenceFromWord, openModal]);
 
   // Close word menu (with protection against immediate close)
   const closeWordMenu = useCallback((force = false) => {
@@ -1306,7 +1342,55 @@ export default function Viewer() {
       longPressTriggered = false;
     };
 
-    // 터치 이벤트는 이미지 레벨에서 통합 처리 - 여기서는 제거
+    // 터치 이벤트 - 롱프레스만
+    const handleTouchStart = (e) => {
+      console.log(`[Grammar] TouchStart on annotation: ${annotation.id}, pattern: ${patternIdx}`);
+      // 이미지 레벨의 롱프레스 타이머 방지 - grammar underline 위에서 터치할 때
+      // 이미지 핸들러로 이벤트가 전파되면 별도의 롱프레스 타이머가 시작되어 충돌함
+      e.stopPropagation();
+      longPressTriggered = false;
+      longPressTimer = setTimeout(() => {
+        console.log(`[Grammar] Touch LongPress triggered! annotation: ${annotation.id}, pattern: ${patternIdx}`);
+        longPressTriggered = true;
+        showGrammarTooltipBelow();
+        longPressTimer = null;
+      }, LONG_PRESS_DURATION);
+    };
+
+    const handleTouchEnd = (e) => {
+      // 먼저 롱프레스 타이머 취소 (grammar 모달이 열리지 않도록)
+      const wasLongPress = longPressTriggered;
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      longPressTriggered = false;
+
+      console.log(`[Grammar] TouchEnd on annotation: ${annotation.id}, wasLongPress: ${wasLongPress}`);
+
+      if (wasLongPress) {
+        // 롱프레스가 이미 트리거됨 - grammar 모달이 열렸으므로 이벤트 차단
+        e.stopPropagation();
+        e.preventDefault();
+      } else {
+        // 짧은 탭일 경우 - vocab 마커 클릭 동작 수행
+        // TouchStart에서 stopPropagation 했으므로 여기서 직접 handleWordTap 호출
+        e.stopPropagation();
+        const touch = e.changedTouches[0];
+        if (touch) {
+          handleWordTap(touch.clientX, touch.clientY, false);
+        }
+      }
+    };
+
+    const handleTouchCancel = () => {
+      console.log(`[Grammar] TouchCancel on annotation: ${annotation.id}`);
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      longPressTriggered = false;
+    };
 
     // lines 데이터가 있으면 각 줄별로 밑줄 렌더링
     if (lines && lines.length > 0) {
@@ -1332,6 +1416,9 @@ export default function Viewer() {
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerLeave}
           onPointerCancel={handlePointerLeave}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchCancel}
         >
           {underlines}
         </g>
@@ -1348,6 +1435,9 @@ export default function Viewer() {
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerLeave}
         onPointerCancel={handlePointerLeave}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
       >
         <line
           x1={`${bounds.x}%`}
@@ -2002,11 +2092,11 @@ export default function Viewer() {
                         />
                       );
                     })}
-                  {/* Vocabulary markers (green shadow + rounded) - 이벤트는 이미지 레벨에서 통합 처리 */}
+                  {/* Vocabulary markers (green shadow + rounded) */}
                   {getVocabularyAnnotations(currentPage).map(annotation => {
                     const selectionData = JSON.parse(annotation.selection_rect);
                     const bounds = selectionData.bounds || selectionData;
-                    console.log('[VocabMarker] annotation:', annotation.selected_text, 'bounds:', bounds);
+                    const containerRect = imageContainerRef.current?.getBoundingClientRect();
 
                     // Padding for visual effect
                     const pad = 0.3;
@@ -2018,12 +2108,17 @@ export default function Viewer() {
                     const isHighlighted = highlightedVocabId === annotation.id;
                     return (
                       <g key={`vocab-${annotation.id}`}>
+                        {/* Background with rounded corners and shadow */}
                         <rect
                           x={`${x}%`} y={`${y}%`}
                           width={`${w}%`} height={`${h}%`}
                           rx="0.5" ry="0.5"
                           className={`vocab-marker-bg${isHighlighted ? ' highlighted' : ''}`}
-                          style={{ pointerEvents: 'none' }}
+                          onMouseDown={(e) => containerRect && handleVocabMarkerPointerDown(e, annotation, containerRect)}
+                          onMouseUp={(e) => handleVocabMarkerPointerUp(e, annotation)}
+                          onMouseLeave={handleVocabMarkerPointerLeave}
+                          onTouchStart={(e) => containerRect && handleVocabMarkerPointerDown(e, annotation, containerRect)}
+                          onTouchEnd={(e) => handleVocabMarkerPointerUp(e, annotation)}
                         />
                       </g>
                     );
@@ -2205,10 +2300,11 @@ export default function Viewer() {
                 />
 
                 <svg className="highlighter-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-                  {/* Vocabulary markers - 이벤트는 이미지 레벨에서 통합 처리 */}
+                  {/* Vocabulary markers */}
                   {getVocabularyAnnotations().map(annotation => {
                     const selectionData = JSON.parse(annotation.selection_rect);
                     const bounds = selectionData.bounds || selectionData;
+                    const containerRect = imageContainerRef.current?.getBoundingClientRect();
                     const pad = 0.3;
                     const x = Math.max(0, bounds.x - pad);
                     const y = Math.max(0, bounds.y - pad);
@@ -2221,7 +2317,11 @@ export default function Viewer() {
                           width={`${w}%`} height={`${h}%`}
                           rx="0.5" ry="0.5"
                           className="vocab-marker-bg"
-                          style={{ pointerEvents: 'none' }}
+                          onMouseDown={(e) => containerRect && handleVocabMarkerPointerDown(e, annotation, containerRect)}
+                          onMouseUp={(e) => handleVocabMarkerPointerUp(e, annotation)}
+                          onMouseLeave={handleVocabMarkerPointerLeave}
+                          onTouchStart={(e) => containerRect && handleVocabMarkerPointerDown(e, annotation, containerRect)}
+                          onTouchEnd={(e) => handleVocabMarkerPointerUp(e, annotation)}
                         />
                       </g>
                     );
@@ -2375,10 +2475,11 @@ export default function Viewer() {
                         />
                       );
                     })}
-                  {/* Vocabulary markers (green shadow + rounded) - 이벤트는 이미지 레벨에서 통합 처리 */}
+                  {/* Vocabulary markers (green shadow + rounded) */}
                   {getVocabularyAnnotations().map(annotation => {
                     const selectionData = JSON.parse(annotation.selection_rect);
                     const bounds = selectionData.bounds || selectionData;
+                    const containerRect = imageContainerRef.current?.getBoundingClientRect();
 
                     // Padding for visual effect
                     const pad = 0.3;
@@ -2390,12 +2491,17 @@ export default function Viewer() {
                     const isHighlighted = highlightedVocabId === annotation.id;
                     return (
                       <g key={`vocab-${annotation.id}`}>
+                        {/* Background with rounded corners and shadow */}
                         <rect
                           x={`${x}%`} y={`${y}%`}
                           width={`${w}%`} height={`${h}%`}
                           rx="0.5" ry="0.5"
                           className={`vocab-marker-bg${isHighlighted ? ' highlighted' : ''}`}
-                          style={{ pointerEvents: 'none' }}
+                          onMouseDown={(e) => containerRect && handleVocabMarkerPointerDown(e, annotation, containerRect)}
+                          onMouseUp={(e) => handleVocabMarkerPointerUp(e, annotation)}
+                          onMouseLeave={handleVocabMarkerPointerLeave}
+                          onTouchStart={(e) => containerRect && handleVocabMarkerPointerDown(e, annotation, containerRect)}
+                          onTouchEnd={(e) => handleVocabMarkerPointerUp(e, annotation)}
                         />
                       </g>
                     );
@@ -2884,7 +2990,6 @@ export default function Viewer() {
             pattern={activeModal.data.pattern}
             annotation={activeModal.data.annotation}
             position={activeModal.data.position}
-            zoomScale={zoomScale}
             onClose={closeModal}
             onDelete={async () => {
               if (activeModal.data.annotation) {
