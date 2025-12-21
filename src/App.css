@@ -4533,7 +4533,7 @@
   min-width: min(200px, 85vw);
   max-width: min(94vw, 340px);
   max-height: 70vh;
-  overflow-y: auto;
+  overflow: visible; /* 화살표가 보이도록 */
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   animation: menuFadeIn 0.15s ease-out;
   pointer-events: auto; /* 모달 자체는 클릭 가능 */
@@ -4572,7 +4572,7 @@
   min-width: min(280px, 88vw);
   max-width: min(94vw, 420px);
   max-height: 75vh;
-  transform: translateX(-50%);
+  /* transform은 인라인 스타일에서 scale()로 처리 */
 }
 
 @keyframes menuFadeIn {
@@ -4636,6 +4636,8 @@
   line-height: 1.5;
   margin-bottom: var(--spacing-md);
   white-space: pre-wrap;
+  max-height: 40vh;
+  overflow-y: auto;
 }
 
 .word-menu-actions {
@@ -4684,6 +4686,8 @@
   flex-direction: column;
   gap: var(--spacing-xs);
   margin-bottom: var(--spacing-md);
+  max-height: 40vh;
+  overflow-y: auto;
 }
 
 .pattern-checkbox {
