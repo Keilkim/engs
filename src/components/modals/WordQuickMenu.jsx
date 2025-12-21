@@ -326,7 +326,8 @@ export default function WordQuickMenu({
 
   // 위치 계산 - 메뉴를 선택된 텍스트의 가로 중앙에 배치
   const halfWidth = menuWidth / 2;
-  let left = position.x - halfWidth; // 중앙 정렬
+  const originalLeft = position.x - halfWidth; // 원래 중앙 정렬 위치
+  let left = originalLeft;
   let top = position.y;
 
   // 좌우 경계 체크 (containerBounds 기준)
@@ -345,6 +346,11 @@ export default function WordQuickMenu({
     top = bounds.bottom - menuHeight - MARGIN;
   }
 
+  // 화살표 위치 계산 - 모달이 이동해도 마킹 위치를 가리키도록
+  // position.x는 마킹의 중앙 좌표, left는 모달의 왼쪽 좌표
+  const arrowLeftPx = position.x - left; // 모달 내에서 화살표의 x 위치
+  const arrowLeftPercent = Math.min(Math.max((arrowLeftPx / menuWidth) * 100, 10), 90); // 10%~90% 범위
+
   const menuStyle = {
     position: 'fixed',
     left,
@@ -354,6 +360,7 @@ export default function WordQuickMenu({
     maxHeight: menuHeight,
     transform: `scale(${scaleFactor})`,
     transformOrigin: placement === 'above' ? 'bottom center' : 'top center',
+    '--arrow-left': `${arrowLeftPercent}%`, // CSS 변수로 화살표 위치 전달
   };
 
   // 화살표 방향에 따른 클래스

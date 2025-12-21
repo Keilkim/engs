@@ -4547,7 +4547,7 @@
   height: 12px;
   background: var(--color-base-sub);
   border: 1px solid var(--color-accent);
-  left: 50%;
+  left: var(--arrow-left, 50%); /* 동적 위치, 기본값 50% */
 }
 
 /* 위쪽 화살표 (모달이 마킹 아래에 위치) */
