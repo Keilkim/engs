@@ -5,16 +5,14 @@ import { createAnnotation } from '../../services/annotation';
 export default function WordQuickMenu({
   isOpen,
   position,
-  placement = 'below', // 'below' or 'above' - 마킹 기준 위치
+  placement = 'below',
   word,
   wordBbox,
-  sentenceWords, // 문장의 개별 단어들 (줄별 렌더링용)
+  sentenceWords,
   sourceId,
   currentPage,
   existingAnnotation,
   isGrammarMode,
-  containerBounds, // screenshot-main의 bounds
-  zoomScale = 1, // 현재 줌 스케일
   onClose,
   onSaved,
   onDeleted,
@@ -304,55 +302,22 @@ export default function WordQuickMenu({
 
   if (!isOpen) return null;
 
-  // 모바일/데스크톱 viewport 크기
-  const vw = typeof window !== 'undefined' ? window.innerWidth : 375;
-  const vh = typeof window !== 'undefined' ? window.innerHeight : 667;
-  const MARGIN = 12; // 최소 여백
+  // 간단한 위치 계산
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const MARGIN = 12;
+  const menuWidth = isGrammarMode ? Math.min(340, vw - 24) : Math.min(300, vw - 24);
 
-  // 기본 메뉴 크기 (줌 전)
-  const baseMenuWidth = isGrammarMode
-    ? Math.min(Math.max(280, vw * 0.85), 380)
-    : Math.min(Math.max(200, vw * 0.8), 320);
-  const baseMenuHeight = vh * 0.6;
-
-  // scale은 사용하지 않고, 크기 자체를 조절 (위치 계산이 정확해짐)
-  // 줌인 시 모달도 약간 커지지만, 화면을 벗어나지 않도록 제한
-  const scaleFactor = Math.min(Math.max(1, zoomScale * 0.7), 1.5); // 1~1.5 범위
-  const menuWidth = Math.min(baseMenuWidth * scaleFactor, vw - MARGIN * 2);
-  const menuHeight = Math.min(baseMenuHeight * scaleFactor, vh * 0.8);
-
-  // 컨테이너 bounds 또는 viewport 사용
-  const bounds = containerBounds || {
-    left: 0,
-    top: 0,
-    right: vw,
-    bottom: vh,
-  };
-
-  // 위치 계산 - 메뉴를 선택된 텍스트의 가로 중앙에 배치
-  const halfWidth = menuWidth / 2;
-  let left = position.x - halfWidth;
+  // 모달 위치: position.x를 중심으로, 화면 경계에서 조정
+  let left = Math.max(MARGIN, Math.min(position.x - menuWidth / 2, vw - menuWidth - MARGIN));
   let top = position.y;
 
-  // 좌우 경계 체크
-  if (left < bounds.left + MARGIN) {
-    left = bounds.left + MARGIN;
-  }
-  if (left + menuWidth > bounds.right - MARGIN) {
-    left = bounds.right - menuWidth - MARGIN;
-  }
-
   // 상하 경계 체크
-  if (top < bounds.top + MARGIN) {
-    top = bounds.top + MARGIN;
-  }
-  if (top + menuHeight > bounds.bottom - MARGIN) {
-    top = bounds.bottom - menuHeight - MARGIN;
-  }
+  if (top < MARGIN) top = MARGIN;
+  if (top > vh - 200) top = vh - 200;
 
-  // 화살표 위치 계산 - 모달이 이동해도 마킹 위치를 가리키도록
-  const arrowLeftPx = position.x - left;
-  const arrowLeftPercent = Math.min(Math.max((arrowLeftPx / menuWidth) * 100, 12), 88);
+  // 화살표 위치: position.x가 모달 내 어디에 있는지 계산
+  const arrowLeft = Math.min(Math.max(((position.x - left) / menuWidth) * 100, 15), 85);
 
   const menuStyle = {
     position: 'fixed',
@@ -360,11 +325,11 @@ export default function WordQuickMenu({
     top,
     zIndex: 1000,
     width: menuWidth,
-    maxHeight: menuHeight,
-    '--arrow-left': `${arrowLeftPercent}%`,
+    maxHeight: vh * 0.6,
+    '--arrow-left': `${arrowLeft}%`,
   };
 
-  // 화살표 방향에 따른 클래스
+  // 화살표 방향
   const arrowClass = placement === 'above' ? 'arrow-below' : 'arrow-above';
 
   // Existing vocabulary annotation view

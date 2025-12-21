@@ -924,10 +924,6 @@ export default function Viewer() {
           ? Math.min(markerBottomPx + 12, viewportHeight - 50)
           : Math.max(markerTopPx - 12, 50);
 
-        // screenshot-main bounds 계산
-        const mainContainer = imageContainerRef.current?.parentElement;
-        const mainBounds = mainContainer ? mainContainer.getBoundingClientRect() : null;
-
         openModal('wordMenu', {
           position: { x: posX, y: posY },
           placement,
@@ -936,12 +932,6 @@ export default function Viewer() {
           sentenceWords: sentence.words,
           existingAnnotation: null,
           isGrammarMode: true,
-          containerBounds: mainBounds ? {
-            left: mainBounds.left,
-            top: mainBounds.top,
-            right: mainBounds.right,
-            bottom: mainBounds.bottom,
-          } : null,
         });
         return;
       }
@@ -969,10 +959,6 @@ export default function Viewer() {
       ? Math.min(markerBottomPx + 12, viewportHeight - 50)
       : Math.max(markerTopPx - 12, 50);
 
-    // screenshot-main bounds 계산
-    const mainContainer = imageContainerRef.current?.parentElement;
-    const mainBounds = mainContainer ? mainContainer.getBoundingClientRect() : null;
-
     openModal('wordMenu', {
       position: { x: posX, y: posY },
       placement,
@@ -980,12 +966,6 @@ export default function Viewer() {
       wordBbox: word.bbox,
       existingAnnotation: null,
       isGrammarMode: false,
-      containerBounds: mainBounds ? {
-        left: mainBounds.left,
-        top: mainBounds.top,
-        right: mainBounds.right,
-        bottom: mainBounds.bottom,
-      } : null,
     });
   }, [penModeActive, findWordAtPoint, findAnnotationAtPoint, findSentenceFromWord, openModal, activeModal, closeModal]);
 
@@ -2952,8 +2932,6 @@ export default function Viewer() {
         currentPage={currentPage}
         existingAnnotation={activeModal.data.existingAnnotation || null}
         isGrammarMode={activeModal.data.isGrammarMode || false}
-        containerBounds={activeModal.data.containerBounds || null}
-        zoomScale={zoomScale}
         onClose={closeWordMenu}
         onSaved={handleWordMenuSaved}
         onDeleted={handleWordMenuDelete}
