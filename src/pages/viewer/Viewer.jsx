@@ -1112,8 +1112,10 @@ export default function Viewer() {
       // Start long-press timer for grammar mode
       wordTapTimer.current = setTimeout(() => {
         if (mouseClickStart.current && !mouseClickStart.current.moved) {
-          handleWordTap(mouseClickStart.current.x, mouseClickStart.current.y, true);
-          mouseClickStart.current = null;
+          const clickData = mouseClickStart.current;
+          mouseClickStart.current = null; // 먼저 null로 설정하여 중복 호출 방지
+          wordTapTimer.current = null; // 타이머도 클리어
+          handleWordTap(clickData.x, clickData.y, true);
         }
       }, 500);
     }
@@ -1744,8 +1746,10 @@ export default function Viewer() {
       wordTapTimer.current = setTimeout(() => {
         if (wordTapStart.current && !wordTapStart.current.moved) {
           // 롱프레스 성공 - grammar mode
-          handleWordTap(wordTapStart.current.x, wordTapStart.current.y, true);
-          wordTapStart.current = null;
+          const tapData = wordTapStart.current;
+          wordTapStart.current = null; // 먼저 null로 설정하여 중복 호출 방지
+          wordTapTimer.current = null; // 타이머도 클리어
+          handleWordTap(tapData.x, tapData.y, true);
         }
       }, LONG_PRESS_DURATION);
     };
