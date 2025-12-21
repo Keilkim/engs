@@ -1,10 +1,13 @@
 import { useState, useMemo } from 'react';
 
-export default function GrammarTooltip({ pattern, annotation, position, zoomScale = 1, onClose, onDelete }) {
+export default function GrammarTooltip({ pattern, annotation, position, placement = 'below', zoomScale = 1, onClose, onDelete }) {
   const [deleting, setDeleting] = useState(false);
 
   // 줌 스케일에 따라 크기 조정
   const scaleFactor = Math.max(1, zoomScale * 0.8);
+
+  // 화살표 방향에 따른 클래스
+  const arrowClass = placement === 'above' ? 'arrow-below' : 'arrow-above';
 
   // Parse saved grammar data from annotation
   const savedData = useMemo(() => {
@@ -34,12 +37,12 @@ export default function GrammarTooltip({ pattern, annotation, position, zoomScal
 
   return (
     <div
-      className="grammar-tooltip saved-grammar"
+      className={`grammar-tooltip saved-grammar ${arrowClass}`}
       style={{
         top: position.y,
         left: position.x,
         transform: `translate(-50%, 0) scale(${scaleFactor})`,
-        transformOrigin: 'top center',
+        transformOrigin: placement === 'above' ? 'bottom center' : 'top center',
       }}
       onClick={(e) => e.stopPropagation()}
     >

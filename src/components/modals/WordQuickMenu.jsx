@@ -5,6 +5,7 @@ import { createAnnotation } from '../../services/annotation';
 export default function WordQuickMenu({
   isOpen,
   position,
+  placement = 'below', // 'below' or 'above' - 마킹 기준 위치
   word,
   wordBbox,
   sentenceWords, // 문장의 개별 단어들 (줄별 렌더링용)
@@ -352,15 +353,18 @@ export default function WordQuickMenu({
     width: menuWidth,
     maxHeight: menuHeight,
     transform: `scale(${scaleFactor})`,
-    transformOrigin: 'top center',
+    transformOrigin: placement === 'above' ? 'bottom center' : 'top center',
   };
+
+  // 화살표 방향에 따른 클래스
+  const arrowClass = placement === 'above' ? 'arrow-below' : 'arrow-above';
 
   // Existing vocabulary annotation view
   if (existingAnnotation && !isGrammarMode) {
     return (
       <>
         <div className="word-menu-overlay" />
-        <div className="word-quick-menu existing" style={menuStyle}>
+        <div className={`word-quick-menu existing ${arrowClass}`} style={menuStyle}>
           <div className="word-menu-header">
             <span className="word-text">{existingAnnotation.selected_text}</span>
             <button
@@ -391,7 +395,7 @@ export default function WordQuickMenu({
     return (
       <>
         <div className="word-menu-overlay" />
-        <div className="word-quick-menu grammar existing" style={menuStyle}>
+        <div className={`word-quick-menu grammar existing ${arrowClass}`} style={menuStyle}>
           <div className="word-menu-header">
             <span className="sentence-text">{grammarData.originalText}</span>
             <button
@@ -430,7 +434,7 @@ export default function WordQuickMenu({
     return (
       <>
         <div className="word-menu-overlay" />
-        <div className="word-quick-menu grammar" style={menuStyle}>
+        <div className={`word-quick-menu grammar ${arrowClass}`} style={menuStyle}>
           {loading ? (
             <div className="loading-state">분석 중...</div>
           ) : grammarData ? (
@@ -473,7 +477,7 @@ export default function WordQuickMenu({
   return (
     <>
       <div className="word-menu-overlay" />
-      <div className="word-quick-menu" style={menuStyle}>
+      <div className={`word-quick-menu ${arrowClass}`} style={menuStyle}>
         <div className="word-menu-header">
           <span className="word-text">{word}</span>
           <button

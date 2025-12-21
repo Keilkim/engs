@@ -847,11 +847,24 @@ export default function Viewer() {
           const bounds = selectionData.bounds || selectionData;
           const lines = selectionData.lines;
 
-          // 마지막 줄의 아래쪽 위치 계산
+          // 위/아래 위치 계산
+          const firstLine = lines && lines.length > 0 ? lines[0] : bounds;
           const lastLine = lines && lines.length > 0 ? lines[lines.length - 1] : bounds;
           const centerX = bounds.x + bounds.width / 2;
+
           const posX = rect.left + centerX * rect.width / 100;
-          const posY = rect.top + (lastLine.y + lastLine.height) * rect.height / 100 + 15;
+          const markerTopPx = rect.top + firstLine.y * rect.height / 100;
+          const markerBottomPx = rect.top + (lastLine.y + lastLine.height) * rect.height / 100;
+
+          // 위/아래 공간 비교하여 placement 결정
+          const viewportHeight = window.innerHeight;
+          const spaceAbove = markerTopPx;
+          const spaceBelow = viewportHeight - markerBottomPx;
+          const placement = spaceBelow >= 200 || spaceBelow > spaceAbove ? 'below' : 'above';
+
+          const posY = placement === 'below'
+            ? markerBottomPx + 12
+            : markerTopPx - 12;
 
           // 저장된 첫 번째 패턴 사용 (또는 전체 패턴)
           const pattern = analysisData.patterns?.[0] || {
@@ -865,6 +878,7 @@ export default function Viewer() {
             pattern: pattern,
             annotation: existingAnnotation,
             position: { x: posX, y: posY },
+            placement,
           });
           return;
         } catch {
@@ -886,19 +900,33 @@ export default function Viewer() {
         menuJustOpened.current = true;
         setTimeout(() => { menuJustOpened.current = false; }, 100);
 
-        // 문장의 가로 중앙, 마킹 아래에 모달 위치
+        // 문장의 가로 중앙
         const sentenceCenterX = sentence.bbox.x + sentence.bbox.width / 2;
+        const sentenceTopY = sentence.bbox.y;
         const sentenceBottomY = sentence.bbox.y + sentence.bbox.height;
 
-        // 개별 단어들 중 가장 아래 라인 찾기
+        // 개별 단어들 중 가장 위/아래 라인 찾기
+        let minTopY = sentenceTopY;
         let maxBottomY = sentenceBottomY;
         if (sentence.words && sentence.words.length > 0) {
+          minTopY = Math.min(...sentence.words.map(w => w.bbox.y));
           maxBottomY = Math.max(...sentence.words.map(w => w.bbox.y + w.bbox.height));
         }
 
         // 퍼센트 → 픽셀 변환
         const posX = rect.left + (sentenceCenterX * rect.width / 100);
-        const posY = rect.top + (maxBottomY * rect.height / 100) + 15; // 15px margin
+        const markerTopPx = rect.top + (minTopY * rect.height / 100);
+        const markerBottomPx = rect.top + (maxBottomY * rect.height / 100);
+
+        // 위/아래 공간 비교하여 placement 결정
+        const viewportHeight = window.innerHeight;
+        const spaceAbove = markerTopPx;
+        const spaceBelow = viewportHeight - markerBottomPx;
+        const placement = spaceBelow >= 200 || spaceBelow > spaceAbove ? 'below' : 'above';
+
+        const posY = placement === 'below'
+          ? markerBottomPx + 12
+          : markerTopPx - 12;
 
         // screenshot-main bounds 계산
         const mainContainer = imageContainerRef.current?.parentElement;
@@ -906,6 +934,7 @@ export default function Viewer() {
 
         openModal('wordMenu', {
           position: { x: posX, y: posY },
+          placement,
           word: sentence.text,
           wordBbox: sentence.bbox,
           sentenceWords: sentence.words, // 개별 단어들의 bbox 정보도 전달
@@ -926,11 +955,25 @@ export default function Viewer() {
     menuJustOpened.current = true;
     setTimeout(() => { menuJustOpened.current = false; }, 100);
 
-    // 단어의 가로 중앙, 아래에 메뉴 위치
+    // 단어의 가로 중앙
     const wordCenterX = word.bbox.x + word.bbox.width / 2;
+    const wordTopY = word.bbox.y;
     const wordBottomY = word.bbox.y + word.bbox.height;
+
+    // 퍼센트 → 픽셀 변환
     const posX = rect.left + (wordCenterX * rect.width / 100);
-    const posY = rect.top + (wordBottomY * rect.height / 100) + 15; // 15px margin
+    const markerTopPx = rect.top + (wordTopY * rect.height / 100);
+    const markerBottomPx = rect.top + (wordBottomY * rect.height / 100);
+
+    // 위/아래 공간 비교하여 placement 결정
+    const viewportHeight = window.innerHeight;
+    const spaceAbove = markerTopPx;
+    const spaceBelow = viewportHeight - markerBottomPx;
+    const placement = spaceBelow >= 200 || spaceBelow > spaceAbove ? 'below' : 'above';
+
+    const posY = placement === 'below'
+      ? markerBottomPx + 12
+      : markerTopPx - 12;
 
     // screenshot-main bounds 계산
     const mainContainer = imageContainerRef.current?.parentElement;
@@ -938,6 +981,7 @@ export default function Viewer() {
 
     openModal('wordMenu', {
       position: { x: posX, y: posY },
+      placement,
       word: word.text,
       wordBbox: word.bbox,
       existingAnnotation: null,
@@ -2884,6 +2928,7 @@ export default function Viewer() {
             pattern={activeModal.data.pattern}
             annotation={activeModal.data.annotation}
             position={activeModal.data.position}
+            placement={activeModal.data.placement || 'below'}
             zoomScale={zoomScale}
             onClose={closeModal}
             onDelete={async () => {
@@ -2901,6 +2946,7 @@ export default function Viewer() {
       <WordQuickMenu
         isOpen={activeModal.type === 'wordMenu'}
         position={activeModal.data.position || { x: 0, y: 0 }}
+        placement={activeModal.data.placement || 'below'}
         word={activeModal.data.word || ''}
         wordBbox={activeModal.data.wordBbox || null}
         sentenceWords={activeModal.data.sentenceWords || null}

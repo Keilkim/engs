@@ -1094,6 +1094,7 @@
   pointer-events: auto; /* 모달 자체는 클릭 가능 */
 }
 
+/* 화살표 - 기본 스타일 */
 .grammar-tooltip::before {
   content: '';
   position: absolute;
@@ -1101,11 +1102,23 @@
   height: 12px;
   background: var(--color-base-sub);
   border: 1px solid var(--color-highlight);
+  left: 50%;
+}
+
+/* 위쪽 화살표 (모달이 마킹 아래에 위치) */
+.grammar-tooltip.arrow-above::before {
   border-right: none;
   border-bottom: none;
   transform: translateX(-50%) rotate(45deg);
-  left: 50%;
   top: -7px;
+}
+
+/* 아래쪽 화살표 (모달이 마킹 위에 위치) */
+.grammar-tooltip.arrow-below::before {
+  border-left: none;
+  border-top: none;
+  transform: translateX(-50%) rotate(45deg);
+  bottom: -7px;
 }
 
 @keyframes tooltipFadeIn {
@@ -4526,7 +4539,7 @@
   pointer-events: auto; /* 모달 자체는 클릭 가능 */
 }
 
-/* 화살표 (위쪽) - 마킹을 가리킴 */
+/* 화살표 - 기본 스타일 (위쪽 화살표, 마킹 아래에 모달) */
 .word-quick-menu::before {
   content: '';
   position: absolute;
@@ -4534,11 +4547,23 @@
   height: 12px;
   background: var(--color-base-sub);
   border: 1px solid var(--color-accent);
+  left: 50%;
+}
+
+/* 위쪽 화살표 (모달이 마킹 아래에 위치) */
+.word-quick-menu.arrow-above::before {
   border-right: none;
   border-bottom: none;
   transform: translateX(-50%) rotate(45deg);
-  left: 50%;
   top: -7px;
+}
+
+/* 아래쪽 화살표 (모달이 마킹 위에 위치) */
+.word-quick-menu.arrow-below::before {
+  border-left: none;
+  border-top: none;
+  transform: translateX(-50%) rotate(45deg);
+  bottom: -7px;
 }
 
 /* Grammar mode: wider for sentences */
