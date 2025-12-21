@@ -4566,14 +4566,6 @@
   bottom: -7px;
 }
 
-/* Grammar mode: wider for sentences */
-.word-quick-menu.grammar {
-  width: clamp(280px, 92vw, 420px);
-  min-width: min(280px, 88vw);
-  max-width: min(94vw, 420px);
-  max-height: 75vh;
-  /* transform은 인라인 스타일에서 scale()로 처리 */
-}
 
 @keyframes menuFadeIn {
   from {

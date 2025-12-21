@@ -304,33 +304,37 @@ export default function WordQuickMenu({
 
   if (!isOpen) return null;
 
-  // Clamp position to container bounds (screenshot-main) or viewport
-  // 줌 스케일에 따라 동적으로 메뉴 크기 계산 (줌인하면 모달도 커짐)
+  // 모바일/데스크톱 viewport 크기
   const vw = typeof window !== 'undefined' ? window.innerWidth : 375;
   const vh = typeof window !== 'undefined' ? window.innerHeight : 667;
-  const scaleFactor = Math.max(1, zoomScale * 0.8); // 줌에 따라 크기 증가 (80% 비율)
-  const baseMenuWidth = isGrammarMode
-    ? Math.min(Math.max(280, vw * 0.92), 420)
-    : Math.min(Math.max(200, vw * 0.88), 340);
-  const menuWidth = Math.min(baseMenuWidth * scaleFactor, vw * 0.94);
-  const menuHeight = Math.min(vh * 0.75 * scaleFactor, vh * 0.85);
   const MARGIN = 12; // 최소 여백
+
+  // 기본 메뉴 크기 (줌 전)
+  const baseMenuWidth = isGrammarMode
+    ? Math.min(Math.max(280, vw * 0.85), 380)
+    : Math.min(Math.max(200, vw * 0.8), 320);
+  const baseMenuHeight = vh * 0.6;
+
+  // scale은 사용하지 않고, 크기 자체를 조절 (위치 계산이 정확해짐)
+  // 줌인 시 모달도 약간 커지지만, 화면을 벗어나지 않도록 제한
+  const scaleFactor = Math.min(Math.max(1, zoomScale * 0.7), 1.5); // 1~1.5 범위
+  const menuWidth = Math.min(baseMenuWidth * scaleFactor, vw - MARGIN * 2);
+  const menuHeight = Math.min(baseMenuHeight * scaleFactor, vh * 0.8);
 
   // 컨테이너 bounds 또는 viewport 사용
   const bounds = containerBounds || {
     left: 0,
     top: 0,
-    right: window.innerWidth,
-    bottom: window.innerHeight,
+    right: vw,
+    bottom: vh,
   };
 
   // 위치 계산 - 메뉴를 선택된 텍스트의 가로 중앙에 배치
   const halfWidth = menuWidth / 2;
-  const originalLeft = position.x - halfWidth; // 원래 중앙 정렬 위치
-  let left = originalLeft;
+  let left = position.x - halfWidth;
   let top = position.y;
 
-  // 좌우 경계 체크 (containerBounds 기준)
+  // 좌우 경계 체크
   if (left < bounds.left + MARGIN) {
     left = bounds.left + MARGIN;
   }
@@ -338,7 +342,7 @@ export default function WordQuickMenu({
     left = bounds.right - menuWidth - MARGIN;
   }
 
-  // 상하 경계 체크 (containerBounds 기준)
+  // 상하 경계 체크
   if (top < bounds.top + MARGIN) {
     top = bounds.top + MARGIN;
   }
@@ -347,9 +351,8 @@ export default function WordQuickMenu({
   }
 
   // 화살표 위치 계산 - 모달이 이동해도 마킹 위치를 가리키도록
-  // position.x는 마킹의 중앙 좌표, left는 모달의 왼쪽 좌표
-  const arrowLeftPx = position.x - left; // 모달 내에서 화살표의 x 위치
-  const arrowLeftPercent = Math.min(Math.max((arrowLeftPx / menuWidth) * 100, 10), 90); // 10%~90% 범위
+  const arrowLeftPx = position.x - left;
+  const arrowLeftPercent = Math.min(Math.max((arrowLeftPx / menuWidth) * 100, 12), 88);
 
   const menuStyle = {
     position: 'fixed',
@@ -358,9 +361,7 @@ export default function WordQuickMenu({
     zIndex: 1000,
     width: menuWidth,
     maxHeight: menuHeight,
-    transform: `scale(${scaleFactor})`,
-    transformOrigin: placement === 'above' ? 'bottom center' : 'top center',
-    '--arrow-left': `${arrowLeftPercent}%`, // CSS 변수로 화살표 위치 전달
+    '--arrow-left': `${arrowLeftPercent}%`,
   };
 
   // 화살표 방향에 따른 클래스
