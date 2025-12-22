@@ -21,8 +21,8 @@ export default function Review() {
     try {
       const data = await getTodayReviewItems();
       setItems(data || []);
-    } catch (err) {
-      console.error('Failed to load review items:', err);
+    } catch {
+      // ignore
     } finally {
       setLoading(false);
     }
@@ -45,8 +45,8 @@ export default function Review() {
       } else {
         setCurrentIndex(-1);
       }
-    } catch (err) {
-      console.error('Failed to save evaluation:', err);
+    } catch {
+      // ignore
     }
   }
 

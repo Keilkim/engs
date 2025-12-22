@@ -14,6 +14,7 @@ export default function Register() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
 
   function handleChange(e) {
     const { name, value, type, checked } = e.target;
@@ -53,7 +54,7 @@ export default function Register() {
 
     try {
       await signUp(formData.email, formData.password, formData.nickname);
-      navigate('/');
+      setShowVerificationModal(true);
     } catch (err) {
       if (err.message.includes('already registered')) {
         setError('Email already in use');
@@ -169,6 +170,31 @@ export default function Register() {
           </button>
         </form>
       </div>
+
+      {showVerificationModal && (
+        <div className="modal-overlay">
+          <div className="modal-content verification-modal">
+            <div className="verification-icon">✉️</div>
+            <h2>Email Verification Required</h2>
+            <p>
+              We've sent a verification email to <strong>{formData.email}</strong>.
+            </p>
+            <p>
+              Click the link in the email to complete your registration.
+            </p>
+            <p className="verification-note">
+              If you don't see the email, please check your spam folder.
+            </p>
+            <button
+              type="button"
+              className="register-button"
+              onClick={() => navigate('/login')}
+            >
+              Go to Login
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

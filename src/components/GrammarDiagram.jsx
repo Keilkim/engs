@@ -1,42 +1,6 @@
 import { useState, useEffect } from 'react';
-
-// TTS 함수 - 자연스러운 원어민 영어 발음
-function speakText(text) {
-  if (!text || !window.speechSynthesis) return;
-
-  window.speechSynthesis.cancel();
-
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'en-US';
-  utterance.rate = 0.95; // 문장은 살짝만 느리게
-  utterance.pitch = 1.0;
-  utterance.volume = 1.0;
-
-  // 고품질 영어 음성 선택
-  const voices = window.speechSynthesis.getVoices();
-  const preferredVoices = [
-    'Samantha', 'Karen', 'Daniel', 'Moira',
-    'Google US English', 'Google UK English Female',
-    'Microsoft Zira', 'Microsoft David',
-  ];
-
-  let selectedVoice = null;
-  for (const name of preferredVoices) {
-    selectedVoice = voices.find(v => v.name.includes(name) && v.lang.startsWith('en'));
-    if (selectedVoice) break;
-  }
-
-  if (!selectedVoice) {
-    selectedVoice = voices.find(v => v.lang.startsWith('en-US')) ||
-                    voices.find(v => v.lang.startsWith('en'));
-  }
-
-  if (selectedVoice) {
-    utterance.voice = selectedVoice;
-  }
-
-  window.speechSynthesis.speak(utterance);
-}
+import { useTapToClose } from '../hooks/useTapToClose';
+import { speakText } from '../utils/tts';
 
 export default function GrammarDiagram({
   grammarData,
@@ -81,6 +45,9 @@ export default function GrammarDiagram({
   // 선택된 패턴 인덱스
   const [selectedPatterns, setSelectedPatterns] = useState(new Set());
   const [saving, setSaving] = useState(false);
+
+  // 탭으로 닫기 핸들러
+  const { handleTouchStart, handleTouchEnd, handleClick } = useTapToClose(onClose);
 
   // 모달 열릴 때 자동으로 읽기
   useEffect(() => {
@@ -128,8 +95,8 @@ export default function GrammarDiagram({
         wordPositions: ocrWordPositions?.words || [], // 전체 OCR 결과도 저장
       });
       onClose();
-    } catch (err) {
-      console.error('Failed to save patterns:', err);
+    } catch {
+      // ignore
     } finally {
       setSaving(false);
     }
@@ -143,7 +110,12 @@ export default function GrammarDiagram({
   const modalMaxHeight = Math.min(vh * 0.85 * scaleFactor, vh * 0.9);
 
   return (
-    <div className="grammar-diagram-overlay">
+    <div
+      className="grammar-diagram-overlay"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onClick={handleClick}
+    >
       <div
         className="grammar-diagram-modal"
         style={{ width: modalWidth, maxHeight: modalMaxHeight }}
@@ -186,21 +158,16 @@ export default function GrammarDiagram({
                       onChange={() => togglePattern(idx)}
                       onClick={(e) => e.stopPropagation()}
                     />
+                    <span className="pattern-color-dot" style={{ background: pattern.color }} />
                     <div className="pattern-content">
-                      <div className="pattern-header">
-                        <span
-                          className="pattern-type"
-                          style={{ color: pattern.color }}
-                        >
-                          {pattern.typeKr || pattern.type}
-                        </span>
-                        <span className="pattern-words">
-                          {pattern.words?.join(' ') || ''}
-                        </span>
-                      </div>
-                      <div className="pattern-explanation">
-                        {pattern.explanation}
-                      </div>
+                      <span className="pattern-type" style={{ color: pattern.color }}>
+                        {pattern.typeKr || pattern.type}
+                      </span>
+                      {pattern.explanation && (
+                        <p className="pattern-explanation">
+                          {pattern.explanation}
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))}

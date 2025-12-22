@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { deleteSource } from '../../services/source';
 import { TranslatableText } from '../../components/translatable';
 
-export default function SourceGrid({ sources, loading, onSourceDeleted, onSourceUpdated }) {
+export default function SourceGrid({ sources, loading, columnCount = 2, onSourceDeleted, onSourceUpdated, selectMode = false, selectedIds = [], onSelectToggle }) {
   const navigate = useNavigate();
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -16,9 +16,12 @@ export default function SourceGrid({ sources, loading, onSourceDeleted, onSource
     }
   }
 
+  // 컬럼 수에 따른 버튼 크기 계산
+  const buttonScale = Math.max(0.6, 1 - (columnCount - 2) * 0.1);
+
   if (loading) {
     return (
-      <div className="source-grid">
+      <div className="source-grid" style={{ '--grid-columns': columnCount }}>
         {[...Array(6)].map((_, i) => (
           <div key={i} className="source-card source-card-skeleton">
             <div className="source-thumbnail skeleton-shimmer" />
@@ -39,6 +42,10 @@ export default function SourceGrid({ sources, loading, onSourceDeleted, onSource
 
   function handleSourceClick(source) {
     if (deleteConfirm) return;
+    if (selectMode) {
+      onSelectToggle?.(source.id);
+      return;
+    }
     navigate(`/viewer/${source.id}`);
   }
 
@@ -56,8 +63,8 @@ export default function SourceGrid({ sources, loading, onSourceDeleted, onSource
       if (onSourceDeleted) {
         onSourceDeleted();
       }
-    } catch (err) {
-      console.error('Failed to delete source:', err);
+    } catch {
+      // ignore
     } finally {
       setDeleting(false);
     }
@@ -76,15 +83,16 @@ export default function SourceGrid({ sources, loading, onSourceDeleted, onSource
   }
 
   return (
-    <div className="source-grid">
+    <div className="source-grid" style={{ '--grid-columns': columnCount, '--btn-scale': buttonScale }}>
       {sources.map((source) => {
         const previewImage = getPreviewImage(source);
         const isConfirming = deleteConfirm === source.id;
+        const isSelected = selectedIds.includes(source.id);
 
         return (
           <div
             key={source.id}
-            className={`source-card ${isConfirming ? 'confirming-delete' : ''}`}
+            className={`source-card ${isConfirming ? 'confirming-delete' : ''} ${selectMode ? 'select-mode' : ''} ${isSelected ? 'selected' : ''}`}
             onClick={() => handleSourceClick(source)}
           >
             <div className="source-thumbnail">
@@ -106,27 +114,40 @@ export default function SourceGrid({ sources, loading, onSourceDeleted, onSource
                 {source.type.toUpperCase().charAt(0)}
               </span>
 
-              {/* 즐겨찾기 버튼 (좌상단) */}
-              {!isConfirming && (
+              {/* 선택 모드 체크박스 (가운데) */}
+              {selectMode && (
+                <div className={`source-select-checkbox ${isSelected ? 'checked' : ''}`}>
+                  {isSelected && (
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+                    </svg>
+                  )}
+                </div>
+              )}
+
+              {/* 즐겨찾기 버튼 (좌상단) - 선택 모드가 아닐 때만 */}
+              {!isConfirming && !selectMode && (
                 <button
                   className={`source-pin-btn ${source.pinned ? 'active' : ''}`}
                   onClick={(e) => handlePinToggle(e, source)}
                   title={source.pinned ? 'Remove from favorites' : 'Add to favorites'}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <svg viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
                   </svg>
                 </button>
               )}
 
-              {/* Delete button (우상단) */}
-              <button
-                className="source-delete-btn"
-                onClick={(e) => handleDeleteClick(e, source)}
-                title="Delete"
-              >
-                ×
-              </button>
+              {/* Delete button (우상단) - 선택 모드가 아닐 때만 */}
+              {!selectMode && (
+                <button
+                  className="source-delete-btn"
+                  onClick={(e) => handleDeleteClick(e, source)}
+                  title="Delete"
+                >
+                  ×
+                </button>
+              )}
 
               {/* Delete confirmation overlay */}
               {isConfirming && (

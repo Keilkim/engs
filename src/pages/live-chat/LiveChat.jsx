@@ -72,7 +72,6 @@ export default function LiveChat() {
       stream.getTracks().forEach(track => track.stop());
       return true;
     } catch (err) {
-      console.error('Permission denied:', err);
       if (err.name === 'NotAllowedError') {
         setError('카메라와 마이크 권한을 허용해주세요');
       } else if (err.name === 'NotFoundError') {
@@ -120,8 +119,7 @@ export default function LiveChat() {
             return '';
           });
         },
-        onError: (err) => {
-          console.error('Session error:', err);
+        onError: () => {
           setError('연결 중 오류가 발생했습니다');
         },
       });
@@ -153,8 +151,6 @@ export default function LiveChat() {
       }, 1000);
 
     } catch (err) {
-      console.error('Failed to start call:', err);
-      // Better error messages
       if (err.message?.includes('not found') || err.message?.includes('not supported')) {
         setError('Gemini Live API를 사용할 수 없습니다. API 키를 확인하거나 나중에 다시 시도해주세요.');
       } else {

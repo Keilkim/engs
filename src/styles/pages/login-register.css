@@ -1,0 +1,205 @@
+/*
+ * ===========================================
+ * Login & Register Pages
+ * ===========================================
+ */
+
+.login-screen,
+.register-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  background-color: var(--color-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.login-container,
+.register-container {
+  width: 100%;
+  max-width: 400px;
+  max-height: calc(100dvh - var(--spacing-lg) * 2);
+  background-color: var(--color-base-sub);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-2xl);
+  padding: var(--spacing-xl);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.app-logo {
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.app-logo h1 {
+  font-size: var(--font-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.login-form,
+.register-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.input-group label {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.input-group input {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-base);
+  background-color: var(--color-base-dark);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  color: var(--color-text);
+  transition: all var(--transition-normal);
+}
+
+.input-group input:focus {
+  outline: none;
+  border-color: var(--color-highlight);
+  box-shadow: var(--focus-ring);
+}
+
+.input-group input::placeholder {
+  color: var(--color-text-light);
+}
+
+.auto-login-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: var(--font-sm);
+  margin-top: var(--spacing-xs);
+}
+
+.auto-login-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-highlight);
+  cursor: pointer;
+}
+
+.auto-login-checkbox span {
+  user-select: none;
+}
+
+.login-button,
+.register-button {
+  width: 100%;
+  padding: var(--spacing-md);
+  font-size: var(--font-base);
+  font-weight: var(--font-weight-semibold);
+  background-color: var(--color-highlight);
+  color: var(--color-text);
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  margin-top: var(--spacing-sm);
+}
+
+.login-button:hover,
+.register-button:hover {
+  background-color: var(--color-highlight-light);
+}
+
+.login-button:active,
+.register-button:active {
+  background-color: var(--color-highlight-dark);
+}
+
+.login-button:disabled,
+.register-button:disabled {
+  background-color: var(--color-accent);
+  color: var(--color-text-light);
+  cursor: not-allowed;
+}
+
+.social-login {
+  margin-top: var(--spacing-lg);
+  text-align: center;
+}
+
+.social-login p {
+  font-size: var(--font-sm);
+  color: var(--color-text-sub);
+  margin-bottom: var(--spacing-md);
+}
+
+.social-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.google-button {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  background-color: var(--color-base-sub-light);
+  color: var(--color-text);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.google-button:hover {
+  background-color: var(--color-accent);
+}
+
+.kakao-button {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  background-color: #FEE500;
+  color: #000000;
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.kakao-button:hover {
+  background-color: #E5CF00;
+}
+
+.login-links {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-lg);
+  margin-top: var(--spacing-lg);
+}
+
+.login-links a {
+  font-size: var(--font-sm);
+  color: var(--color-text-sub);
+  transition: color var(--transition-fast);
+}
+
+.login-links a:hover {
+  color: var(--color-highlight);
+}

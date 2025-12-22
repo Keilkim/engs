@@ -1,46 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTapToClose } from '../../hooks/useTapToClose';
+import { speakText } from '../../utils/tts';
+import { cleanDisplayText, isWordOrPhrase } from '../../utils/textUtils';
+import { adjustPositionToViewport, calculateMenuDimensions } from '../../utils/positioning';
 import { analyzeText, analyzeGrammarPatterns } from '../../services/ai';
 import { createAnnotation, createVocabularyItem } from '../../services/annotation';
 import GrammarDiagram from '../GrammarDiagram';
-
-// TTS 함수 - 자연스러운 원어민 영어 발음
-function speakText(text) {
-  if (!text || !window.speechSynthesis) return;
-
-  window.speechSynthesis.cancel();
-
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'en-US';
-  utterance.rate = 1.0; // 자연스러운 속도
-  utterance.pitch = 1.0;
-  utterance.volume = 1.0;
-
-  // 고품질 영어 음성 선택 (우선순위: Premium > Enhanced > 기본)
-  const voices = window.speechSynthesis.getVoices();
-  const preferredVoices = [
-    'Samantha', 'Karen', 'Daniel', 'Moira', // macOS 고품질
-    'Google US English', 'Google UK English Female', // Chrome
-    'Microsoft Zira', 'Microsoft David', // Windows
-  ];
-
-  let selectedVoice = null;
-  for (const name of preferredVoices) {
-    selectedVoice = voices.find(v => v.name.includes(name) && v.lang.startsWith('en'));
-    if (selectedVoice) break;
-  }
-
-  // 폴백: 아무 영어 음성
-  if (!selectedVoice) {
-    selectedVoice = voices.find(v => v.lang.startsWith('en-US')) ||
-                    voices.find(v => v.lang.startsWith('en'));
-  }
-
-  if (selectedVoice) {
-    utterance.voice = selectedVoice;
-  }
-
-  window.speechSynthesis.speak(utterance);
-}
 
 export default function ContextMenu({
   isOpen,
@@ -64,24 +29,11 @@ export default function ContextMenu({
   const [wordSaved, setWordSaved] = useState(false);
   const [savingWord, setSavingWord] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  const [error, setError] = useState('');
   const menuRef = useRef(null);
 
-  // Get text from selectedWords (OCR-based) or fallback to selectedText
-  const hasOcrWords = selectedWords && selectedWords.length > 0;
-  const displayText = hasOcrWords
-    ? selectedWords.map(w => w.text).join(' ')
-    : selectedText;
-
-  // 단어인지 문장인지 판별
-  function isWordOrPhrase(text) {
-    if (!text) return false;
-    const trimmed = text.trim();
-    const wordCount = trimmed.split(/\s+/).length;
-    return wordCount <= 2 && !/[.!?]$/.test(trimmed);
-  }
-
-  // Reset state when selection changes
-  useEffect(() => {
+  // 모달 상태 리셋 함수 (중복 제거)
+  const resetModalState = useCallback(() => {
     setAnalysisResult(null);
     setGrammarData(null);
     setAiPatterns(null);
@@ -91,7 +43,22 @@ export default function ContextMenu({
     setLoading(false);
     setWordSaved(false);
     setSavingWord(false);
-  }, [selectedText, selectionRect, selectedWords]);
+    setError('');
+  }, []);
+
+  // 탭으로 닫기 핸들러
+  const { handleTouchStart, handleTouchEnd, handleClick } = useTapToClose(onClose);
+
+  // Get text from selectedWords (OCR-based) or fallback to selectedText
+  const hasOcrWords = selectedWords && selectedWords.length > 0;
+  const displayText = hasOcrWords
+    ? selectedWords.map(w => w.text).join(' ')
+    : selectedText;
+
+  // Reset state when selection changes
+  useEffect(() => {
+    resetModalState();
+  }, [selectedText, selectionRect, selectedWords, resetModalState]);
 
   // 메뉴 열릴 때 자동 분석 시작
   useEffect(() => {
@@ -105,36 +72,13 @@ export default function ContextMenu({
   useEffect(() => {
     if (!isOpen || !menuRef.current) return;
 
-    const menu = menuRef.current;
-    const rect = menu.getBoundingClientRect();
-    const padding = 16; // 화면 가장자리 여백
+    const adjusted = adjustPositionToViewport({
+      element: menuRef.current,
+      position,
+      padding: 16,
+    });
 
-    let x = position.x;
-    let y = position.y;
-
-    // 오른쪽 경계 체크
-    const rightEdge = x + rect.width / 2;
-    if (rightEdge > window.innerWidth - padding) {
-      x = window.innerWidth - padding - rect.width / 2;
-    }
-
-    // 왼쪽 경계 체크
-    const leftEdge = x - rect.width / 2;
-    if (leftEdge < padding) {
-      x = padding + rect.width / 2;
-    }
-
-    // 아래쪽 경계 체크
-    if (y + rect.height > window.innerHeight - padding) {
-      y = window.innerHeight - padding - rect.height;
-    }
-
-    // 위쪽 경계 체크
-    if (y < padding) {
-      y = padding;
-    }
-
-    setMenuPosition({ x, y });
+    setMenuPosition(adjusted);
   }, [isOpen, position, analysisResult, loading, showMemo]);
 
   // 텍스트가 표시되면 자동으로 읽기
@@ -156,7 +100,6 @@ export default function ContextMenu({
     if (!text || text.startsWith('(') || text.startsWith('[Image Selection')) return;
 
     const isWord = isWordOrPhrase(text);
-    console.log('분석 시작:', text, '단어여부:', isWord);
     setLoading(true);
 
     // 타임아웃 설정 (10초)
@@ -178,17 +121,17 @@ export default function ContextMenu({
         try {
           const patterns = await Promise.race([analyzeGrammarPatterns(text), timeout]);
           setAiPatterns(patterns);
-        } catch (err) {
-          console.error('문법 분석 실패:', err);
+        } catch {
+          setError('문법 분석 실패');
           setAiPatterns({ patterns: [] });
         } finally {
           setGrammarLoading(false);
         }
         return; // 문장은 여기서 종료
       }
-    } catch (err) {
-      console.error('분석 실패:', err);
-      setAnalysisResult({ type: 'word', content: '분석 실패 (다시 시도해주세요)' });
+    } catch {
+      setError('분석 실패. 다시 시도해주세요.');
+      setAnalysisResult({ type: 'word', content: '' });
     } finally {
       setLoading(false);
     }
@@ -208,8 +151,8 @@ export default function ContextMenu({
       setWordSaved(true);
       onAnnotationCreated?.();
       handleClose(); // 저장 후 메뉴 닫기
-    } catch (err) {
-      console.error('단어 저장 실패:', err);
+    } catch {
+      setError('단어 저장 실패');
     } finally {
       setSavingWord(false);
     }
@@ -227,32 +170,29 @@ export default function ContextMenu({
       });
       onAnnotationCreated?.();
       handleClose();
-    } catch (err) {
-      console.error('메모 저장 실패:', err);
+    } catch {
+      setError('메모 저장 실패');
     }
   }
 
   function handleClose() {
-    setAnalysisResult(null);
-    setGrammarData(null);
-    setAiPatterns(null);
-    setGrammarLoading(false);
-    setShowMemo(false);
-    setMemoText('');
-    setWordSaved(false);
-    setSavingWord(false);
+    resetModalState();
     onClose();
   }
 
   // 줌 스케일에 따라 동적으로 메뉴 크기 계산
-  const vw = typeof window !== 'undefined' ? window.innerWidth : 375;
-  const vh = typeof window !== 'undefined' ? window.innerHeight : 667;
-  const scaleFactor = Math.max(1, zoomScale * 0.8);
-  const menuWidth = Math.min(Math.max(220, vw * 0.88) * scaleFactor, vw * 0.94);
-  const menuMaxHeight = Math.min(vh * 0.7 * scaleFactor, vh * 0.85);
+  const { width: menuWidth, maxHeight: menuMaxHeight } = calculateMenuDimensions({
+    baseWidth: Math.max(220, (typeof window !== 'undefined' ? window.innerWidth : 375) * 0.88),
+    zoomScale,
+  });
 
   return (
-    <div className="context-menu-overlay">
+    <div
+      className="context-menu-overlay"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onClick={handleClick}
+    >
       <div
         ref={menuRef}
         className="context-menu"
@@ -264,6 +204,7 @@ export default function ContextMenu({
         }}
         onClick={(e) => e.stopPropagation()}
       >
+        {error && <div className="modal-error">{error}</div>}
         {showMemo ? (
           <div className="memo-input">
             <textarea
@@ -286,7 +227,7 @@ export default function ContextMenu({
         ) : analysisResult ? (
           <div className="analysis-result">
             <div className="result-header">
-              <span className="selected-word">{displayText}</span>
+              <span className="selected-word">{cleanDisplayText(displayText)}</span>
               <button
                 className="speak-btn"
                 onClick={() => speakText(displayText)}

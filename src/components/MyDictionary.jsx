@@ -30,8 +30,8 @@ export default function MyDictionary({ onSelectForChat }) {
       ]);
       setVocabulary(vocabData);
       setGrammarPatterns(grammarData);
-    } catch (err) {
-      console.error('Failed to load dictionary:', err);
+    } catch {
+      // ignore
     } finally {
       setLoading(false);
     }
@@ -60,8 +60,8 @@ export default function MyDictionary({ onSelectForChat }) {
         newSet.delete(id);
         return newSet;
       });
-    } catch (err) {
-      console.error('Failed to delete:', err);
+    } catch {
+      // ignore
     }
   }
 
@@ -74,8 +74,8 @@ export default function MyDictionary({ onSelectForChat }) {
       setNewWord('');
       setNewDefinition('');
       await loadData();
-    } catch (err) {
-      console.error('Failed to add word:', err);
+    } catch {
+      // ignore
     } finally {
       setAdding(false);
     }

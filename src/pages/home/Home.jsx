@@ -20,6 +20,23 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pinned'
+  const [columnCount, setColumnCount] = useState(() => {
+    const saved = localStorage.getItem('grid_column_count');
+    return saved ? Math.min(6, Math.max(2, parseInt(saved, 10))) : 2;
+  });
+
+  // 채팅 선택 모드
+  const [chatSelectMode, setChatSelectMode] = useState(false);
+  const [selectedSourceIds, setSelectedSourceIds] = useState([]);
+
+  // 컬럼 수 변경 핸들러
+  function handleColumnChange(delta) {
+    setColumnCount(prev => {
+      const next = Math.min(6, Math.max(2, prev + delta));
+      localStorage.setItem('grid_column_count', next);
+      return next;
+    });
+  }
 
   // 필터링된 소스 계산
   const filteredSources = useMemo(() => {
@@ -58,7 +75,6 @@ export default function Home() {
           ? { ...source, ...Object.fromEntries(Object.keys(updates).map(k => [k, !updates[k]])) }
           : source
       ));
-      console.error('Failed to update source:', err);
     }
   }
 
@@ -85,8 +101,8 @@ export default function Home() {
       ]);
       setSources(sourcesData || []);
       setReviewCount(count || 0);
-    } catch (err) {
-      console.error('Failed to load data:', err);
+    } catch {
+      // ignore
     } finally {
       setLoading(false);
     }
@@ -94,6 +110,44 @@ export default function Home() {
 
   function handleAddSuccess() {
     loadData();
+  }
+
+  // 채팅 버튼 클릭 핸들러
+  function handleChatClick() {
+    if (!chatSelectMode) {
+      // 선택 모드 시작
+      setChatSelectMode(true);
+      setSelectedSourceIds([]);
+    } else if (selectedSourceIds.length > 0) {
+      // 선택된 소스로 채팅 시작
+      const selectedSources = sources.filter(s => selectedSourceIds.includes(s.id));
+      const titles = selectedSources.map(s => s.title).join(', ');
+      navigate('/chat', {
+        state: {
+          sourceId: selectedSourceIds[0],
+          sourceTitle: titles,
+          topicRestricted: true,
+          selectedSourceIds,
+        },
+      });
+      setChatSelectMode(false);
+      setSelectedSourceIds([]);
+    }
+  }
+
+  // 채팅 선택 모드 취소
+  function handleCancelChatSelect() {
+    setChatSelectMode(false);
+    setSelectedSourceIds([]);
+  }
+
+  // 소스 선택 토글
+  function handleSourceSelect(sourceId) {
+    setSelectedSourceIds(prev =>
+      prev.includes(sourceId)
+        ? prev.filter(id => id !== sourceId)
+        : [...prev, sourceId]
+    );
   }
 
   return (
@@ -110,11 +164,20 @@ export default function Home() {
               <path d="m21 21-4.35-4.35"/>
             </svg>
           </button>
+          {chatSelectMode && (
+            <button
+              className="mypage-button"
+              onClick={handleCancelChatSelect}
+            >
+              Cancel
+            </button>
+          )}
           <button
-            className="mypage-button"
-            onClick={() => navigate('/chat')}
+            className={`mypage-button ${chatSelectMode ? 'chat-active' : ''}`}
+            onClick={handleChatClick}
+            disabled={chatSelectMode && selectedSourceIds.length === 0}
           >
-            Chat
+            Chat{chatSelectMode && selectedSourceIds.length > 0 ? ` (${selectedSourceIds.length})` : ''}
           </button>
           <button
             className="mypage-button"
@@ -167,6 +230,25 @@ export default function Home() {
             >
               Favorites
             </button>
+
+            {/* 컬럼 조절 */}
+            <div className="column-control">
+              <button
+                className="column-btn"
+                onClick={() => handleColumnChange(-1)}
+                disabled={columnCount <= 2}
+              >
+                −
+              </button>
+              <span className="column-count">{columnCount}</span>
+              <button
+                className="column-btn"
+                onClick={() => handleColumnChange(1)}
+                disabled={columnCount >= 6}
+              >
+                +
+              </button>
+            </div>
           </div>
 
           <div className="section-header">
@@ -176,8 +258,12 @@ export default function Home() {
           <SourceGrid
             sources={filteredSources}
             loading={loading}
+            columnCount={columnCount}
             onSourceDeleted={loadData}
             onSourceUpdated={handleSourceUpdated}
+            selectMode={chatSelectMode}
+            selectedIds={selectedSourceIds}
+            onSelectToggle={handleSourceSelect}
           />
         </section>
       </main>

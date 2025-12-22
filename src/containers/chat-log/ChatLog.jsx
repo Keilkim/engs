@@ -16,8 +16,8 @@ export default function ChatLog({ messages, onScrapToggle, streamingText = '' })
         await scrapMessage(message.id);
       }
       onScrapToggle?.();
-    } catch (err) {
-      console.error('스크랩 토글 실패:', err);
+    } catch {
+      // ignore
     }
   }
 

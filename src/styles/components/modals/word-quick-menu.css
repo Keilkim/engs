@@ -1,0 +1,202 @@
+/*
+ * ===========================================
+ * Word Quick Menu Styles
+ * ===========================================
+ */
+
+.word-menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 999;
+  pointer-events: auto;
+}
+
+.word-quick-menu {
+  background-color: var(--color-base-sub);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-md);
+  width: clamp(200px, 88vw, 340px);
+  min-width: min(200px, 85vw);
+  max-width: min(94vw, 340px);
+  max-height: 70vh;
+  overflow: visible;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+
+/* Arrow - base style */
+.word-quick-menu::before {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--color-base-sub);
+  border: 1px solid var(--color-accent);
+  left: var(--arrow-left, 50%);
+}
+
+/* Arrow above (modal below marking) */
+.word-quick-menu.arrow-above::before {
+  border-right: none;
+  border-bottom: none;
+  transform: translateX(-50%) rotate(45deg);
+  top: -7px;
+}
+
+/* Arrow below (modal above marking) */
+.word-quick-menu.arrow-below::before {
+  border-left: none;
+  border-top: none;
+  transform: translateX(-50%) rotate(45deg);
+  bottom: -7px;
+}
+
+
+@keyframes menuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.word-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.word-text {
+  font-size: var(--font-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-highlight);
+}
+
+.sentence-text {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  line-height: 1.4;
+}
+
+.listen-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-base-dark);
+  border: 1px solid var(--color-accent);
+  color: var(--color-text);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.listen-btn:hover {
+  background-color: var(--color-highlight);
+  border-color: var(--color-highlight);
+}
+
+.listen-btn.speaking {
+  background-color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.word-definition {
+  font-size: var(--font-sm);
+  color: var(--color-text-light);
+  line-height: 1.5;
+  margin-bottom: var(--spacing-md);
+  white-space: pre-wrap;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.word-menu-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+}
+
+.word-menu-actions button {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.word-menu-actions .save-btn {
+  background-color: var(--color-highlight);
+  border: none;
+  color: var(--color-text);
+}
+
+.word-menu-actions .save-btn:hover {
+  background-color: var(--color-highlight-light);
+}
+
+.word-menu-actions .close-btn {
+  background-color: transparent;
+  border: 1px solid var(--color-accent);
+  color: var(--color-text-light);
+}
+
+.word-menu-actions .close-btn:hover {
+  background-color: var(--color-base-sub-light);
+}
+
+.word-menu-actions .delete-btn {
+  background-color: var(--color-error);
+  border: none;
+  color: var(--color-text);
+}
+
+.grammar-patterns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.pattern-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.pattern-checkbox:hover {
+  background-color: var(--color-base-dark);
+}
+
+.pattern-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-highlight);
+}
+
+.pattern-color {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.pattern-name {
+  font-size: var(--font-sm);
+  color: var(--color-text);
+}

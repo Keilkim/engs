@@ -29,8 +29,8 @@ export default function Mypage() {
     try {
       await signOut();
       navigate('/login');
-    } catch (err) {
-      console.error('Sign out failed:', err);
+    } catch {
+      // ignore
     } finally {
       setLoggingOut(false);
     }

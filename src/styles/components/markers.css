@@ -1,0 +1,173 @@
+/*
+ * ===========================================
+ * Marker & Highlighter Styles
+ * ===========================================
+ */
+
+/* Highlighter SVG overlay */
+.highlighter-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.highlighter-svg path,
+.highlighter-svg rect {
+  pointer-events: stroke;
+}
+
+/* Highlighter stroke styles */
+.highlighter-stroke {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.highlighter-stroke.drawing {
+  stroke: rgba(255, 214, 10, 0.6);
+  stroke-width: 12;
+}
+
+.highlighter-stroke.active {
+  stroke: rgba(255, 214, 10, 0.7);
+  stroke-width: 12;
+}
+
+.highlighter-stroke.saved {
+  stroke: rgba(255, 214, 10, 0.5);
+  stroke-width: 10;
+  cursor: pointer;
+  pointer-events: stroke;
+  transition: stroke var(--transition-fast), stroke-width var(--transition-fast);
+}
+
+.highlighter-stroke.saved:hover {
+  stroke: rgba(255, 214, 10, 0.8);
+  stroke-width: 14;
+}
+
+/* Word highlight styles (OCR-based real-time selection) */
+.word-highlight {
+  fill: rgba(100, 200, 255, 0.4);
+  stroke: rgba(100, 200, 255, 0.8);
+  stroke-width: 0.3;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+  animation: wordHighlightPulse 0.3s ease-out;
+}
+
+@keyframes wordHighlightPulse {
+  0% {
+    fill: rgba(100, 200, 255, 0.6);
+  }
+  100% {
+    fill: rgba(100, 200, 255, 0.4);
+  }
+}
+
+/* Rectangle highlight styles */
+.highlighter-rect.active {
+  fill: rgba(255, 214, 10, 0.3);
+  stroke: rgba(255, 214, 10, 0.8);
+  stroke-width: 2;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.highlighter-rect.saved {
+  fill: rgba(255, 214, 10, 0.2);
+  stroke: rgba(255, 214, 10, 0.6);
+  stroke-width: 2;
+  cursor: pointer;
+  pointer-events: fill;
+  transition: fill var(--transition-fast), stroke var(--transition-fast);
+  vector-effect: non-scaling-stroke;
+}
+
+.highlighter-rect.saved:hover {
+  fill: rgba(255, 214, 10, 0.4);
+  stroke: rgba(255, 214, 10, 0.9);
+}
+
+/* Vocabulary marker - shadow + rounded (transparent fill) */
+.highlighter-stroke.vocab,
+.highlighter-rect.vocab {
+  fill: transparent;
+  stroke: none;
+  filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.6)) drop-shadow(0 0 8px rgba(59, 130, 246, 0.3));
+}
+
+.vocab-marker-bg {
+  fill: #2a6fd736;
+  stroke: none;
+  cursor: pointer;
+}
+
+/* Highlighted vocab marker - blink animation (5s) */
+.vocab-marker-bg.highlighted {
+  fill: rgba(59, 130, 246, 0.6);
+  animation: vocabHighlightBlink 0.5s ease-in-out 10;
+}
+
+@keyframes vocabHighlightBlink {
+  0%, 100% {
+    fill: rgba(59, 130, 246, 0.6);
+  }
+  50% {
+    fill: rgba(59, 130, 246, 0.15);
+  }
+}
+
+/* Vocabulary underline marker (alternative clean style) */
+.vocab-underline {
+  stroke: rgba(59, 130, 246, 0.9);
+  stroke-width: 3;
+  stroke-linecap: round;
+  cursor: pointer;
+  pointer-events: stroke;
+  transition: stroke var(--transition-fast), stroke-width var(--transition-fast);
+}
+
+.vocab-underline:hover {
+  stroke: rgba(59, 130, 246, 1);
+  stroke-width: 4;
+}
+
+/* Active selection highlight - pulse animation */
+.selection-highlight {
+  fill: rgba(59, 130, 246, 0.35);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  animation: svgSelectionPulse 1s ease-in-out infinite;
+}
+
+@keyframes svgSelectionPulse {
+  0%, 100% {
+    opacity: 1;
+    fill: rgba(59, 130, 246, 0.35);
+  }
+  50% {
+    opacity: 0.4;
+    fill: rgba(59, 130, 246, 0.2);
+  }
+}
+
+/* Grammar marker - dotted underline */
+.grammar-underline {
+  stroke: rgba(59, 130, 246, 0.5);
+  stroke-width: 0.5px;
+  stroke-dasharray: 1 1;
+  fill: none;
+  pointer-events: stroke;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Long-press area */
+.grammar-pattern-group {
+  pointer-events: bounding-box;
+}

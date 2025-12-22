@@ -95,7 +95,6 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
 
       try {
         const result = await extractTextWithWordPositions(pages[i]);
-        console.log(`[Upload-OCR] Page ${i + 1} result:`, result?.words?.length || 0, 'words');
         if (result && result.words) {
           ocrData.pages.push({
             pageIndex: i,
@@ -109,18 +108,14 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
               },
             })),
           });
-          console.log(`[Upload-OCR] Page ${i + 1} saved:`, ocrData.pages[i].words.length, 'words');
         } else {
-          console.log(`[Upload-OCR] Page ${i + 1} no result, saving empty`);
           ocrData.pages.push({ pageIndex: i, words: [] });
         }
-      } catch (err) {
-        console.error(`Page ${i + 1} OCR failed:`, err);
+      } catch {
         ocrData.pages.push({ pageIndex: i, words: [] });
       }
     }
 
-    console.log('[Upload-OCR] Final ocrData:', ocrData.pages.map(p => ({ page: p.pageIndex, words: p.words.length })));
     return ocrData;
   }
 
@@ -216,8 +211,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
 
       onSuccess();
       handleClose();
-    } catch (err) {
-      console.error(err);
+    } catch {
       setError('Failed to upload file');
     } finally {
       setLoading(false);
@@ -263,8 +257,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
 
       onSuccess();
       handleClose();
-    } catch (err) {
-      console.error(err);
+    } catch {
       setError('Failed to capture screenshot');
     } finally {
       setLoading(false);

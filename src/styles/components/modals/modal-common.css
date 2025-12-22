@@ -1,0 +1,32 @@
+/*
+ * ===========================================
+ * Modal Common Styles
+ * ===========================================
+ */
+
+/* 에러 메시지 */
+.modal-error {
+  background-color: rgba(255, 69, 58, 0.15);
+  border: 1px solid rgba(255, 69, 58, 0.3);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+  color: var(--color-error);
+  font-size: var(--font-sm);
+}
+
+/* 로딩 상태 */
+.modal-loading {
+  padding: var(--spacing-md);
+  text-align: center;
+  color: var(--color-text-sub);
+  font-size: var(--font-sm);
+}
+
+/* 에러 상태 (전체 영역) */
+.modal-error-state {
+  padding: var(--spacing-md);
+  text-align: center;
+  color: var(--color-error);
+  font-size: var(--font-sm);
+}

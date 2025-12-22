@@ -112,6 +112,14 @@
   --focus-ring: 0 0 0 3px rgba(10, 132, 255, 0.4);
 
 
+  /* ========== Overlays ========== */
+
+  --overlay-light: rgba(0, 0, 0, 0.6);
+  --overlay-medium: rgba(0, 0, 0, 0.7);
+  --overlay-dark: rgba(0, 0, 0, 0.85);
+  --overlay-darker: rgba(0, 0, 0, 0.9);
+
+
   /* ========== Glassmorphism ========== */
 
   --glass-bg: rgba(255, 255, 255, 0.05);

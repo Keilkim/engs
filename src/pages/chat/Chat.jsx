@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { chatStream } from '../../services/ai';
+import { chatStream, extractOcrText } from '../../services/ai';
 import { saveChatMessage, getChatLogs, clearChatLogs } from '../../services/chat';
 import { getSource } from '../../services/source';
 import ChatLog from '../../containers/chat-log/ChatLog';
@@ -16,10 +16,11 @@ export default function Chat() {
   const [sourceContext, setSourceContext] = useState(null);
   const [vocabContext, setVocabContext] = useState(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const abortControllerRef = useRef(null);
 
   const initialMessage = location.state?.initialMessage;
   const sourceId = location.state?.sourceId;
+  const sourceTitle = location.state?.sourceTitle;
+  const topicRestricted = location.state?.topicRestricted ?? false;
   const vocabItems = location.state?.vocabContext;
   const contextType = location.state?.contextType;
 
@@ -73,17 +74,19 @@ export default function Chat() {
     try {
       const logs = await getChatLogs(sourceId);
       setMessages(logs || []);
-    } catch (err) {
-      console.error('Failed to load chat history:', err);
+    } catch {
+      // ignore
     }
   }
 
   async function loadSourceContext() {
     try {
       const source = await getSource(sourceId);
-      setSourceContext(source?.content || '');
-    } catch (err) {
-      console.error('Failed to load source context:', err);
+      // OCR 데이터 포함하여 텍스트 추출 (소스명, 페이지 정보 포함)
+      const contextText = extractOcrText(source);
+      setSourceContext(contextText);
+    } catch {
+      // ignore
     }
   }
 
@@ -110,7 +113,17 @@ export default function Chat() {
         )
       );
 
-      const combinedContext = [sourceContext, vocabContext].filter(Boolean).join('\n\n');
+      // 주제 제한 모드일 때 컨텍스트에 제한 지시 추가
+      let combinedContext = [sourceContext, vocabContext].filter(Boolean).join('\n\n');
+
+      if (topicRestricted && sourceTitle) {
+        const topicInstruction = `[IMPORTANT TOPIC RESTRICTION]
+You must ONLY discuss topics related to the learning material: "${sourceTitle}".
+If the user asks about unrelated topics, politely guide them back to the learning material.
+Say something like: "That's interesting, but let's focus on the learning material we're studying. Is there anything about '${sourceTitle}' you'd like to discuss?"
+Do NOT answer questions that are completely unrelated to the material.`;
+        combinedContext = topicInstruction + (combinedContext ? '\n\n' + combinedContext : '');
+      }
 
       // 대화 히스토리를 포함하여 스트리밍 요청
       const currentMessages = [...messages, savedUserMsg];
@@ -121,14 +134,14 @@ export default function Chat() {
         (chunk, fullText) => {
           // 실시간으로 타이핑 효과 표시
           setStreamingText(fullText);
-        }
+        },
+        topicRestricted
       );
 
       setStreamingText('');
       const savedAiMsg = await saveChatMessage(aiResponse, 'assistant', sourceId);
       setMessages((prev) => [...prev, savedAiMsg]);
-    } catch (err) {
-      console.error('Failed to send message:', err);
+    } catch {
       setStreamingText('');
       setMessages((prev) => [
         ...prev,
@@ -148,8 +161,8 @@ export default function Chat() {
       await clearChatLogs(sourceId);
       setMessages([]);
       setShowClearConfirm(false);
-    } catch (err) {
-      console.error('Failed to clear chat:', err);
+    } catch {
+      // ignore
     }
   }
 
@@ -166,7 +179,13 @@ export default function Chat() {
         <button className="back-button" onClick={() => navigate('/')}>
           <TranslatableText textKey="nav.back">Back</TranslatableText>
         </button>
-        <h1><TranslatableText textKey="chat.aiChat">AI Chat</TranslatableText></h1>
+        <h1>
+          {topicRestricted && sourceTitle ? (
+            <span className="chat-topic-title">{sourceTitle}</span>
+          ) : (
+            <TranslatableText textKey="chat.aiChat">AI Chat</TranslatableText>
+          )}
+        </h1>
         <div className="chat-header-actions">
           {sourceContext && (
             <span className="context-badge" title="Learning source connected">

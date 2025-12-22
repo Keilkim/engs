@@ -19,8 +19,8 @@ export default function StatsDashboard() {
       ]);
       setStats(statsData);
       setWeeklyStats(weeklyData);
-    } catch (err) {
-      console.error('통계 로드 실패:', err);
+    } catch {
+      // ignore
     } finally {
       setLoading(false);
     }

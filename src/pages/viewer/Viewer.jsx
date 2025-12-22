@@ -8,6 +8,8 @@ import WordQuickMenu from '../../components/modals/WordQuickMenu';
 import GrammarTooltip from '../../components/GrammarTooltip';
 import { TranslatableText } from '../../components/translatable';
 import { PenModeToggle, ColorPalette, PenCanvas, usePenStrokes } from '../../components/pen-mode';
+import { useOcrWords, useSentenceFinder, useMinimap, useAnnotationHelpers } from './hooks';
+import { GrammarPatternRenderer } from './components';
 
 export default function Viewer() {
   const { id } = useParams();
@@ -30,8 +32,18 @@ export default function Viewer() {
   const pinchStartRef = useRef(null); // For pinch zoom tracking
   const mobileNavRef = useRef(null); // For auto-scrolling mobile nav
   const scrollContainerRef = useRef(null); // For scroll tracking
-  const minimapRef = useRef(null); // For minimap viewport indicator
-  const minimapDragging = useRef(false); // For minimap drag
+
+  // Minimap navigation (from custom hook)
+  const {
+    viewportPosition,
+    minimapRef,
+    handleMinimapMouseDown,
+    handleMinimapMouseMove,
+    handleMinimapMouseUp,
+    handleMinimapTouchStart,
+    handleMinimapTouchMove,
+    handleMinimapTouchEnd,
+  } = useMinimap(scrollContainerRef);
 
   // Panning state (for zoomed view navigation)
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
@@ -44,9 +56,6 @@ export default function Viewer() {
 
   // Mouse click tracking for desktop tap detection
   const mouseClickStart = useRef(null); // { x, y, time }
-
-  // Scroll tracking for minimap viewport indicator
-  const [viewportPosition, setViewportPosition] = useState({ top: 0, height: 100 });
 
   // Pen mode state
   const [penModeActive, setPenModeActive] = useState(false);
@@ -90,52 +99,23 @@ export default function Viewer() {
   // 단어 삭제 상태
   const [deletingVocab, setDeletingVocab] = useState(false);
 
-  // OCR word data from source (pre-computed on upload)
-  const [ocrWords, setOcrWords] = useState([]); // Current page's words with bbox
+  // OCR word data (from custom hook)
+  const { ocrWords, findWordAtPoint } = useOcrWords(source, currentPage);
+  const { findSentenceFromWord } = useSentenceFinder(ocrWords);
+
+  // Annotation helpers (from custom hook)
+  const {
+    isVocabularyAnnotation,
+    isGrammarAnnotation,
+    getVocabularyAnnotations,
+    getGrammarAnnotations,
+    findAnnotationAtPoint,
+  } = useAnnotationHelpers(annotations, currentPage);
+
   const [selectedWords, setSelectedWords] = useState([]); // Words selected by brush
   const wordTapTimer = useRef(null); // For long-press detection
   const wordTapStart = useRef(null); // { x, y, time, word, bbox }
   const menuJustOpened = useRef(false); // Prevent menu from closing immediately
-
-  // Check if annotation is a vocabulary item
-  function isVocabularyAnnotation(annotation) {
-    if (!annotation.ai_analysis_json) return false;
-    try {
-      const data = JSON.parse(annotation.ai_analysis_json);
-      return data.isVocabulary === true;
-    } catch {
-      return false;
-    }
-  }
-
-  // Check if annotation is a grammar pattern
-  function isGrammarAnnotation(annotation) {
-    if (!annotation.ai_analysis_json) return false;
-    try {
-      const data = JSON.parse(annotation.ai_analysis_json);
-      return data.type === 'grammar';
-    } catch {
-      return false;
-    }
-  }
-
-  // Get vocabulary annotations for image (with selection_rect)
-  function getVocabularyAnnotations(pageNum = null) {
-    return annotations.filter(a => {
-      if (!a.selection_rect || !isVocabularyAnnotation(a)) return false;
-      if (pageNum !== null) {
-        try {
-          const rect = JSON.parse(a.selection_rect);
-          return rect.page === pageNum;
-        } catch {
-          return false;
-        }
-      }
-      return true;
-    });
-  }
-
-  // 단어 마킹 터치 핸들러는 이미지 레벨에서 통합 처리 - 제거됨
 
   // Delete vocabulary annotation
   async function handleDeleteVocabAnnotation() {
@@ -161,34 +141,6 @@ export default function Viewer() {
     }
     loadData();
   }, [id]);
-
-  // Load OCR words for current page from source.ocr_data
-  useEffect(() => {
-    if (!source?.ocr_data) {
-      setOcrWords([]);
-      return;
-    }
-
-    try {
-      const ocrData = typeof source.ocr_data === 'string'
-        ? JSON.parse(source.ocr_data)
-        : source.ocr_data;
-
-      const pageData = ocrData.pages?.find(p => p.pageIndex === currentPage);
-      setOcrWords(pageData?.words || []);
-      console.log(`[OCR] Page ${currentPage} loaded:`, pageData?.words?.length || 0, 'words');
-      // 첫 5개 단어의 좌표 출력
-      if (pageData?.words?.length > 0) {
-        console.log('[OCR] Sample words:', pageData.words.slice(0, 5).map(w => ({
-          text: w.text,
-          bbox: `x:${w.bbox.x.toFixed(1)}% y:${w.bbox.y.toFixed(1)}% w:${w.bbox.width.toFixed(1)}% h:${w.bbox.height.toFixed(1)}%`
-        })));
-      }
-    } catch (err) {
-      console.error('Failed to parse OCR data:', err);
-      setOcrWords([]);
-    }
-  }, [source, currentPage]);
 
   // Escape special regex characters
   function escapeRegex(string) {
@@ -407,389 +359,6 @@ export default function Viewer() {
     const dy = touches[0].clientY - touches[1].clientY;
     return Math.sqrt(dx * dx + dy * dy);
   }, []);
-
-  // Find the full sentence containing a word from OCR data
-  // Uses target word's neighbor gaps to determine column/row boundaries
-  const findSentenceFromWord = useCallback((targetWord) => {
-    if (!ocrWords || ocrWords.length === 0 || !targetWord) return null;
-
-    const targetY = targetWord.bbox.y;
-    const targetHeight = targetWord.bbox.height;
-    const targetX = targetWord.bbox.x;
-    const targetRight = targetX + targetWord.bbox.width;
-    const targetBottom = targetY + targetHeight;
-
-    // === 1단계: 타겟 단어 기준 좌/우/위/아래 최소 간격 계산 ===
-    let minLeftGap = Infinity;
-    let minRightGap = Infinity;
-    let minTopGap = Infinity;
-    let minBottomGap = Infinity;
-
-    for (const w of ocrWords) {
-      if (w === targetWord) continue;
-      const wRight = w.bbox.x + w.bbox.width;
-      const wBottom = w.bbox.y + w.bbox.height;
-
-      // 같은 줄에 있는 단어 (Y 겹침)
-      const yOverlap = Math.min(targetBottom, wBottom) - Math.max(targetY, w.bbox.y);
-      if (yOverlap > targetHeight * 0.3) {
-        if (wRight <= targetX) {
-          // 왼쪽 단어
-          const gap = targetX - wRight;
-          if (gap < minLeftGap) minLeftGap = gap;
-        } else if (w.bbox.x >= targetRight) {
-          // 오른쪽 단어
-          const gap = w.bbox.x - targetRight;
-          if (gap < minRightGap) minRightGap = gap;
-        }
-      }
-
-      // 같은 컬럼에 있는 단어 (X 겹침)
-      const xOverlap = Math.min(targetRight, wRight) - Math.max(targetX, w.bbox.x);
-      if (xOverlap > targetWord.bbox.width * 0.3) {
-        if (wBottom <= targetY) {
-          // 위쪽 단어
-          const gap = targetY - wBottom;
-          if (gap < minTopGap) minTopGap = gap;
-        } else if (w.bbox.y >= targetBottom) {
-          // 아래쪽 단어
-          const gap = w.bbox.y - targetBottom;
-          if (gap < minBottomGap) minBottomGap = gap;
-        }
-      }
-    }
-
-    // threshold 계산: 최소 간격의 1.5배 (기본값 설정)
-    const horizontalGap = Math.min(minLeftGap, minRightGap);
-    const verticalGap = Math.min(minTopGap, minBottomGap);
-    const H_THRESHOLD = horizontalGap === Infinity ? 5 : horizontalGap * 1.5;
-    const V_THRESHOLD = verticalGap === Infinity ? targetHeight * 1.5 : verticalGap * 1.5;
-
-    console.log(`[Sentence] Target: "${targetWord.text}", gaps: L=${minLeftGap.toFixed(2)}, R=${minRightGap.toFixed(2)}, T=${minTopGap.toFixed(2)}, B=${minBottomGap.toFixed(2)}`);
-    console.log(`[Sentence] Thresholds: H=${H_THRESHOLD.toFixed(2)}, V=${V_THRESHOLD.toFixed(2)}`);
-
-    // === 2단계: threshold 기반으로 같은 블록의 단어만 필터링 ===
-    // 타겟에서 시작해서 연결된 단어들을 flood-fill 방식으로 찾기
-    const blockWords = new Set([targetWord]);
-    const queue = [targetWord];
-
-    while (queue.length > 0) {
-      const current = queue.shift();
-      const curX = current.bbox.x;
-      const curRight = curX + current.bbox.width;
-      const curY = current.bbox.y;
-      const curBottom = curY + current.bbox.height;
-
-      for (const w of ocrWords) {
-        if (blockWords.has(w)) continue;
-
-        const wRight = w.bbox.x + w.bbox.width;
-        const wBottom = w.bbox.y + w.bbox.height;
-
-        // 같은 줄 체크 (Y 겹침)
-        const yOverlap = Math.min(curBottom, wBottom) - Math.max(curY, w.bbox.y);
-        if (yOverlap > current.bbox.height * 0.3) {
-          // 수평 간격 체크
-          let hGap = Infinity;
-          if (wRight <= curX) hGap = curX - wRight;
-          else if (w.bbox.x >= curRight) hGap = w.bbox.x - curRight;
-          else hGap = 0; // 겹침
-
-          if (hGap <= H_THRESHOLD) {
-            blockWords.add(w);
-            queue.push(w);
-            continue;
-          }
-        }
-
-        // 같은 컬럼 체크 (X 겹침)
-        const xOverlap = Math.min(curRight, wRight) - Math.max(curX, w.bbox.x);
-        if (xOverlap > current.bbox.width * 0.3) {
-          // 수직 간격 체크
-          let vGap = Infinity;
-          if (wBottom <= curY) vGap = curY - wBottom;
-          else if (w.bbox.y >= curBottom) vGap = w.bbox.y - curBottom;
-          else vGap = 0; // 겹침
-
-          if (vGap <= V_THRESHOLD) {
-            blockWords.add(w);
-            queue.push(w);
-          }
-        }
-      }
-    }
-
-    // === 3단계: 블록 단어들을 줄로 그룹화 ===
-    console.log(`[Sentence] Block words found: ${blockWords.size}`);
-    const blockWordsArray = Array.from(blockWords);
-    const lineGroups = [];
-    const sortedWords = [...blockWordsArray].sort((a, b) => {
-      const yDiff = a.bbox.y - b.bbox.y;
-      const avgHeight = (a.bbox.height + b.bbox.height) / 2;
-      if (Math.abs(yDiff) > avgHeight * 0.5) return yDiff;
-      return a.bbox.x - b.bbox.x;
-    });
-
-    let currentLine = [];
-    let lastY = null;
-    let lastHeight = null;
-
-    for (const word of sortedWords) {
-      const lineGap = lastY !== null ? Math.abs(word.bbox.y - lastY) : 0;
-      const avgHeight = lastHeight !== null ? (word.bbox.height + lastHeight) / 2 : word.bbox.height;
-
-      if (lastY === null || lineGap <= avgHeight * 0.5) {
-        currentLine.push(word);
-      } else {
-        if (currentLine.length > 0) lineGroups.push(currentLine);
-        currentLine = [word];
-      }
-      lastY = word.bbox.y;
-      lastHeight = word.bbox.height;
-    }
-    if (currentLine.length > 0) lineGroups.push(currentLine);
-
-    // Sort each line by X
-    lineGroups.forEach(line => line.sort((a, b) => a.bbox.x - b.bbox.x));
-
-    // Calculate average height per line for paragraph detection
-    const lineHeights = lineGroups.map(line => {
-      const heights = line.map(w => w.bbox.height);
-      return heights.reduce((a, b) => a + b, 0) / heights.length;
-    });
-
-    // Calculate gaps between lines
-    const lineGaps = [];
-    for (let i = 1; i < lineGroups.length; i++) {
-      const prevLineBottom = Math.max(...lineGroups[i - 1].map(w => w.bbox.y + w.bbox.height));
-      const currLineTop = Math.min(...lineGroups[i].map(w => w.bbox.y));
-      lineGaps.push(currLineTop - prevLineBottom);
-    }
-
-    // Find which line contains the target word
-    let targetLineIdx = -1;
-    let targetWordIdx = -1;
-    for (let i = 0; i < lineGroups.length; i++) {
-      const idx = lineGroups[i].findIndex(w => w === targetWord);
-      if (idx !== -1) {
-        targetLineIdx = i;
-        targetWordIdx = idx;
-        break;
-      }
-    }
-
-    if (targetLineIdx === -1) return null;
-
-    // Multi-language sentence end detection
-    const isSentenceEnd = (text) => /[.!?。！？]$/.test(text) || /^[.!?。！？]+$/.test(text);
-
-    // Check if height change indicates new section (e.g., title vs body)
-    const isHeightBreak = (lineIdx) => {
-      if (lineIdx < 0 || lineIdx >= lineGroups.length) return true;
-      const currentHeight = lineHeights[targetLineIdx];
-      const otherHeight = lineHeights[lineIdx];
-      // Height difference > 40% = different section
-      return Math.abs(currentHeight - otherHeight) > currentHeight * 0.4;
-    };
-
-    // Check if line gap indicates paragraph break
-    const isParagraphBreak = (gapIdx) => {
-      if (gapIdx < 0 || gapIdx >= lineGaps.length) return false;
-      const gap = lineGaps[gapIdx];
-      const avgHeight = lineHeights[targetLineIdx];
-      // Gap > 1.3x line height = paragraph break
-      return gap > avgHeight * 1.3;
-    };
-
-    let startLineIdx = targetLineIdx;
-    let startWordIdx = 0;
-    let endLineIdx = targetLineIdx;
-    let endWordIdx = lineGroups[targetLineIdx].length - 1;
-
-    // Search backwards for sentence/paragraph start (no line limit)
-    outerBack: for (let li = targetLineIdx; li >= 0; li--) {
-      // Check paragraph break before this line
-      if (li < targetLineIdx && isParagraphBreak(li)) {
-        startLineIdx = li + 1;
-        startWordIdx = 0;
-        break outerBack;
-      }
-
-      // Check height break (different font size = new section)
-      if (li < targetLineIdx && isHeightBreak(li)) {
-        startLineIdx = li + 1;
-        startWordIdx = 0;
-        break outerBack;
-      }
-
-      const line = lineGroups[li];
-      const searchStart = li === targetLineIdx ? targetWordIdx - 1 : line.length - 1;
-
-      for (let wi = searchStart; wi >= 0; wi--) {
-        if (isSentenceEnd(line[wi].text)) {
-          startLineIdx = li;
-          startWordIdx = wi + 1;
-          if (startWordIdx >= line.length && li + 1 < lineGroups.length) {
-            startLineIdx = li + 1;
-            startWordIdx = 0;
-          }
-          break outerBack;
-        }
-      }
-      startLineIdx = li;
-      startWordIdx = 0;
-    }
-
-    // Search forwards for sentence/paragraph end (no line limit)
-    outerForward: for (let li = targetLineIdx; li < lineGroups.length; li++) {
-      // Check paragraph break after this line
-      if (li > targetLineIdx && isParagraphBreak(li - 1)) {
-        endLineIdx = li - 1;
-        endWordIdx = lineGroups[li - 1].length - 1;
-        break outerForward;
-      }
-
-      // Check height break
-      if (li > targetLineIdx && isHeightBreak(li)) {
-        endLineIdx = li - 1;
-        endWordIdx = lineGroups[li - 1].length - 1;
-        break outerForward;
-      }
-
-      const line = lineGroups[li];
-      const searchStart = li === targetLineIdx ? targetWordIdx : 0;
-
-      for (let wi = searchStart; wi < line.length; wi++) {
-        if (isSentenceEnd(line[wi].text)) {
-          endLineIdx = li;
-          endWordIdx = wi;
-          break outerForward;
-        }
-      }
-      endLineIdx = li;
-      endWordIdx = line.length - 1;
-    }
-
-    // Collect all words in the sentence
-    const sentenceWords = [];
-    for (let li = startLineIdx; li <= endLineIdx; li++) {
-      const line = lineGroups[li];
-      const start = li === startLineIdx ? startWordIdx : 0;
-      const end = li === endLineIdx ? endWordIdx : line.length - 1;
-
-      for (let wi = start; wi <= end; wi++) {
-        if (line[wi]) sentenceWords.push(line[wi]);
-      }
-    }
-
-    if (sentenceWords.length === 0) return null;
-
-    // Calculate combined bbox
-    const minX = Math.min(...sentenceWords.map(w => w.bbox.x));
-    const minY = Math.min(...sentenceWords.map(w => w.bbox.y));
-    const maxX = Math.max(...sentenceWords.map(w => w.bbox.x + w.bbox.width));
-    const maxY = Math.max(...sentenceWords.map(w => w.bbox.y + w.bbox.height));
-
-    const combinedText = sentenceWords.map(w => w.text).join(' ');
-    const combinedBbox = {
-      x: minX,
-      y: minY,
-      width: maxX - minX,
-      height: maxY - minY,
-    };
-
-    console.log(`[Sentence] Found: "${combinedText}" (${sentenceWords.length} words, lines ${startLineIdx}-${endLineIdx})`);
-
-    return {
-      text: combinedText,
-      bbox: combinedBbox,
-      words: sentenceWords,
-    };
-  }, [ocrWords]);
-
-  // Check if a point (x, y in %) intersects with a word's bbox
-  const findWordAtPoint = useCallback((x, y) => {
-    console.log(`[Match] Checking point: x=${x.toFixed(2)}%, y=${y.toFixed(2)}%, ocrWords: ${ocrWords.length}`);
-
-    for (const word of ocrWords) {
-      const { bbox } = word;
-      if (
-        x >= bbox.x &&
-        x <= bbox.x + bbox.width &&
-        y >= bbox.y &&
-        y <= bbox.y + bbox.height
-      ) {
-        console.log(`[Match] HIT: "${word.text}" at bbox(${bbox.x.toFixed(1)}, ${bbox.y.toFixed(1)}, ${bbox.width.toFixed(1)}, ${bbox.height.toFixed(1)})`);
-        return word;
-      }
-    }
-    // 가장 가까운 단어 찾기 (디버깅용)
-    if (ocrWords.length > 0) {
-      let closest = null;
-      let minDist = Infinity;
-      for (const word of ocrWords) {
-        const cx = word.bbox.x + word.bbox.width / 2;
-        const cy = word.bbox.y + word.bbox.height / 2;
-        const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-        if (dist < minDist) {
-          minDist = dist;
-          closest = word;
-        }
-      }
-      if (closest) {
-        console.log(`[Match] MISS - Closest word: "${closest.text}" at dist=${minDist.toFixed(1)}% (bbox: x=${closest.bbox.x.toFixed(1)}, y=${closest.bbox.y.toFixed(1)})`);
-      }
-    }
-    return null;
-  }, [ocrWords]);
-
-  // Find existing annotation at point (vocabulary or grammar)
-  const findAnnotationAtPoint = useCallback((x, y, preferGrammar = false) => {
-    // 클릭 위치에 맞는 모든 annotation 수집
-    const matchingAnnotations = [];
-
-    for (const annotation of annotations) {
-      if (!annotation.selection_rect) continue;
-      try {
-        const data = JSON.parse(annotation.selection_rect);
-        if (data.page !== undefined && data.page !== currentPage) continue;
-
-        const bounds = data.bounds || data;
-        if (
-          x >= bounds.x &&
-          x <= bounds.x + bounds.width &&
-          y >= bounds.y &&
-          y <= bounds.y + bounds.height
-        ) {
-          // annotation 타입과 영역 크기 저장
-          const area = bounds.width * bounds.height;
-          const isVocab = isVocabularyAnnotation(annotation);
-          matchingAnnotations.push({ annotation, area, isVocab });
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    if (matchingAnnotations.length === 0) return null;
-
-    // 정렬: preferGrammar이면 grammar 우선, 아니면 vocabulary 우선
-    matchingAnnotations.sort((a, b) => {
-      if (preferGrammar) {
-        // grammar(문장)가 vocabulary(단어)보다 우선
-        if (!a.isVocab && b.isVocab) return -1;
-        if (a.isVocab && !b.isVocab) return 1;
-      } else {
-        // vocabulary(단어)가 grammar(문장)보다 우선
-        if (a.isVocab && !b.isVocab) return -1;
-        if (!a.isVocab && b.isVocab) return 1;
-      }
-      // 같은 타입이면 더 작은 영역 우선
-      return a.area - b.area;
-    });
-
-    return matchingAnnotations[0].annotation;
-  }, [annotations, currentPage]);
 
   // Handle word tap (short tap = vocabulary, long press = grammar/sentence)
   const handleWordTap = useCallback((clientX, clientY, isLongPress = false) => {
@@ -1213,236 +782,6 @@ export default function Viewer() {
       `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
     ).join(' ');
   }
-
-  // Get grammar annotations with patterns
-  function getGrammarAnnotations(pageNum = null) {
-    const grammarAnnotations = annotations.filter(a => {
-      if (!a.ai_analysis_json) return false;
-      try {
-        const data = JSON.parse(a.ai_analysis_json);
-        return data.type === 'grammar';
-      } catch {
-        return false;
-      }
-    });
-
-    // 페이지 필터 적용
-    if (pageNum !== null) {
-      return grammarAnnotations.filter(a => {
-        if (!a.selection_rect) return false;
-        try {
-          const rect = JSON.parse(a.selection_rect);
-          return rect.page === pageNum;
-        } catch {
-          return false;
-        }
-      });
-    }
-
-    return grammarAnnotations;
-  }
-
-  // 문법 패턴 렌더링 (lines 데이터 또는 bounds 사용)
-  function renderGrammarPattern(annotation, pattern, patternIdx) {
-    console.log(`[renderGrammarPattern] annotation: ${annotation.id}, pattern: ${patternIdx}, text: "${annotation.selected_text}"`);
-
-    if (!annotation.selection_rect) return null;
-
-    let selectionData;
-    try {
-      selectionData = JSON.parse(annotation.selection_rect);
-    } catch {
-      return null;
-    }
-
-    const bounds = selectionData.bounds || selectionData;
-    const lines = selectionData.lines; // 줄별 bbox 데이터
-
-    if (!bounds || bounds.width === undefined) return null;
-
-    const centerX = bounds.x + bounds.width / 2;
-
-    // 탭/클릭 시 grammar-tooltip을 밑줄 아래에 표시
-    const showGrammarTooltipBelow = () => {
-      console.log(`[Grammar] showGrammarTooltipBelow - annotation: ${annotation.id}, pattern: ${patternIdx}`);
-      const currentRect = imageContainerRef.current?.getBoundingClientRect();
-      if (!currentRect) return;
-
-      // 마지막 줄의 아래쪽 위치 계산
-      const lastLine = lines && lines.length > 0 ? lines[lines.length - 1] : bounds;
-      const posX = currentRect.left + centerX * currentRect.width / 100;
-      const posY = currentRect.top + (lastLine.y + lastLine.height) * currentRect.height / 100 + 15;
-
-      openModal('grammarTooltip', {
-        pattern: pattern,
-        annotation: annotation,
-        position: { x: posX, y: posY },
-      });
-    };
-
-    // 롱프레스 감지 (500ms 이상 눌러야 표시)
-    let longPressTimer = null;
-    let longPressTriggered = false;
-    const LONG_PRESS_DURATION = 500;
-
-    const handlePointerDown = (e) => {
-      // 터치 이벤트는 handleTouchStart에서 처리 - 중복 방지
-      if (e.pointerType === 'touch') return;
-
-      console.log(`[Grammar] PointerDown on annotation: ${annotation.id}, pattern: ${patternIdx}`);
-      // 롱프레스가 완료되기 전까지는 이벤트를 차단하지 않음
-      // 이렇게 해야 짧은 클릭이 아래의 vocab-marker로 전파됨
-      longPressTriggered = false;
-      longPressTimer = setTimeout(() => {
-        console.log(`[Grammar] LongPress triggered! annotation: ${annotation.id}, pattern: ${patternIdx}`);
-        longPressTriggered = true;
-        showGrammarTooltipBelow();
-        longPressTimer = null;
-      }, LONG_PRESS_DURATION);
-    };
-
-    const handlePointerUp = (e) => {
-      // 터치 이벤트는 handleTouchEnd에서 처리 - 중복 방지
-      if (e.pointerType === 'touch') return;
-
-      // 롱프레스가 트리거됐으면 이벤트 차단
-      if (longPressTriggered) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-      // 타이머가 아직 있으면 (롱프레스 전) 취소
-      if (longPressTimer) {
-        clearTimeout(longPressTimer);
-        longPressTimer = null;
-      }
-      longPressTriggered = false;
-    };
-
-    const handlePointerLeave = () => {
-      if (longPressTimer) {
-        clearTimeout(longPressTimer);
-        longPressTimer = null;
-      }
-      longPressTriggered = false;
-    };
-
-    // 터치 이벤트는 이미지 레벨에서 통합 처리 - 여기서는 제거
-
-    // lines 데이터가 있으면 각 줄별로 밑줄 렌더링
-    if (lines && lines.length > 0) {
-      const underlines = lines.map((line, i) => {
-        const underlineY = line.y + line.height; // 텍스트 바로 아래
-        return (
-          <line
-            key={`line-${i}`}
-            x1={`${line.x}%`}
-            y1={`${underlineY}%`}
-            x2={`${line.x + line.width}%`}
-            y2={`${underlineY}%`}
-            className="grammar-underline"
-          />
-        );
-      });
-
-      return (
-        <g
-          key={`${annotation.id}-${patternIdx}`}
-          className="grammar-pattern-group"
-          onPointerDown={handlePointerDown}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerLeave}
-          onPointerCancel={handlePointerLeave}
-        >
-          {underlines}
-        </g>
-      );
-    }
-
-    // lines가 없으면 bounds 기준 단일 밑줄
-    const underlineY = bounds.y + bounds.height;
-    return (
-      <g
-        key={`${annotation.id}-${patternIdx}`}
-        className="grammar-pattern-group"
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerLeave}
-        onPointerCancel={handlePointerLeave}
-      >
-        <line
-          x1={`${bounds.x}%`}
-          y1={`${underlineY}%`}
-          x2={`${bounds.x + bounds.width}%`}
-          y2={`${underlineY}%`}
-          className="grammar-underline"
-        />
-      </g>
-    );
-  }
-
-  // Handle minimap click/drag to jump to position
-  function handleMinimapClick(e) {
-    const container = scrollContainerRef.current;
-    const minimap = minimapRef.current;
-    if (!container || !minimap) return;
-
-    const rect = minimap.getBoundingClientRect();
-    const clickY = e.clientY - rect.top;
-    const clickPercent = clickY / rect.height;
-
-    const targetScroll = clickPercent * container.scrollHeight - container.clientHeight / 2;
-    container.scrollTo({
-      top: Math.max(0, targetScroll),
-      behavior: minimapDragging.current ? 'auto' : 'smooth',
-    });
-  }
-
-  // Minimap drag handlers (mouse)
-  function handleMinimapMouseDown(e) {
-    minimapDragging.current = true;
-    handleMinimapClick(e);
-  }
-
-  function handleMinimapMouseMove(e) {
-    if (!minimapDragging.current) return;
-    handleMinimapClick(e);
-  }
-
-  function handleMinimapMouseUp() {
-    minimapDragging.current = false;
-  }
-
-  // Minimap drag handlers (touch)
-  function handleMinimapTouchStart(e) {
-    e.preventDefault();
-    minimapDragging.current = true;
-    const touch = e.touches[0];
-    handleMinimapClick({ clientY: touch.clientY });
-  }
-
-  function handleMinimapTouchMove(e) {
-    if (!minimapDragging.current) return;
-    e.preventDefault();
-    const touch = e.touches[0];
-    handleMinimapClick({ clientY: touch.clientY });
-  }
-
-  function handleMinimapTouchEnd() {
-    minimapDragging.current = false;
-  }
-
-  // Global mouse/touch up for minimap drag
-  useEffect(() => {
-    const handleGlobalMouseUp = () => {
-      minimapDragging.current = false;
-    };
-    window.addEventListener('mouseup', handleGlobalMouseUp);
-    window.addEventListener('touchend', handleGlobalMouseUp);
-    return () => {
-      window.removeEventListener('mouseup', handleGlobalMouseUp);
-      window.removeEventListener('touchend', handleGlobalMouseUp);
-    };
-  }, []);
 
   const handleTextSelection = useCallback((e) => {
     // Don't show context menu if clicking on a highlight
@@ -2057,7 +1396,14 @@ export default function Viewer() {
                       try {
                         const analysisData = JSON.parse(annotation.ai_analysis_json);
                         return analysisData.patterns?.map((pattern, idx) =>
-                          renderGrammarPattern(annotation, pattern, idx)
+                          <GrammarPatternRenderer
+                            key={`${annotation.id}-${idx}`}
+                            annotation={annotation}
+                            pattern={pattern}
+                            patternIdx={idx}
+                            imageContainerRef={imageContainerRef}
+                            openModal={openModal}
+                          />
                         );
                       } catch (err) {
                         console.error('Grammar parse error:', err);
@@ -2253,7 +1599,14 @@ export default function Viewer() {
                     try {
                       const analysisData = JSON.parse(annotation.ai_analysis_json);
                       return analysisData.patterns?.map((pattern, idx) =>
-                        renderGrammarPattern(annotation, pattern, idx)
+                        <GrammarPatternRenderer
+                            key={`${annotation.id}-${idx}`}
+                            annotation={annotation}
+                            pattern={pattern}
+                            patternIdx={idx}
+                            imageContainerRef={imageContainerRef}
+                            openModal={openModal}
+                          />
                       );
                     } catch (err) {
                       return null;
@@ -2431,7 +1784,14 @@ export default function Viewer() {
                         const analysisData = JSON.parse(annotation.ai_analysis_json);
                         console.log('[URL Screenshot] Annotation', annotation.id, 'has', analysisData.patterns?.length, 'patterns');
                         return analysisData.patterns?.map((pattern, idx) =>
-                          renderGrammarPattern(annotation, pattern, idx)
+                          <GrammarPatternRenderer
+                            key={`${annotation.id}-${idx}`}
+                            annotation={annotation}
+                            pattern={pattern}
+                            patternIdx={idx}
+                            imageContainerRef={imageContainerRef}
+                            openModal={openModal}
+                          />
                         );
                       } catch (err) {
                         console.error('Grammar parse error:', err);

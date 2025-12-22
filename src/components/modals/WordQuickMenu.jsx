@@ -1,4 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useTapToClose } from '../../hooks/useTapToClose';
+import { speakText, stopSpeaking as stopTTS } from '../../utils/tts';
+import { cleanDisplayText } from '../../utils/textUtils';
+import { calculateModalPosition, getArrowClass } from '../../utils/positioning';
 import { lookupWord, analyzeGrammarPatterns } from '../../services/ai';
 import { createAnnotation } from '../../services/annotation';
 
@@ -22,13 +26,24 @@ export default function WordQuickMenu({
   const [grammarData, setGrammarData] = useState(null);
   const [checkedPatterns, setCheckedPatterns] = useState([]);
   const [speaking, setSpeaking] = useState(false);
+  const [error, setError] = useState('');
+
+  // 모달 상태 리셋 함수
+  const resetModalState = useCallback(() => {
+    setDefinition('');
+    setGrammarData(null);
+    setCheckedPatterns([]);
+    setLoading(false);
+    setSpeaking(false);
+    setError('');
+  }, []);
+
+  // 탭 감지용 훅 (줌/이동과 구분)
+  const { handleTouchStart: handleOverlayTouchStart, handleTouchEnd: handleOverlayTouchEnd, handleClick: handleOverlayClick } = useTapToClose(onClose);
 
   useEffect(() => {
     if (!isOpen) {
-      setDefinition('');
-      setGrammarData(null);
-      setCheckedPatterns([]);
-      setLoading(false);
+      resetModalState();
       return;
     }
 
@@ -42,7 +57,7 @@ export default function WordQuickMenu({
           setDefinition(data.definition || '');
         }
       } catch {
-        // ignore
+        setError('주석 데이터 로드 실패');
       }
       return;
     }
@@ -54,7 +69,7 @@ export default function WordQuickMenu({
       // Vocabulary mode: auto-lookup definition
       handleLookupDefinition();
     }
-  }, [isOpen, word, existingAnnotation, isGrammarMode]);
+  }, [isOpen, word, existingAnnotation, isGrammarMode, resetModalState]);
 
   // Look up word definition (preview, not save)
   async function handleLookupDefinition() {
@@ -63,59 +78,27 @@ export default function WordQuickMenu({
     try {
       const result = await lookupWord(word);
       setDefinition(result.definition || result || '');
-    } catch (err) {
-      console.error('Failed to lookup word:', err);
+    } catch {
+      setError('단어 검색 실패');
       setDefinition('');
     } finally {
       setLoading(false);
     }
   }
 
-  // TTS speak function - 자연스러운 원어민 발음
+  // TTS speak function using shared utility
   function speak(text) {
     if (!text || speaking) return;
-
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-
-    // 고품질 영어 음성 선택
-    const voices = window.speechSynthesis.getVoices();
-    const preferredVoices = [
-      'Samantha', 'Karen', 'Daniel', 'Moira',
-      'Google US English', 'Google UK English Female',
-      'Microsoft Zira', 'Microsoft David',
-    ];
-
-    let selectedVoice = null;
-    for (const name of preferredVoices) {
-      selectedVoice = voices.find(v => v.name.includes(name) && v.lang.startsWith('en'));
-      if (selectedVoice) break;
-    }
-
-    if (!selectedVoice) {
-      selectedVoice = voices.find(v => v.lang.startsWith('en-US')) ||
-                      voices.find(v => v.lang.startsWith('en'));
-    }
-
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-    }
-
-    utterance.onstart = () => setSpeaking(true);
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-
-    window.speechSynthesis.speak(utterance);
+    speakText(text, {
+      onStart: () => setSpeaking(true),
+      onEnd: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+    });
   }
 
   // Stop speaking
   function stopSpeaking() {
-    window.speechSynthesis.cancel();
+    stopTTS();
     setSpeaking(false);
   }
 
@@ -157,11 +140,8 @@ export default function WordQuickMenu({
       onClose(true); // force close
 
       // 백그라운드에서 실제 저장
-      createAnnotation(annotationData).catch(err => {
-        console.error('Failed to save vocabulary:', err);
-      });
-    } catch (err) {
-      console.error('Failed to save vocabulary:', err);
+      createAnnotation(annotationData).catch(() => {});
+    } catch {
       setLoading(false);
     }
   }
@@ -181,8 +161,8 @@ export default function WordQuickMenu({
       });
       // Auto-check all patterns initially
       setCheckedPatterns(result.patterns?.map((_, i) => i) || []);
-    } catch (err) {
-      console.error('Grammar analysis failed:', err);
+    } catch {
+      setError('문법 분석 실패');
       setGrammarData({ originalText: word, translation: '', patterns: [] });
     } finally {
       setLoading(false);
@@ -291,55 +271,58 @@ export default function WordQuickMenu({
       onClose(true); // force close
 
       // 백그라운드에서 실제 저장
-      createAnnotation(annotationData).catch(err => {
-        console.error('Failed to save grammar:', err);
-      });
-    } catch (err) {
-      console.error('Failed to save grammar:', err);
+      createAnnotation(annotationData).catch(() => {});
+    } catch {
       setLoading(false);
     }
   }
 
   if (!isOpen) return null;
 
-  // 간단한 위치 계산
+  // 위치 계산
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const MARGIN = 12;
   const menuWidth = isGrammarMode ? Math.min(340, vw - 24) : Math.min(300, vw - 24);
 
-  // 모달 위치: position.x를 중심으로, 화면 경계에서 조정
-  let left = Math.max(MARGIN, Math.min(position.x - menuWidth / 2, vw - menuWidth - MARGIN));
-  let top = position.y;
-
-  // 상하 경계 체크
-  if (top < MARGIN) top = MARGIN;
-  if (top > vh - 200) top = vh - 200;
-
-  // 화살표 위치: position.x가 모달 내 어디에 있는지 계산
-  const arrowLeft = Math.min(Math.max(((position.x - left) / menuWidth) * 100, 15), 85);
+  const { left, top, transform, arrowLeft } = calculateModalPosition({
+    position,
+    menuWidth,
+    margin: 12,
+    placement,
+  });
 
   const menuStyle = {
     position: 'fixed',
     left,
     top,
+    transform,
     zIndex: 1000,
     width: menuWidth,
     maxHeight: vh * 0.6,
     '--arrow-left': `${arrowLeft}%`,
   };
 
-  // 화살표 방향
-  const arrowClass = placement === 'above' ? 'arrow-below' : 'arrow-above';
+  const arrowClass = getArrowClass(placement);
+
+  // Overlay 컴포넌트 (탭으로 닫기)
+  const Overlay = () => (
+    <div
+      className="word-menu-overlay"
+      onTouchStart={handleOverlayTouchStart}
+      onTouchEnd={handleOverlayTouchEnd}
+      onClick={handleOverlayClick}
+    />
+  );
 
   // Existing vocabulary annotation view
   if (existingAnnotation && !isGrammarMode) {
     return (
       <>
-        <div className="word-menu-overlay" />
+        <Overlay />
         <div className={`word-quick-menu existing ${arrowClass}`} style={menuStyle}>
+          {error && <div className="modal-error">{error}</div>}
           <div className="word-menu-header">
-            <span className="word-text">{existingAnnotation.selected_text}</span>
+            <span className="word-text">{cleanDisplayText(existingAnnotation.selected_text)}</span>
             <button
               className={`listen-btn ${speaking ? 'speaking' : ''}`}
               onClick={() => speaking ? stopSpeaking() : speak(existingAnnotation.selected_text)}
@@ -367,7 +350,7 @@ export default function WordQuickMenu({
   if (existingAnnotation && isGrammarMode && grammarData) {
     return (
       <>
-        <div className="word-menu-overlay" />
+        <Overlay />
         <div className={`word-quick-menu grammar existing ${arrowClass}`} style={menuStyle}>
           <div className="word-menu-header">
             <span className="sentence-text">{grammarData.originalText}</span>
@@ -406,7 +389,7 @@ export default function WordQuickMenu({
   if (isGrammarMode) {
     return (
       <>
-        <div className="word-menu-overlay" />
+        <Overlay />
         <div className={`word-quick-menu grammar ${arrowClass}`} style={menuStyle}>
           {loading ? (
             <div className="loading-state">분석 중...</div>
@@ -439,7 +422,7 @@ export default function WordQuickMenu({
               </div>
             </>
           ) : (
-            <div className="error-state">분석 실패</div>
+            <div className="modal-error-state">{error || '분석 실패'}</div>
           )}
         </div>
       </>
@@ -449,10 +432,10 @@ export default function WordQuickMenu({
   // New word - quick save menu
   return (
     <>
-      <div className="word-menu-overlay" />
+      <Overlay />
       <div className={`word-quick-menu ${arrowClass}`} style={menuStyle}>
         <div className="word-menu-header">
-          <span className="word-text">{word}</span>
+          <span className="word-text">{cleanDisplayText(word)}</span>
           <button
             className={`listen-btn ${speaking ? 'speaking' : ''}`}
             onClick={() => speaking ? stopSpeaking() : speak(word)}

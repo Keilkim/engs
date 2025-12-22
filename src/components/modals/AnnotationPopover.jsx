@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { deleteAnnotation } from '../../services/annotation';
 import { TranslatableText } from '../translatable';
 
@@ -8,14 +9,16 @@ export default function AnnotationPopover({
   onClose,
   onDelete,
 }) {
+  const [error, setError] = useState('');
+
   if (!isOpen || !annotation) return null;
 
   async function handleDelete() {
     try {
       await deleteAnnotation(annotation.id);
       onDelete();
-    } catch (err) {
-      console.error('Failed to delete annotation:', err);
+    } catch {
+      setError('주석 삭제 실패');
     }
   }
 
@@ -41,6 +44,7 @@ export default function AnnotationPopover({
         }}
         onClick={(e) => e.stopPropagation()}
       >
+        {error && <div className="modal-error">{error}</div>}
         <div className="annotation-popover-header">
           <span className="annotation-type-badge">
             {annotation.type === 'highlight' ? 'Highlight' : 'Memo'}

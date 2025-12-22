@@ -13,8 +13,18 @@
 @import './styles/components/buttons.css';
 @import './styles/components/inputs.css';
 @import './styles/components/cards.css';
+@import './styles/components/markers.css';
+
+/* Import modal styles */
+@import './styles/components/modals/modal-common.css';
+@import './styles/components/modals/context-menu.css';
+@import './styles/components/modals/word-quick-menu.css';
+@import './styles/components/modals/grammar-tooltip.css';
 
 /* Import page styles */
+@import './styles/pages/login-register.css';
+@import './styles/pages/mypage.css';
+@import './styles/pages/review.css';
 @import './App.css';
 
 /*
@@ -239,6 +249,51 @@
   color: var(--color-text);
 }
 
+/* 컬럼 조절 컨트롤 */
+.column-control {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-left: auto;
+  padding: 4px 8px;
+  background-color: var(--color-base-sub);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-full);
+}
+
+.column-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  color: var(--color-text);
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.column-btn:hover:not(:disabled) {
+  background-color: var(--color-accent);
+}
+
+.column-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.column-count {
+  min-width: 16px;
+  text-align: center;
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
 /*
  * ===========================================
  * Bottom Navigation
@@ -413,7 +468,7 @@
 
 .source-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(var(--grid-columns, 2), 1fr);
   gap: var(--spacing-md);
 }
 
@@ -635,13 +690,13 @@
   position: absolute;
   top: var(--spacing-xs);
   right: var(--spacing-xs);
-  width: 24px;
-  height: 24px;
+  width: calc(24px * var(--btn-scale, 1));
+  height: calc(24px * var(--btn-scale, 1));
   background-color: rgba(0, 0, 0, 0.6);
   border: none;
   border-radius: var(--radius-full);
   color: var(--color-text);
-  font-size: var(--font-lg);
+  font-size: calc(var(--font-lg) * var(--btn-scale, 1));
   cursor: pointer;
   opacity: 1;
   transition: background-color var(--transition-fast);
@@ -661,8 +716,8 @@
   position: absolute;
   top: var(--spacing-xs);
   left: var(--spacing-xs);
-  width: 28px;
-  height: 28px;
+  width: calc(28px * var(--btn-scale, 1));
+  height: calc(28px * var(--btn-scale, 1));
   background-color: #e5e5e5;
   border: none;
   border-radius: var(--radius-full);
@@ -673,6 +728,11 @@
   align-items: center;
   justify-content: center;
   z-index: 10;
+}
+
+.source-pin-btn svg {
+  width: calc(14px * var(--btn-scale, 1));
+  height: calc(14px * var(--btn-scale, 1));
 }
 
 .source-pin-btn:hover {
@@ -686,6 +746,69 @@
 
 .source-pin-btn.active:hover {
   background-color: #2563eb;
+}
+
+/* Source card select mode */
+.source-card.select-mode {
+  cursor: pointer;
+}
+
+.source-card.select-mode:hover {
+  border-color: #3b82f6;
+}
+
+.source-card.select-mode.selected {
+  border-color: #3b82f6;
+  border-width: 2px;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+/* 선택 체크박스 (가운데) */
+.source-select-checkbox {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 40px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 2px solid #d1d5db;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 15;
+  transition: all var(--transition-fast);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.source-select-checkbox.checked {
+  background-color: #3b82f6;
+  border-color: #3b82f6;
+}
+
+.source-select-checkbox svg {
+  width: 22px;
+  height: 22px;
+  color: white;
+}
+
+/* Chat 버튼 활성 상태 (파란색) */
+.mypage-button.chat-active {
+  background-color: #3b82f6;
+  border-color: #3b82f6;
+  color: white;
+}
+
+.mypage-button.chat-active:hover {
+  background-color: #2563eb;
+  border-color: #2563eb;
+}
+
+.mypage-button.chat-active:disabled {
+  background-color: #93c5fd;
+  border-color: #93c5fd;
+  cursor: not-allowed;
 }
 
 /* Delete confirmation overlay on card */
