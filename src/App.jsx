@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { TranslationProvider } from './i18n';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Pages
 import Login from './pages/login/Login';
@@ -17,9 +18,10 @@ import Onboarding from './pages/onboarding/Onboarding';
 
 function App() {
   return (
-    <TranslationProvider>
-      <AuthProvider>
-        <BrowserRouter>
+    <ErrorBoundary>
+      <TranslationProvider>
+        <AuthProvider>
+          <BrowserRouter>
           <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
@@ -93,10 +95,11 @@ function App() {
 
           {/* Catch-all route */}
           <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </TranslationProvider>
+          </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </TranslationProvider>
+    </ErrorBoundary>
   );
 }
 

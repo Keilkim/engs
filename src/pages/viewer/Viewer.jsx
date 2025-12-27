@@ -215,20 +215,32 @@ export default function Viewer() {
   }
 
   async function loadData() {
-    setLoading(true);
+    console.log('[Viewer] loadData called, id:', id, 'current source:', source?.id);
+
+    // source가 이미 있으면 로딩 상태로 변경하지 않음 (깜빡임 방지)
+    if (!source) {
+      setLoading(true);
+    }
+
     try {
       const [sourceData, annotationsData, vocabData] = await Promise.all([
         getSource(id),
         getAnnotations(id),
         getVocabulary(),
       ]);
+      console.log('[Viewer] loadData success:', {
+        sourceId: sourceData?.id,
+        sourceType: sourceData?.type,
+        hasPages: !!sourceData?.pages,
+        hasScreenshot: !!sourceData?.screenshot,
+      });
       setSource(sourceData);
       setAnnotations(annotationsData || []);
       setVocabulary(vocabData || []);
       setCurrentPage(0); // Reset to first page on initial load
     } catch (err) {
+      console.error('[Viewer] loadData error:', err);
       setError('Unable to load source');
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -1227,9 +1239,19 @@ export default function Viewer() {
 
   // Render captured screenshot viewer
   function renderContent() {
-    const displayImage = getDisplayImage();
-    const pages = getPages();
-    const hasPages = pages && pages.length > 1;
+    try {
+      const displayImage = getDisplayImage();
+      const pages = getPages();
+      const hasPages = pages && pages.length > 1;
+
+      console.log('[Viewer] renderContent:', {
+        displayImage: displayImage?.substring?.(0, 50) || displayImage,
+        sourceType: source?.type,
+        sourceId: source?.id,
+        pagesCount: pages?.length,
+        currentPage,
+        hasPages,
+      });
 
     // For URL type with content, show article view
     if (source.type === 'url' && source.content) {
@@ -1929,6 +1951,20 @@ export default function Viewer() {
         )}
       </div>
     );
+    } catch (err) {
+      console.error('[Viewer] renderContent error:', err);
+      return (
+        <div className="no-screenshot">
+          <p style={{ color: '#ff6b6b' }}>이미지를 불러올 수 없습니다</p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ marginTop: '16px', padding: '8px 16px', borderRadius: '8px', background: '#0A84FF', color: '#fff', border: 'none' }}
+          >
+            새로고침
+          </button>
+        </div>
+      );
+    }
   }
 
   if (loading) {
