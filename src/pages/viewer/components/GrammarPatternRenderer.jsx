@@ -5,7 +5,6 @@ import { useCallback } from 'react';
  */
 export default function GrammarPatternRenderer({
   annotation,
-  pattern,
   patternIdx,
   imageContainerRef,
   openModal,
@@ -35,12 +34,14 @@ export default function GrammarPatternRenderer({
     const posX = currentRect.left + centerX * currentRect.width / 100;
     const posY = currentRect.top + (lastLine.y + lastLine.height) * currentRect.height / 100 + 15;
 
-    openModal('grammarTooltip', {
-      pattern,
-      annotation,
+    openModal('wordMenu', {
+      word: annotation.selected_text,
+      existingAnnotation: annotation,
+      isGrammarMode: true,
       position: { x: posX, y: posY },
+      placement: 'below',
     });
-  }, [imageContainerRef, openModal, pattern, annotation, bounds, lines, centerX]);
+  }, [imageContainerRef, openModal, annotation, bounds, lines, centerX]);
 
   // Long press detection (500ms)
   let longPressTimer = null;

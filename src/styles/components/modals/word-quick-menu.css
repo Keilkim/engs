@@ -15,7 +15,7 @@
 .word-quick-menu {
   background-color: var(--color-base-sub);
   border: 1px solid var(--color-accent);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   padding: var(--spacing-md);
   width: clamp(200px, 88vw, 340px);
   min-width: min(200px, 85vw);
@@ -199,4 +199,31 @@
 .pattern-name {
   font-size: var(--font-sm);
   color: var(--color-text);
+}
+
+.pattern-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pattern-words {
+  font-size: var(--font-sm);
+  color: var(--color-text-sub);
+  font-style: italic;
+}
+
+.pattern-explanation {
+  font-size: var(--font-xs);
+  color: var(--color-text);
+  line-height: var(--line-height-relaxed);
+}
+
+.grammar-translation {
+  font-size: var(--font-sm);
+  color: var(--color-text-sub);
+  margin-bottom: var(--spacing-sm);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-accent);
 }

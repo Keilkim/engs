@@ -3,9 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getSource, deleteSource } from '../../services/source';
 import { getAnnotations, getVocabulary, deleteAnnotation } from '../../services/annotation';
 import ContextMenu from '../../components/modals/ContextMenu';
-import AnnotationPopover from '../../components/modals/AnnotationPopover';
 import WordQuickMenu from '../../components/modals/WordQuickMenu';
-import GrammarTooltip from '../../components/GrammarTooltip';
 import { TranslatableText } from '../../components/translatable';
 import { PenModeToggle, ColorPalette, PenCanvas, usePenStrokes } from '../../components/pen-mode';
 import { useOcrWords, useSentenceFinder, useMinimap, useAnnotationHelpers } from './hooks';
@@ -68,7 +66,7 @@ export default function Viewer() {
   // Note: Drawing mode removed - using tap/long-press for word selection instead
 
   // Centralized modal state - only one modal open at a time
-  // Types: 'contextMenu' | 'annotationPopover' | 'vocabTooltip' | 'grammarTooltip' | 'vocabDeleteConfirm' | 'wordMenu' | null
+  // Types: 'contextMenu' | 'wordMenu' | 'vocabDeleteConfirm' | null
   const [activeModal, setActiveModal] = useState({
     type: null,
     data: {},
@@ -93,7 +91,6 @@ export default function Viewer() {
   // Vocabulary panel state (sidebar - not a popup modal)
   const [vocabulary, setVocabulary] = useState([]);
   const [showVocabPanel, setShowVocabPanel] = useState(false);
-  const vocabTooltipTimer = useRef(null);
   const [highlightedVocabId, setHighlightedVocabId] = useState(null); // 파란 글로우 효과용
   const highlightTimer = useRef(null);
 
@@ -263,11 +260,6 @@ export default function Viewer() {
 
   // Show vocabulary tooltip with smart positioning
   function showVocabWord(word, definition, markerRect = null, annotation = null) {
-    // Clear existing timer
-    if (vocabTooltipTimer.current) {
-      clearTimeout(vocabTooltipTimer.current);
-    }
-
     // Calculate smart position based on available space
     let position = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     let placement = 'below';
@@ -277,16 +269,13 @@ export default function Viewer() {
       const spaceAbove = markerRect.top;
       const spaceBelow = viewportHeight - markerRect.bottom;
 
-      // Position below if there's enough space (200px) or more space than above
       placement = spaceBelow >= 200 || spaceBelow > spaceAbove ? 'below' : 'above';
 
-      // Center horizontally on the marker, clamp to screen edges
       const x = Math.min(
         Math.max(20, markerRect.left + markerRect.width / 2),
         window.innerWidth - 20
       );
 
-      // Position above or below the marker
       const y = placement === 'below'
         ? markerRect.bottom + 12
         : markerRect.top - 12;
@@ -294,60 +283,19 @@ export default function Viewer() {
       position = { x, y };
     }
 
-    openModal('vocabTooltip', { word, definition, position, placement, annotation });
-
-    // Auto-hide는 annotation이 있으면 (삭제 가능한 상태) 비활성화
-    if (!annotation) {
-      vocabTooltipTimer.current = setTimeout(() => {
-        closeModal();
-      }, 5000);
-    }
+    openModal('wordMenu', {
+      word,
+      existingAnnotation: annotation,
+      isGrammarMode: false,
+      position,
+      placement,
+    });
   }
 
-  // Close vocabulary tooltip
-  function closeVocabTooltip() {
-    if (vocabTooltipTimer.current) {
-      clearTimeout(vocabTooltipTimer.current);
-    }
-    closeModal();
-  }
-
-  // Delete vocabulary from tooltip
-  async function handleDeleteVocabFromTooltip() {
-    if (activeModal.type !== 'vocabTooltip' || !activeModal.data.annotation) return;
-    try {
-      await deleteAnnotation(activeModal.data.annotation.id);
-      closeVocabTooltip();
-      refreshAnnotations();
-    } catch (err) {
-      console.error('Failed to delete vocabulary:', err);
-    }
-  }
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (vocabTooltipTimer.current) {
-        clearTimeout(vocabTooltipTimer.current);
-      }
-    };
-  }, []);
 
   function handleHighlightClick(e) {
     e.stopPropagation();
-    const annotationId = e.target.getAttribute('data-id');
-    const annotation = annotations.find((a) => a.id === annotationId);
-
-    if (annotation) {
-      const rect = e.target.getBoundingClientRect();
-      openModal('annotationPopover', {
-        position: {
-          x: rect.left + rect.width / 2,
-          y: rect.bottom + 10,
-        },
-        annotation,
-      });
-    }
+    // Pen mode disabled - no action needed
   }
 
   const handleMouseDown = useCallback((e) => {
@@ -424,7 +372,6 @@ export default function Viewer() {
       // 문법(grammar) 롱프레스 - 저장된 문법 tooltip 표시 (다시 분석하지 않음)
       if (isGrammar && isLongPress) {
         try {
-          const analysisData = JSON.parse(existingAnnotation.ai_analysis_json);
           const selectionData = JSON.parse(existingAnnotation.selection_rect);
           const bounds = selectionData.bounds || selectionData;
           const lines = selectionData.lines;
@@ -448,17 +395,10 @@ export default function Viewer() {
             ? Math.min(markerBottomPx + 12, viewportHeight - 50)
             : Math.max(markerTopPx - 12, 50);
 
-          // 저장된 첫 번째 패턴 사용 (또는 전체 패턴)
-          const pattern = analysisData.patterns?.[0] || {
-            type: 'grammar',
-            typeKr: '문법',
-            words: [existingAnnotation.selected_text],
-            explanation: analysisData.translation || '',
-          };
-
-          openModal('grammarTooltip', {
-            pattern: pattern,
-            annotation: existingAnnotation,
+          openModal('wordMenu', {
+            word: existingAnnotation.selected_text,
+            existingAnnotation: existingAnnotation,
+            isGrammarMode: true,
             position: { x: posX, y: posY },
             placement,
           });
@@ -840,16 +780,7 @@ export default function Viewer() {
     window.getSelection()?.removeAllRanges();
   }
 
-  function closeAnnotationPopover() {
-    closeModal();
-  }
-
   function handleAnnotationCreated() {
-    refreshAnnotations(); // Don't reset page position
-  }
-
-  function handleAnnotationDeleted() {
-    closeAnnotationPopover();
     refreshAnnotations(); // Don't reset page position
   }
 
@@ -1353,17 +1284,6 @@ export default function Viewer() {
                             key={annotation.id}
                             d={pathToSvg(data.path)}
                             className="highlighter-stroke saved"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const containerRect = imageContainerRef.current.getBoundingClientRect();
-                              openModal('annotationPopover', {
-                                position: {
-                                  x: containerRect.left + (bounds.x + (bounds.width || 0) / 2) * containerRect.width / 100,
-                                  y: containerRect.top + (bounds.y + (bounds.height || 0)) * containerRect.height / 100 + 10,
-                                },
-                                annotation,
-                              });
-                            }}
                           />
                         );
                       }
@@ -1372,17 +1292,6 @@ export default function Viewer() {
                           key={annotation.id}
                           x={data.x} y={data.y} width={data.width} height={data.height}
                           className="highlighter-rect saved"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const containerRect = imageContainerRef.current.getBoundingClientRect();
-                            openModal('annotationPopover', {
-                              position: {
-                                x: containerRect.left + (data.x + data.width / 2) * containerRect.width / 100,
-                                y: containerRect.top + (data.y + data.height) * containerRect.height / 100 + 10,
-                              },
-                              annotation,
-                            });
-                          }}
                         />
                       );
                     })}
@@ -1418,11 +1327,10 @@ export default function Viewer() {
                     return grammarAnns.map(annotation => {
                       try {
                         const analysisData = JSON.parse(annotation.ai_analysis_json);
-                        return analysisData.patterns?.map((pattern, idx) =>
+                        return analysisData.patterns?.map((_, idx) =>
                           <GrammarPatternRenderer
                             key={`${annotation.id}-${idx}`}
                             annotation={annotation}
-                            pattern={pattern}
                             patternIdx={idx}
                             imageContainerRef={imageContainerRef}
                             openModal={openModal}
@@ -1621,11 +1529,10 @@ export default function Viewer() {
                   {getGrammarAnnotations().map(annotation => {
                     try {
                       const analysisData = JSON.parse(annotation.ai_analysis_json);
-                      return analysisData.patterns?.map((pattern, idx) =>
+                      return analysisData.patterns?.map((_, idx) =>
                         <GrammarPatternRenderer
                             key={`${annotation.id}-${idx}`}
                             annotation={annotation}
-                            pattern={pattern}
                             patternIdx={idx}
                             imageContainerRef={imageContainerRef}
                             openModal={openModal}
@@ -1740,17 +1647,6 @@ export default function Viewer() {
                             key={annotation.id}
                             d={pathToSvg(data.path)}
                             className="highlighter-stroke saved"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const containerRect = imageContainerRef.current.getBoundingClientRect();
-                              openModal('annotationPopover', {
-                                position: {
-                                  x: containerRect.left + (bounds.x + (bounds.width || 0) / 2) * containerRect.width / 100,
-                                  y: containerRect.top + (bounds.y + (bounds.height || 0)) * containerRect.height / 100 + 10,
-                                },
-                                annotation,
-                              });
-                            }}
                           />
                         );
                       }
@@ -1759,17 +1655,6 @@ export default function Viewer() {
                           key={annotation.id}
                           x={data.x} y={data.y} width={data.width} height={data.height}
                           className="highlighter-rect saved"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const containerRect = imageContainerRef.current.getBoundingClientRect();
-                            openModal('annotationPopover', {
-                              position: {
-                                x: containerRect.left + (data.x + data.width / 2) * containerRect.width / 100,
-                                y: containerRect.top + (data.y + data.height) * containerRect.height / 100 + 10,
-                              },
-                              annotation,
-                            });
-                          }}
                         />
                       );
                     })}
@@ -1806,11 +1691,10 @@ export default function Viewer() {
                       try {
                         const analysisData = JSON.parse(annotation.ai_analysis_json);
                         console.log('[URL Screenshot] Annotation', annotation.id, 'has', analysisData.patterns?.length, 'patterns');
-                        return analysisData.patterns?.map((pattern, idx) =>
+                        return analysisData.patterns?.map((_, idx) =>
                           <GrammarPatternRenderer
                             key={`${annotation.id}-${idx}`}
                             annotation={annotation}
-                            pattern={pattern}
                             patternIdx={idx}
                             imageContainerRef={imageContainerRef}
                             openModal={openModal}
@@ -2036,7 +1920,6 @@ export default function Viewer() {
         onMouseDown={handleMouseDown}
         onMouseUp={handleTextSelection}
         onTouchEnd={handleTextSelection}
-        onClick={() => activeModal.type === 'annotationPopover' && closeAnnotationPopover()}
       >
         {renderContent()}
 
@@ -2048,16 +1931,6 @@ export default function Viewer() {
               key={memo.id}
               className="memo-marker"
               style={{ top: `${100 + index * 40}px` }}
-              onClick={(e) => {
-                e.stopPropagation();
-                openModal('annotationPopover', {
-                  position: {
-                    x: window.innerWidth - 60,
-                    y: 100 + index * 40,
-                  },
-                  annotation: memo,
-                });
-              }}
               title={memo.memo_content}
             >
               M
@@ -2078,13 +1951,6 @@ export default function Viewer() {
         onAnnotationCreated={handleAnnotationCreated}
       />
 
-      <AnnotationPopover
-        isOpen={activeModal.type === 'annotationPopover'}
-        position={activeModal.data.position || { x: 0, y: 0 }}
-        annotation={activeModal.data.annotation || null}
-        onClose={closeAnnotationPopover}
-        onDelete={handleAnnotationDeleted}
-      />
 
       {/* Pen Mode Toggle Button - temporarily hidden */}
       {/* <PenModeToggle
@@ -2188,51 +2054,6 @@ export default function Viewer() {
         </div>
       )}
 
-      {/* Vocabulary Tooltip with listen/delete buttons */}
-      {activeModal.type === 'vocabTooltip' && activeModal.data.word && (
-        <>
-          <div className="vocab-tooltip-overlay" />
-          <div
-            className={`vocab-tooltip ${activeModal.data.placement}${activeModal.data.annotation ? ' with-actions' : ''}`}
-            style={{
-              left: activeModal.data.position.x,
-              top: activeModal.data.position.y,
-              transform: activeModal.data.placement === 'below'
-                ? 'translateX(-50%)'
-                : 'translate(-50%, -100%)'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="vocab-tooltip-header">
-              <span className="vocab-tooltip-word">{activeModal.data.word}</span>
-              <button
-                className="listen-btn"
-                onClick={() => {
-                  const utterance = new SpeechSynthesisUtterance(activeModal.data.word);
-                  utterance.lang = 'en-US';
-                  utterance.rate = 0.9;
-                  window.speechSynthesis.cancel();
-                  window.speechSynthesis.speak(utterance);
-                }}
-                title="듣기"
-              >
-                🔊
-              </button>
-            </div>
-            <pre className="vocab-tooltip-definition">{activeModal.data.definition}</pre>
-            {activeModal.data.annotation && (
-              <div className="vocab-tooltip-actions">
-                <button className="delete-btn" onClick={handleDeleteVocabFromTooltip}>
-                  삭제
-                </button>
-                <button className="close-btn" onClick={closeVocabTooltip}>
-                  닫기
-                </button>
-              </div>
-            )}
-          </div>
-        </>
-      )}
 
       {/* Delete confirmation modal */}
       {showDeleteConfirm && (
@@ -2293,28 +2114,6 @@ export default function Viewer() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* Grammar Tooltip */}
-      {activeModal.type === 'grammarTooltip' && activeModal.data.pattern && (
-        <>
-          <div className="grammar-tooltip-overlay" />
-          <GrammarTooltip
-            pattern={activeModal.data.pattern}
-            annotation={activeModal.data.annotation}
-            position={activeModal.data.position}
-            placement={activeModal.data.placement || 'below'}
-            zoomScale={zoomScale}
-            onClose={closeModal}
-            onDelete={async () => {
-              if (activeModal.data.annotation) {
-                await deleteAnnotation(activeModal.data.annotation.id);
-                closeModal();
-                refreshAnnotations();
-              }
-            }}
-          />
-        </>
       )}
 
       {/* Word Quick Menu (tap/long-press) */}

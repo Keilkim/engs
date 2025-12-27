@@ -335,10 +335,10 @@ export default function WordQuickMenu({
           </div>
           <div className="word-menu-actions">
             <button className="delete-btn" onClick={onDeleted} disabled={loading}>
-              삭제
+              Delete
             </button>
             <button className="close-btn" onClick={onClose}>
-              닫기
+              Close
             </button>
           </div>
         </div>
@@ -368,16 +368,20 @@ export default function WordQuickMenu({
             {grammarData.patterns?.map((pattern, i) => (
               <div key={i} className="pattern-item saved">
                 <span className="pattern-color" style={{ background: pattern.color }} />
-                <span className="pattern-name">{pattern.typeKr || pattern.type}</span>
+                <div className="pattern-content">
+                  <span className="pattern-name" style={{ color: pattern.color }}>{pattern.typeKr || pattern.type}</span>
+                  {pattern.words && <span className="pattern-words">{pattern.words.join(' ')}</span>}
+                  {pattern.explanation && <span className="pattern-explanation">{pattern.explanation}</span>}
+                </div>
               </div>
             ))}
           </div>
           <div className="word-menu-actions">
             <button className="delete-btn" onClick={onDeleted} disabled={loading}>
-              삭제
+              Delete
             </button>
             <button className="close-btn" onClick={onClose}>
-              닫기
+              Close
             </button>
           </div>
         </div>
@@ -414,10 +418,10 @@ export default function WordQuickMenu({
                   onClick={handleSaveGrammar}
                   disabled={checkedPatterns.length === 0 || loading}
                 >
-                  저장
+                  Save
                 </button>
                 <button className="close-btn" onClick={onClose}>
-                  닫기
+                  Close
                 </button>
               </div>
             </>
@@ -453,10 +457,10 @@ export default function WordQuickMenu({
                 className="save-btn"
                 onClick={handleSaveVocabulary}
               >
-                단어 저장
+                Save
               </button>
               <button className="close-btn" onClick={onClose}>
-                취소
+                Close
               </button>
             </div>
           </>
