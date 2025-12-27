@@ -400,6 +400,11 @@ export default function Viewer() {
             ? Math.min(markerBottomPx + 12, viewportHeight - safeAreaBottom - 50)
             : Math.max(markerTopPx - 12, 50);
 
+          // lines 데이터를 sentenceWords 형식으로 변환 (줄별 하이라이트용)
+          const sentenceWords = lines && lines.length > 0
+            ? lines.map((line, i) => ({ text: `line-${i}`, bbox: line }))
+            : null;
+
           openModal('wordMenu', {
             word: existingAnnotation.selected_text,
             existingAnnotation: existingAnnotation,
@@ -407,6 +412,7 @@ export default function Viewer() {
             position: { x: posX, y: posY },
             placement,
             wordBbox: bounds, // 동적 위치 업데이트용
+            sentenceWords, // 줄별 하이라이트용
           });
           return;
         } catch {
