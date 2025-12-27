@@ -56,9 +56,7 @@
   color: var(--color-text);
 }
 
-/* Context Menu - styles moved to modals/context-menu.css */
-
-/* Vocabulary Panel & Tooltip */
+/* Vocabulary Panel */
 .vocab-float-btn {
   position: fixed;
   bottom: 100px;
@@ -205,8 +203,6 @@
   gap: var(--spacing-xs);
   justify-content: flex-end;
 }
-
-/* Grammar styles - moved to modals/grammar-tooltip.css */
 
 /* Viewer improvements */
 .viewer-title {

@@ -17,9 +17,7 @@
 
 /* Import modal styles */
 @import './styles/components/modals/modal-common.css';
-@import './styles/components/modals/context-menu.css';
 @import './styles/components/modals/word-quick-menu.css';
-@import './styles/components/modals/grammar-tooltip.css';
 
 /* Import page styles */
 @import './styles/pages/login-register.css';

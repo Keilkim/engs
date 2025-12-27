@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getSource, deleteSource } from '../../services/source';
 import { getAnnotations, getVocabulary, deleteAnnotation } from '../../services/annotation';
-import ContextMenu from '../../components/modals/ContextMenu';
 import WordQuickMenu from '../../components/modals/WordQuickMenu';
 import { TranslatableText } from '../../components/translatable';
 import { PenModeToggle, ColorPalette, PenCanvas, usePenStrokes } from '../../components/pen-mode';
@@ -22,7 +21,6 @@ export default function Viewer() {
   const contentRef = useRef(null);
   const imageContainerRef = useRef(null);
   const zoomWrapperRef = useRef(null); // For accurate coordinate calculation when zoomed
-  const mouseDownPos = useRef(null);
   const touchStartRef = useRef(null); // For swipe detection
   const [isShaking, setIsShaking] = useState(false); // Boundary shake effect
   const [zoomScale, setZoomScale] = useState(1); // Pinch zoom scale
@@ -66,7 +64,7 @@ export default function Viewer() {
   // Note: Drawing mode removed - using tap/long-press for word selection instead
 
   // Centralized modal state - only one modal open at a time
-  // Types: 'contextMenu' | 'wordMenu' | 'vocabDeleteConfirm' | null
+  // Types: 'wordMenu' | 'vocabDeleteConfirm' | null
   const [activeModal, setActiveModal] = useState({
     type: null,
     data: {},
@@ -110,7 +108,6 @@ export default function Viewer() {
     findAnnotationAtPoint,
   } = useAnnotationHelpers(annotations, currentPage);
 
-  const [selectedWords, setSelectedWords] = useState([]); // Words selected by brush
   const wordTapTimer = useRef(null); // For long-press detection
   const wordTapStart = useRef(null); // { x, y, time, word, bbox }
   const menuJustOpened = useRef(false); // Prevent menu from closing immediately
@@ -297,10 +294,6 @@ export default function Viewer() {
     e.stopPropagation();
     // Pen mode disabled - no action needed
   }
-
-  const handleMouseDown = useCallback((e) => {
-    mouseDownPos.current = { x: e.clientX, y: e.clientY };
-  }, []);
 
   // Get coordinates from mouse or touch event
   const getEventCoords = useCallback((e) => {
@@ -734,54 +727,6 @@ export default function Viewer() {
     return points.map((p, i) =>
       `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
     ).join(' ');
-  }
-
-  const handleTextSelection = useCallback((e) => {
-    // Don't show context menu if clicking on a highlight
-    if (e.target.classList?.contains('highlight')) {
-      return;
-    }
-
-    // Check if mouse actually moved (dragged) - minimum 10px
-    if (mouseDownPos.current) {
-      const dx = Math.abs(e.clientX - mouseDownPos.current.x);
-      const dy = Math.abs(e.clientY - mouseDownPos.current.y);
-      if (dx < 10 && dy < 10) {
-        mouseDownPos.current = null;
-        return; // Just a click, not a drag
-      }
-    }
-    mouseDownPos.current = null;
-
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) {
-      return;
-    }
-
-    const selectedText = selection.toString().trim();
-
-    if (selectedText && selectedText.length > 0) {
-      const range = selection.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-
-      openModal('contextMenu', {
-        position: {
-          x: rect.left + window.scrollX,
-          y: rect.bottom + window.scrollY + 10,
-        },
-        selectedText,
-      });
-    }
-  }, [openModal]);
-
-  function closeContextMenu() {
-    closeModal();
-    setSelectedWords([]);
-    window.getSelection()?.removeAllRanges();
-  }
-
-  function handleAnnotationCreated() {
-    refreshAnnotations(); // Don't reset page position
   }
 
   // Get the display image (screenshot or original)
@@ -1915,12 +1860,7 @@ export default function Viewer() {
         </div>
       </header>
 
-      <main
-        className="viewer-content"
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleTextSelection}
-        onTouchEnd={handleTextSelection}
-      >
+      <main className="viewer-content">
         {renderContent()}
 
         {/* Memo markers displayed as floating indicators */}
@@ -1937,20 +1877,6 @@ export default function Viewer() {
             </div>
           ))}
       </main>
-
-      <ContextMenu
-        isOpen={activeModal.type === 'contextMenu'}
-        position={activeModal.data.position || { x: 0, y: 0 }}
-        selectedText={activeModal.data.selectedText || ''}
-        selectionRect={activeModal.data.selectionRect || null}
-        selectedWords={selectedWords}
-        sourceId={id}
-        pages={getPages()}
-        zoomScale={zoomScale}
-        onClose={closeContextMenu}
-        onAnnotationCreated={handleAnnotationCreated}
-      />
-
 
       {/* Pen Mode Toggle Button - temporarily hidden */}
       {/* <PenModeToggle
