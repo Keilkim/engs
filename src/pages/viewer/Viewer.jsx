@@ -36,6 +36,7 @@ export default function Viewer() {
   // Minimap navigation (from custom hook)
   const {
     viewportPosition,
+    setViewportPosition,
     minimapRef,
     handleMinimapMouseDown,
     handleMinimapMouseMove,

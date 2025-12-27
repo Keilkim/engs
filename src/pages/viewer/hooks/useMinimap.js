@@ -99,6 +99,7 @@ export function useMinimap(scrollContainerRef) {
 
   return {
     viewportPosition,
+    setViewportPosition,
     minimapRef,
     handleMinimapClick,
     handleMinimapMouseDown,
