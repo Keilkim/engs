@@ -1303,8 +1303,8 @@ export default function Viewer() {
                       }
                     });
                   })()}
-                  {/* Active selection highlight - 줄별 하이라이트 */}
-                  {activeModal.type === 'wordMenu' && activeModal.data.sentenceWords && activeModal.data.sentenceWords.length > 0 ? (
+                  {/* Active selection highlight - 줄별 하이라이트 (문법 모드에서는 표시 안함) */}
+                  {activeModal.type === 'wordMenu' && !activeModal.data.isGrammarMode && activeModal.data.sentenceWords && activeModal.data.sentenceWords.length > 0 ? (
                     // 문장 모드: 줄별로 하이라이트 (처음~끝 단어)
                     (() => {
                       const words = activeModal.data.sentenceWords;
@@ -1344,7 +1344,7 @@ export default function Viewer() {
                         );
                       });
                     })()
-                  ) : activeModal.type === 'wordMenu' && activeModal.data.wordBbox && (
+                  ) : activeModal.type === 'wordMenu' && !activeModal.data.isGrammarMode && activeModal.data.wordBbox && (
                     // 단어 모드: 단일 하이라이트
                     <rect
                       x={`${activeModal.data.wordBbox.x}%`}
@@ -1484,8 +1484,8 @@ export default function Viewer() {
                       return null;
                     }
                   })}
-                  {/* Active selection highlight */}
-                  {activeModal.type === 'wordMenu' && activeModal.data.wordBbox && (
+                  {/* Active selection highlight (문법 모드에서는 표시 안함) */}
+                  {activeModal.type === 'wordMenu' && !activeModal.data.isGrammarMode && activeModal.data.wordBbox && (
                     <rect
                       x={`${activeModal.data.wordBbox.x}%`}
                       y={`${activeModal.data.wordBbox.y}%`}
@@ -1625,8 +1625,8 @@ export default function Viewer() {
                       }
                     });
                   })()}
-                  {/* Active selection highlight - 줄별 하이라이트 */}
-                  {activeModal.type === 'wordMenu' && activeModal.data.sentenceWords && activeModal.data.sentenceWords.length > 0 ? (
+                  {/* Active selection highlight - 줄별 하이라이트 (문법 모드에서는 표시 안함) */}
+                  {activeModal.type === 'wordMenu' && !activeModal.data.isGrammarMode && activeModal.data.sentenceWords && activeModal.data.sentenceWords.length > 0 ? (
                     (() => {
                       const words = activeModal.data.sentenceWords;
                       const lines = [];
@@ -1664,7 +1664,7 @@ export default function Viewer() {
                         );
                       });
                     })()
-                  ) : activeModal.type === 'wordMenu' && activeModal.data.wordBbox && (
+                  ) : activeModal.type === 'wordMenu' && !activeModal.data.isGrammarMode && activeModal.data.wordBbox && (
                     <rect
                       x={`${activeModal.data.wordBbox.x}%`}
                       y={`${activeModal.data.wordBbox.y}%`}
