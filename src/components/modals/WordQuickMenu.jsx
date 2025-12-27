@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { speakText, stopSpeaking as stopTTS } from '../../utils/tts';
 import { cleanDisplayText } from '../../utils/textUtils';
-import { calculateModalPosition, getArrowClass } from '../../utils/positioning';
+import { calculateModalPosition, getArrowClass, getMobileSafeAreaBottom } from '../../utils/positioning';
 import { lookupWord, analyzeGrammarPatterns } from '../../services/ai';
 import { createAnnotation } from '../../services/annotation';
 
@@ -30,6 +30,7 @@ export default function WordQuickMenu({
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState('');
   const [dynamicPosition, setDynamicPosition] = useState(null);
+  const [positionReady, setPositionReady] = useState(false); // 위치 계산 완료 전까지 숨김
   const rafRef = useRef(null);
   const modalRef = useRef(null);
   const touchStartRef = useRef({ time: 0, x: 0, y: 0 });
@@ -42,12 +43,17 @@ export default function WordQuickMenu({
     setLoading(false);
     setSpeaking(false);
     setError('');
+    setPositionReady(false);
   }, []);
 
   // 위치 업데이트 함수 (wordBbox % 기반으로 뷰포트 좌표 계산)
   const updatePosition = useCallback(() => {
     if (!wordBbox || !containerRef?.current) {
       setDynamicPosition(null);
+      // wordBbox 없으면 초기 position 사용 → 바로 ready
+      if (position) {
+        setPositionReady(true);
+      }
       return;
     }
 
@@ -64,13 +70,20 @@ export default function WordQuickMenu({
       : containerRect.top + (topY * containerRect.height / 100) - 12;
 
     setDynamicPosition({ x: newX, y: newY });
-  }, [wordBbox, containerRef, placement]);
+    setPositionReady(true);
+  }, [wordBbox, containerRef, placement, position]);
 
   // zoomScale/panOffset 변경 시 위치 재계산
   useEffect(() => {
-    if (!isOpen || !wordBbox || !containerRef?.current) return;
-    updatePosition();
-  }, [isOpen, wordBbox, containerRef, updatePosition, zoomScale, panOffset]);
+    if (!isOpen) return;
+    // wordBbox가 있으면 동적 위치 계산
+    if (wordBbox && containerRef?.current) {
+      updatePosition();
+    } else if (position) {
+      // wordBbox 없고 초기 position만 있으면 바로 ready
+      setPositionReady(true);
+    }
+  }, [isOpen, wordBbox, containerRef, updatePosition, zoomScale, panOffset, position]);
 
   // 스크롤/리사이즈 시 위치 업데이트
   useEffect(() => {
@@ -381,6 +394,7 @@ export default function WordQuickMenu({
   // 위치 계산 (dynamicPosition 우선, 없으면 초기 position 사용)
   const vw = window.innerWidth;
   const vh = window.innerHeight;
+  const safeAreaBottom = getMobileSafeAreaBottom();
   const menuWidth = isGrammarMode ? Math.min(340, vw - 24) : Math.min(300, vw - 24);
   const effectivePosition = dynamicPosition || position;
 
@@ -391,6 +405,9 @@ export default function WordQuickMenu({
     placement,
   });
 
+  // 모바일에서 하단 주소창을 고려한 최대 높이 계산
+  const maxHeight = Math.min(vh * 0.6, vh - safeAreaBottom - 100);
+
   const menuStyle = {
     position: 'fixed',
     left,
@@ -398,8 +415,10 @@ export default function WordQuickMenu({
     transform,
     zIndex: 1000,
     width: menuWidth,
-    maxHeight: vh * 0.6,
+    maxHeight,
     '--arrow-left': `${arrowLeft}%`,
+    opacity: positionReady ? 1 : 0,
+    visibility: positionReady ? 'visible' : 'hidden',
   };
 
   const arrowClass = getArrowClass(placement);

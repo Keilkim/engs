@@ -5,6 +5,10 @@
  */
 
 :root {
+  /* ========== Safe Area Insets (for mobile browsers) ========== */
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --mobile-bottom-bar-height: 50px; /* Extra padding for mobile browser address bars */
+
   /* ========== Colors ========== */
 
   /* Signature - Titanium accent */

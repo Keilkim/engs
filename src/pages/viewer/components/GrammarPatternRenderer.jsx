@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { getMobileSafeAreaBottom } from '../../../utils/positioning';
 
 /**
  * Renders grammar pattern underlines with long-press interaction
@@ -30,16 +31,30 @@ export default function GrammarPatternRenderer({
     const currentRect = imageContainerRef?.current?.getBoundingClientRect();
     if (!currentRect) return;
 
+    const firstLine = lines && lines.length > 0 ? lines[0] : bounds;
     const lastLine = lines && lines.length > 0 ? lines[lines.length - 1] : bounds;
     const posX = currentRect.left + centerX * currentRect.width / 100;
-    const posY = currentRect.top + (lastLine.y + lastLine.height) * currentRect.height / 100 + 15;
+
+    // 모바일 하단 주소창을 고려한 placement 결정
+    const viewportHeight = window.innerHeight;
+    const safeAreaBottom = getMobileSafeAreaBottom();
+    const markerTopPx = currentRect.top + firstLine.y * currentRect.height / 100;
+    const markerBottomPx = currentRect.top + (lastLine.y + lastLine.height) * currentRect.height / 100;
+    const spaceAbove = markerTopPx;
+    const spaceBelow = viewportHeight - markerBottomPx - safeAreaBottom;
+    const placement = spaceBelow >= 200 || spaceBelow > spaceAbove ? 'below' : 'above';
+
+    const posY = placement === 'below'
+      ? Math.min(markerBottomPx + 15, viewportHeight - safeAreaBottom - 50)
+      : Math.max(markerTopPx - 15, 50);
 
     openModal('wordMenu', {
       word: annotation.selected_text,
       existingAnnotation: annotation,
       isGrammarMode: true,
       position: { x: posX, y: posY },
-      placement: 'below',
+      placement,
+      wordBbox: bounds, // 동적 위치 업데이트를 위해 전달
     });
   }, [imageContainerRef, openModal, annotation, bounds, lines, centerX]);
 

@@ -4,6 +4,29 @@
  */
 
 /**
+ * Get the mobile safe area bottom inset
+ * Accounts for both CSS env(safe-area-inset-bottom) and mobile browser address bars
+ * @returns {number} safe area bottom in pixels
+ */
+export function getMobileSafeAreaBottom() {
+  // Check if it's a mobile device
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (!isMobile) return 0;
+
+  // Get CSS safe-area-inset-bottom value
+  const safeAreaBottom = parseInt(
+    getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-bottom') || '0',
+    10
+  ) || 0;
+
+  // Add extra padding for mobile browser address bars (typically 50-80px on most browsers)
+  // This ensures modals don't get hidden behind the mobile browser's bottom UI
+  const mobileBottomBarPadding = 50;
+
+  return Math.max(safeAreaBottom, mobileBottomBarPadding);
+}
+
+/**
  * Calculate modal position with screen boundary checks
  * @param {Object} options
  * @param {Object} options.position - { x, y } click/target position
@@ -25,6 +48,9 @@ export function calculateModalPosition({
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
+  // Get mobile safe area for bottom positioning
+  const safeAreaBottom = getMobileSafeAreaBottom();
+
   // Horizontal position (centered on position.x, clamped to screen)
   let left;
   if (centerHorizontal) {
@@ -39,9 +65,10 @@ export function calculateModalPosition({
   // Vertical clamping if height provided
   if (menuHeight > 0) {
     if (placement === 'below') {
-      // Ensure doesn't go below screen
-      if (top + menuHeight > vh - margin) {
-        top = vh - margin - menuHeight;
+      // Ensure doesn't go below screen (accounting for mobile safe area)
+      const maxBottom = vh - margin - safeAreaBottom;
+      if (top + menuHeight > maxBottom) {
+        top = maxBottom - menuHeight;
       }
     } else {
       // Ensure doesn't go above screen
@@ -52,6 +79,12 @@ export function calculateModalPosition({
     // Top boundary
     if (top < margin) {
       top = margin;
+    }
+  } else {
+    // Even without explicit height, clamp to safe area when near bottom
+    const maxTop = vh - margin - safeAreaBottom - 100; // Assume ~100px min height
+    if (placement === 'below' && top > maxTop) {
+      top = maxTop;
     }
   }
 
@@ -88,6 +121,9 @@ export function adjustPositionToViewport({ element, position, padding = 16 }) {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
+  // Get mobile safe area for bottom positioning
+  const safeAreaBottom = getMobileSafeAreaBottom();
+
   let x = position.x;
   let y = position.y;
 
@@ -103,9 +139,10 @@ export function adjustPositionToViewport({ element, position, padding = 16 }) {
     x = padding + rect.width / 2;
   }
 
-  // Bottom boundary
-  if (y + rect.height > vh - padding) {
-    y = vh - padding - rect.height;
+  // Bottom boundary (accounting for mobile safe area)
+  const maxBottom = vh - padding - safeAreaBottom;
+  if (y + rect.height > maxBottom) {
+    y = maxBottom - rect.height;
   }
 
   // Top boundary

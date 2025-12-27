@@ -7,6 +7,7 @@ import { TranslatableText } from '../../components/translatable';
 import { PenModeToggle, ColorPalette, PenCanvas, usePenStrokes } from '../../components/pen-mode';
 import { useOcrWords, useSentenceFinder, useMinimap, useAnnotationHelpers } from './hooks';
 import { GrammarPatternRenderer } from './components';
+import { getMobileSafeAreaBottom } from '../../utils/positioning';
 
 export default function Viewer() {
   const { id } = useParams();
@@ -53,6 +54,7 @@ export default function Viewer() {
 
   // Mouse click tracking for desktop tap detection
   const mouseClickStart = useRef(null); // { x, y, time }
+  const mouseTimer = useRef(null); // Long-press timer for desktop
 
   // Pen mode state
   const [penModeActive, setPenModeActive] = useState(false);
@@ -108,12 +110,16 @@ export default function Viewer() {
     findAnnotationAtPoint,
   } = useAnnotationHelpers(annotations, currentPage);
 
-  const wordTapTimer = useRef(null); // For long-press detection
-  const wordTapStart = useRef(null); // { x, y, time, word, bbox }
-  const longPressTriggered = useRef(false); // Prevent short tap after long press
   const menuJustOpened = useRef(false); // Prevent menu from closing immediately
-  const handleWordTapRef = useRef(null); // Stable reference to handleWordTap
-  const activeModalRef = useRef(activeModal); // Track modal state for touch handlers
+  // 단순화된 터치 상태 (하나의 ref로 통합)
+  const touchState = useRef({
+    startTime: 0,
+    startX: 0,
+    startY: 0,
+    moved: false,
+    actionExecuted: false,  // 핵심: 액션이 이미 실행되었는지
+    timer: null,
+  });
 
   // Delete vocabulary annotation
   async function handleDeleteVocabAnnotation() {
@@ -266,8 +272,10 @@ export default function Viewer() {
 
     if (markerRect) {
       const viewportHeight = window.innerHeight;
+      const safeAreaBottom = getMobileSafeAreaBottom();
       const spaceAbove = markerRect.top;
-      const spaceBelow = viewportHeight - markerRect.bottom;
+      // 모바일 하단 주소창 영역을 고려한 실제 사용 가능 공간
+      const spaceBelow = viewportHeight - markerRect.bottom - safeAreaBottom;
 
       placement = spaceBelow >= 200 || spaceBelow > spaceAbove ? 'below' : 'above';
 
@@ -379,16 +387,17 @@ export default function Viewer() {
           const markerTopPx = rect.top + firstLine.y * rect.height / 100;
           const markerBottomPx = rect.top + (lastLine.y + lastLine.height) * rect.height / 100;
 
-          // 위/아래 공간 비교하여 placement 결정
+          // 위/아래 공간 비교하여 placement 결정 (모바일 하단 주소창 고려)
           const viewportHeight = window.innerHeight;
+          const safeAreaBottom = getMobileSafeAreaBottom();
           const spaceAbove = markerTopPx;
-          const spaceBelow = viewportHeight - markerBottomPx;
+          const spaceBelow = viewportHeight - markerBottomPx - safeAreaBottom;
           const placement = spaceBelow >= 200 || spaceBelow > spaceAbove ? 'below' : 'above';
 
           // 모달 위치: 클릭한 X 위치 사용 (가장 정확), Y는 마킹 위/아래
           const posX = clientX;
           const posY = placement === 'below'
-            ? Math.min(markerBottomPx + 12, viewportHeight - 50)
+            ? Math.min(markerBottomPx + 12, viewportHeight - safeAreaBottom - 50)
             : Math.max(markerTopPx - 12, 50);
 
           openModal('wordMenu', {
@@ -397,6 +406,7 @@ export default function Viewer() {
             isGrammarMode: true,
             position: { x: posX, y: posY },
             placement,
+            wordBbox: bounds, // 동적 위치 업데이트용
           });
           return;
         } catch {
@@ -430,16 +440,17 @@ export default function Viewer() {
         const markerTopPx = rect.top + (minTopY * rect.height / 100);
         const markerBottomPx = rect.top + (maxBottomY * rect.height / 100);
 
-        // 위/아래 공간 비교하여 placement 결정
+        // 위/아래 공간 비교하여 placement 결정 (모바일 하단 주소창 고려)
         const viewportHeight = window.innerHeight;
+        const safeAreaBottom = getMobileSafeAreaBottom();
         const spaceAbove = markerTopPx;
-        const spaceBelow = viewportHeight - markerBottomPx;
+        const spaceBelow = viewportHeight - markerBottomPx - safeAreaBottom;
         const placement = spaceBelow >= 200 || spaceBelow > spaceAbove ? 'below' : 'above';
 
         // 모달 위치: 클릭한 X 위치 사용 (가장 정확), Y는 마킹 위/아래
         const posX = clientX;
         const posY = placement === 'below'
-          ? Math.min(markerBottomPx + 12, viewportHeight - 50)
+          ? Math.min(markerBottomPx + 12, viewportHeight - safeAreaBottom - 50)
           : Math.max(markerTopPx - 12, 50);
 
         openModal('wordMenu', {
@@ -465,16 +476,17 @@ export default function Viewer() {
     const markerTopPx = rect.top + (wordTopY * rect.height / 100);
     const markerBottomPx = rect.top + (wordBottomY * rect.height / 100);
 
-    // 위/아래 공간 비교하여 placement 결정
+    // 위/아래 공간 비교하여 placement 결정 (모바일 하단 주소창 고려)
     const viewportHeight = window.innerHeight;
+    const safeAreaBottom2 = getMobileSafeAreaBottom();
     const spaceAbove = markerTopPx;
-    const spaceBelow = viewportHeight - markerBottomPx;
+    const spaceBelow = viewportHeight - markerBottomPx - safeAreaBottom2;
     const placement = spaceBelow >= 200 || spaceBelow > spaceAbove ? 'below' : 'above';
 
     // 모달 위치: 클릭한 X 위치 사용 (가장 정확), Y는 마킹 위/아래
     const posX = clientX;
     const posY = placement === 'below'
-      ? Math.min(markerBottomPx + 12, viewportHeight - 50)
+      ? Math.min(markerBottomPx + 12, viewportHeight - safeAreaBottom2 - 50)
       : Math.max(markerTopPx - 12, 50);
 
     openModal('wordMenu', {
@@ -486,16 +498,6 @@ export default function Viewer() {
       isGrammarMode: false,
     });
   }, [penModeActive, findWordAtPoint, findAnnotationAtPoint, findSentenceFromWord, openModal, activeModal, closeModal]);
-
-  // Keep handleWordTapRef updated (prevents touch handler re-registration on modal state change)
-  useEffect(() => {
-    handleWordTapRef.current = handleWordTap;
-  }, [handleWordTap]);
-
-  // Keep activeModalRef updated (for touch handlers to check modal state)
-  useEffect(() => {
-    activeModalRef.current = activeModal;
-  }, [activeModal]);
 
   // Close word menu (with protection against immediate close)
   const closeWordMenu = useCallback((force = false) => {
@@ -618,11 +620,11 @@ export default function Viewer() {
       };
 
       // Start long-press timer for grammar mode
-      wordTapTimer.current = setTimeout(() => {
+      mouseTimer.current = setTimeout(() => {
         if (mouseClickStart.current && !mouseClickStart.current.moved) {
           const clickData = mouseClickStart.current;
           mouseClickStart.current = null; // 먼저 null로 설정하여 중복 호출 방지
-          wordTapTimer.current = null; // 타이머도 클리어
+          mouseTimer.current = null; // 타이머도 클리어
           handleWordTap(clickData.x, clickData.y, true);
         }
       }, 500);
@@ -682,9 +684,9 @@ export default function Viewer() {
 
       if (deltaX > 10 || deltaY > 10) {
         mouseClickStart.current.moved = true;
-        if (wordTapTimer.current) {
-          clearTimeout(wordTapTimer.current);
-          wordTapTimer.current = null;
+        if (mouseTimer.current) {
+          clearTimeout(mouseTimer.current);
+          mouseTimer.current = null;
         }
       }
     }
@@ -709,9 +711,9 @@ export default function Viewer() {
     twoFingerPanRef.current = null;
 
     // Clear long-press timer
-    if (wordTapTimer.current) {
-      clearTimeout(wordTapTimer.current);
-      wordTapTimer.current = null;
+    if (mouseTimer.current) {
+      clearTimeout(mouseTimer.current);
+      mouseTimer.current = null;
     }
 
     // Mouse click detection (desktop)
@@ -915,29 +917,32 @@ export default function Viewer() {
   // Note: Boundary shake effect removed for single-page
   // Native scrolling with touch-action: pan-y handles overscroll feedback (rubber-band on iOS)
 
-  // Register touch events for tap/long-press word selection
-  // - 탭: 단어 선택 (vocabulary)
-  // - 롱프레스 (500ms): 문법 분석 (grammar)
+  // 터치 핸들링 - 단순화된 상태 머신
+  // - 짧은 탭 (<500ms): 단어 검색
+  // - 롱프레스 (>=500ms): 문법 검색
   // - 2손가락: pinch zoom + pan
-  // - 스와이프: 페이지 이동 (multi-page)
+  // - 스와이프: 페이지 이동
   useEffect(() => {
     const container = imageContainerRef.current;
     if (!container) return;
 
     const pages = getPages();
     const isMultiPage = pages && pages.length > 1;
-    const LONG_PRESS_DURATION = 500; // ms
-    const TAP_MOVE_THRESHOLD = 10; // px - 이 이상 움직이면 탭이 아님
+    const LONG_PRESS_DURATION = 500;
+    const TAP_MOVE_THRESHOLD = 10;
+    const DOUBLE_TAP_DELAY = 300;
+    const DOUBLE_TAP_DISTANCE = 50;
 
     const handleTouchStart = (e) => {
-      // 2손가락(pinch zoom)은 항상 처리
+      const state = touchState.current;
+
+      // 2손가락 → pinch zoom
       if (e.touches.length >= 2) {
         e.preventDefault();
-        if (wordTapTimer.current) {
-          clearTimeout(wordTapTimer.current);
-          wordTapTimer.current = null;
+        if (state.timer) {
+          clearTimeout(state.timer);
+          state.timer = null;
         }
-        wordTapStart.current = null;
         singleFingerPanRef.current = null;
         handleImagePointerDown(e);
         return;
@@ -945,7 +950,7 @@ export default function Viewer() {
 
       const touch = e.touches[0];
 
-      // 확대 상태면 한 손가락 패닝 준비
+      // 확대 상태면 패닝 준비
       if (zoomScale > 1) {
         singleFingerPanRef.current = {
           startX: touch.clientX,
@@ -955,35 +960,33 @@ export default function Viewer() {
         };
       }
 
-      // 모달이 열려있으면 탭/롱프레스 감지 건너뛰기
-      if (activeModalRef.current.type === 'wordMenu') {
+      // 모달 열려있으면 탭 감지 안함
+      if (activeModal.type === 'wordMenu') {
         return;
       }
 
-      // 1손가락: 탭/롱프레스 감지 시작
-      longPressTriggered.current = false; // 리셋
-      wordTapStart.current = {
-        x: touch.clientX,
-        y: touch.clientY,
-        time: Date.now(),
-        moved: false,
-      };
+      // 이전 타이머 정리 & 새 터치 시작
+      if (state.timer) clearTimeout(state.timer);
+      state.startTime = Date.now();
+      state.startX = touch.clientX;
+      state.startY = touch.clientY;
+      state.moved = false;
+      state.actionExecuted = false;
 
-      // 롱프레스 타이머 시작
-      wordTapTimer.current = setTimeout(() => {
-        if (wordTapStart.current && !wordTapStart.current.moved) {
-          // 롱프레스 성공 - grammar mode
-          longPressTriggered.current = true; // 롱프레스 트리거됨
-          const tapData = wordTapStart.current;
-          wordTapStart.current = null; // 먼저 null로 설정하여 중복 호출 방지
-          wordTapTimer.current = null; // 타이머도 클리어
-          handleWordTapRef.current?.(tapData.x, tapData.y, true);
+      // 롱프레스 타이머 (500ms)
+      state.timer = setTimeout(() => {
+        if (!state.moved) {
+          state.actionExecuted = true;  // 먼저 플래그!
+          state.timer = null;
+          handleWordTap(state.startX, state.startY, true);
         }
       }, LONG_PRESS_DURATION);
     };
 
     const handleTouchMove = (e) => {
-      // 2손가락(pinch zoom)
+      const state = touchState.current;
+
+      // 2손가락 → pinch zoom
       if (e.touches.length >= 2) {
         e.preventDefault();
         singleFingerPanRef.current = null;
@@ -993,133 +996,108 @@ export default function Viewer() {
 
       const touch = e.touches[0];
 
-      // 확대 상태에서 한 손가락 패닝 - moved 체크 전에 먼저 패닝 처리
+      // 확대 상태 패닝
       if (zoomScale > 1 && singleFingerPanRef.current) {
         const deltaX = touch.clientX - singleFingerPanRef.current.startX;
         const deltaY = touch.clientY - singleFingerPanRef.current.startY;
 
-        // 조금이라도 움직이면 패닝 시작 (탭/롱프레스 취소)
         if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
           e.preventDefault();
-
-          // 탭/롱프레스 취소
-          if (wordTapStart.current) {
-            wordTapStart.current.moved = true;
+          state.moved = true;
+          if (state.timer) {
+            clearTimeout(state.timer);
+            state.timer = null;
           }
-          if (wordTapTimer.current) {
-            clearTimeout(wordTapTimer.current);
-            wordTapTimer.current = null;
-          }
-
-          const newOffset = clampPanOffset(
+          setPanOffset(clampPanOffset(
             singleFingerPanRef.current.startPanX + deltaX,
             singleFingerPanRef.current.startPanY + deltaY,
             zoomScale
-          );
-          setPanOffset(newOffset);
+          ));
           return;
         }
       }
 
-      // 탭 이동 감지 (확대 안된 상태에서)
-      if (wordTapStart.current) {
-        const deltaX = Math.abs(touch.clientX - wordTapStart.current.x);
-        const deltaY = Math.abs(touch.clientY - wordTapStart.current.y);
-
-        if (deltaX > TAP_MOVE_THRESHOLD || deltaY > TAP_MOVE_THRESHOLD) {
-          // 너무 많이 움직임 - 탭/롱프레스 취소
-          wordTapStart.current.moved = true;
-          if (wordTapTimer.current) {
-            clearTimeout(wordTapTimer.current);
-            wordTapTimer.current = null;
-          }
+      // 움직임 감지 → 탭/롱프레스 취소
+      const deltaX = Math.abs(touch.clientX - state.startX);
+      const deltaY = Math.abs(touch.clientY - state.startY);
+      if (deltaX > TAP_MOVE_THRESHOLD || deltaY > TAP_MOVE_THRESHOLD) {
+        state.moved = true;
+        if (state.timer) {
+          clearTimeout(state.timer);
+          state.timer = null;
         }
       }
     };
 
     const handleTouchEnd = (e) => {
-      // 롱프레스 타이머 클리어
-      if (wordTapTimer.current) {
-        clearTimeout(wordTapTimer.current);
-        wordTapTimer.current = null;
-      }
+      const state = touchState.current;
 
-      // 모달이 열려있으면 모든 탭 처리 건너뛰기
-      if (activeModalRef.current.type === 'wordMenu') {
-        wordTapStart.current = null;
-        singleFingerPanRef.current = null;
-        longPressTriggered.current = false;
-        return;
-      }
-
-      // 롱프레스가 이미 트리거됨 - 모든 추가 처리 건너뛰기
-      if (longPressTriggered.current) {
-        wordTapStart.current = null;
-        singleFingerPanRef.current = null;
-        return;
+      // 타이머 취소
+      if (state.timer) {
+        clearTimeout(state.timer);
+        state.timer = null;
       }
 
       // 2손가락 pinch 종료
       if (pinchStartRef.current || twoFingerPanRef.current) {
         pinchStartRef.current = null;
         twoFingerPanRef.current = null;
-        wordTapStart.current = null;
         return;
       }
 
-      // 탭 감지
-      if (wordTapStart.current && !wordTapStart.current.moved) {
-        const tapData = wordTapStart.current;
-        wordTapStart.current = null;
+      // 이미 롱프레스 실행됨 → 무시
+      if (state.actionExecuted) {
+        e.preventDefault(); // synthetic click 차단
+        singleFingerPanRef.current = null;
+        return;
+      }
 
-        const deltaTime = Date.now() - tapData.time;
+      // 움직임 없이 짧은 탭 (< 500ms)
+      if (!state.moved) {
+        const duration = Date.now() - state.startTime;
 
-        // 롱프레스가 아닌 짧은 탭 (500ms 이전에 손 뗌)
-        if (deltaTime < 500) {
+        if (duration < LONG_PRESS_DURATION) {
           const now = Date.now();
-          const DOUBLE_TAP_DELAY = 300; // ms
-          const DOUBLE_TAP_DISTANCE = 50; // px
 
           // 더블탭 감지
           if (lastTapRef.current) {
-            const timeSinceLastTap = now - lastTapRef.current.time;
-            const distX = Math.abs(tapData.x - lastTapRef.current.x);
-            const distY = Math.abs(tapData.y - lastTapRef.current.y);
+            const timeSince = now - lastTapRef.current.time;
+            const distX = Math.abs(state.startX - lastTapRef.current.x);
+            const distY = Math.abs(state.startY - lastTapRef.current.y);
 
-            if (timeSinceLastTap < DOUBLE_TAP_DELAY && distX < DOUBLE_TAP_DISTANCE && distY < DOUBLE_TAP_DISTANCE) {
-              // 더블탭! 줌 리셋
+            if (timeSince < DOUBLE_TAP_DELAY && distX < DOUBLE_TAP_DISTANCE && distY < DOUBLE_TAP_DISTANCE) {
               lastTapRef.current = null;
               setZoomScale(1);
               setPanOffset({ x: 0, y: 0 });
+              singleFingerPanRef.current = null;
               return;
             }
           }
 
-          // 첫 번째 탭 기록
-          lastTapRef.current = { time: now, x: tapData.x, y: tapData.y };
+          // 첫 탭 기록 & 딜레이 후 단일 탭 처리
+          lastTapRef.current = { time: now, x: state.startX, y: state.startY };
+          const tapX = state.startX;
+          const tapY = state.startY;
 
-          // 짧은 딜레이 후 단일 탭 처리 (더블탭 대기)
           setTimeout(() => {
             if (lastTapRef.current && Date.now() - lastTapRef.current.time >= DOUBLE_TAP_DELAY) {
-              // 더블탭 아님 - 단일 탭 처리
-              handleWordTapRef.current?.(tapData.x, tapData.y, false);
+              handleWordTap(tapX, tapY, false);
               lastTapRef.current = null;
             }
           }, DOUBLE_TAP_DELAY);
+
+          singleFingerPanRef.current = null;
+          return;
         }
-        // 롱프레스는 이미 타이머에서 처리됨
-        return;
       }
 
-      // 스와이프 감지 (움직임이 있었던 경우, 확대 안된 상태에서만)
-      if (wordTapStart.current?.moved && isMultiPage && zoomScale <= 1) {
+      // 스와이프 감지 (움직임 있고, 확대 안된 상태)
+      if (state.moved && isMultiPage && zoomScale <= 1) {
         const touch = e.changedTouches?.[0];
-        if (touch && wordTapStart.current) {
-          const deltaY = touch.clientY - wordTapStart.current.y;
-          const deltaTime = Date.now() - wordTapStart.current.time;
-          const isQuickSwipe = deltaTime < 300 && Math.abs(deltaY) > 50;
-
-          if (isQuickSwipe) {
+        if (touch) {
+          const deltaY = touch.clientY - state.startY;
+          const deltaTime = Date.now() - state.startTime;
+          if (deltaTime < 300 && Math.abs(deltaY) > 50) {
             if (deltaY > 0 && currentPage > 0) {
               setCurrentPage(currentPage - 1);
             } else if (deltaY < 0 && currentPage < pages.length - 1) {
@@ -1131,7 +1109,6 @@ export default function Viewer() {
         }
       }
 
-      wordTapStart.current = null;
       singleFingerPanRef.current = null;
     };
 
@@ -1143,11 +1120,11 @@ export default function Viewer() {
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
-      if (wordTapTimer.current) {
-        clearTimeout(wordTapTimer.current);
+      if (touchState.current.timer) {
+        clearTimeout(touchState.current.timer);
       }
     };
-  }, [source, currentPage, handleImagePointerDown, handleImagePointerMove, triggerShake, zoomScale, panOffset, clampPanOffset]);
+  }, [source, currentPage, handleImagePointerDown, handleImagePointerMove, triggerShake, zoomScale, panOffset, clampPanOffset, activeModal, handleWordTap]);
 
   // Render vocabulary markers (shared helper)
   function renderVocabMarkers(vocabAnnotations) {
