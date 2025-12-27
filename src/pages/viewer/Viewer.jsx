@@ -600,17 +600,24 @@ export default function Viewer() {
       const originX = ((centerX - rect.left) / rect.width) * 100;
       const originY = ((centerY - rect.top) / rect.height) * 100;
 
+      // Compensate panOffset for origin change to prevent jump
+      const deltaOriginX = (originX - zoomOrigin.x) * rect.width / 100;
+      const deltaOriginY = (originY - zoomOrigin.y) * rect.height / 100;
+      const compensatedPanX = panOffset.x + deltaOriginX * (zoomScale - 1);
+      const compensatedPanY = panOffset.y + deltaOriginY * (zoomScale - 1);
+
       setZoomOrigin({ x: originX, y: originY });
+      setPanOffset({ x: compensatedPanX, y: compensatedPanY });
       pinchStartRef.current = {
         distance: getTouchDistance(e.touches),
         scale: zoomScale
       };
-      // Also track for pan detection
+      // Also track for pan detection (use compensated values)
       twoFingerPanRef.current = {
         centerX,
         centerY,
-        startPanX: panOffset.x,
-        startPanY: panOffset.y,
+        startPanX: compensatedPanX,
+        startPanY: compensatedPanY,
       };
       return;
     }
@@ -635,7 +642,7 @@ export default function Viewer() {
         }
       }, 500);
     }
-  }, [getEventCoords, getTouchDistance, zoomScale, panOffset, handleWordTap]);
+  }, [getEventCoords, getTouchDistance, zoomScale, zoomOrigin, panOffset, handleWordTap]);
 
   const handleImagePointerMove = useCallback((e) => {
     // Desktop panning (middle button or spacebar + drag)
@@ -1164,6 +1171,65 @@ export default function Viewer() {
     });
   }
 
+  // Render selection highlight (shared helper) - 줄별 하이라이트
+  function renderSelectionHighlight() {
+    if (activeModal.type !== 'wordMenu') return null;
+
+    // sentenceWords가 있으면 줄별로 그룹화하여 하이라이트
+    if (activeModal.data.sentenceWords && activeModal.data.sentenceWords.length > 0) {
+      const words = activeModal.data.sentenceWords;
+      const lines = [];
+      let currentLine = [words[0]];
+
+      for (let i = 1; i < words.length; i++) {
+        const prev = currentLine[currentLine.length - 1];
+        const curr = words[i];
+        const avgHeight = (prev.bbox.height + curr.bbox.height) / 2;
+
+        if (Math.abs(curr.bbox.y - prev.bbox.y) > avgHeight * 0.5) {
+          lines.push(currentLine);
+          currentLine = [curr];
+        } else {
+          currentLine.push(curr);
+        }
+      }
+      lines.push(currentLine);
+
+      return lines.map((lineWords, i) => {
+        const minX = Math.min(...lineWords.map(w => w.bbox.x));
+        const maxX = Math.max(...lineWords.map(w => w.bbox.x + w.bbox.width));
+        const minY = Math.min(...lineWords.map(w => w.bbox.y));
+        const maxY = Math.max(...lineWords.map(w => w.bbox.y + w.bbox.height));
+
+        return (
+          <rect
+            key={`sel-line-${i}`}
+            x={`${minX}%`}
+            y={`${minY}%`}
+            width={`${maxX - minX}%`}
+            height={`${maxY - minY}%`}
+            className="selection-highlight"
+          />
+        );
+      });
+    }
+
+    // wordBbox만 있으면 단일 하이라이트
+    if (activeModal.data.wordBbox) {
+      return (
+        <rect
+          x={`${activeModal.data.wordBbox.x}%`}
+          y={`${activeModal.data.wordBbox.y}%`}
+          width={`${activeModal.data.wordBbox.width}%`}
+          height={`${activeModal.data.wordBbox.height}%`}
+          className="selection-highlight"
+        />
+      );
+    }
+
+    return null;
+  }
+
   // Render captured screenshot viewer
   function renderContent() {
     try {
@@ -1313,57 +1379,8 @@ export default function Viewer() {
                       }
                     });
                   })()}
-                  {/* Active selection highlight - 줄별 하이라이트 */}
-                  {activeModal.type === 'wordMenu' && activeModal.data.sentenceWords && activeModal.data.sentenceWords.length > 0 ? (
-                    // 문장 모드: 줄별로 하이라이트 (처음~끝 단어)
-                    (() => {
-                      const words = activeModal.data.sentenceWords;
-                      const lines = [];
-                      let currentLine = [words[0]];
-
-                      for (let i = 1; i < words.length; i++) {
-                        const prev = currentLine[currentLine.length - 1];
-                        const curr = words[i];
-                        const avgHeight = (prev.bbox.height + curr.bbox.height) / 2;
-
-                        // Y 차이가 높이의 50% 이상이면 새 줄
-                        if (Math.abs(curr.bbox.y - prev.bbox.y) > avgHeight * 0.5) {
-                          lines.push(currentLine);
-                          currentLine = [curr];
-                        } else {
-                          currentLine.push(curr);
-                        }
-                      }
-                      lines.push(currentLine);
-
-                      return lines.map((lineWords, i) => {
-                        const minX = Math.min(...lineWords.map(w => w.bbox.x));
-                        const maxX = Math.max(...lineWords.map(w => w.bbox.x + w.bbox.width));
-                        const minY = Math.min(...lineWords.map(w => w.bbox.y));
-                        const maxY = Math.max(...lineWords.map(w => w.bbox.y + w.bbox.height));
-
-                        return (
-                          <rect
-                            key={`sel-line-${i}`}
-                            x={`${minX}%`}
-                            y={`${minY}%`}
-                            width={`${maxX - minX}%`}
-                            height={`${maxY - minY}%`}
-                            className="selection-highlight"
-                          />
-                        );
-                      });
-                    })()
-                  ) : activeModal.type === 'wordMenu' && activeModal.data.wordBbox && (
-                    // 단어 모드: 단일 하이라이트
-                    <rect
-                      x={`${activeModal.data.wordBbox.x}%`}
-                      y={`${activeModal.data.wordBbox.y}%`}
-                      width={`${activeModal.data.wordBbox.width}%`}
-                      height={`${activeModal.data.wordBbox.height}%`}
-                      className="selection-highlight"
-                    />
-                  )}
+                  {/* Active selection highlight */}
+                  {renderSelectionHighlight()}
                   {/* Grammar tooltip active - 문장 파란 배경 깜빡임 */}
                   {activeModal.type === 'grammarTooltip' && activeModal.data.annotation && (() => {
                     try {
@@ -1495,15 +1512,7 @@ export default function Viewer() {
                     }
                   })}
                   {/* Active selection highlight */}
-                  {activeModal.type === 'wordMenu' && activeModal.data.wordBbox && (
-                    <rect
-                      x={`${activeModal.data.wordBbox.x}%`}
-                      y={`${activeModal.data.wordBbox.y}%`}
-                      width={`${activeModal.data.wordBbox.width}%`}
-                      height={`${activeModal.data.wordBbox.height}%`}
-                      className="selection-highlight"
-                    />
-                  )}
+                  {renderSelectionHighlight()}
                 </svg>
 
                 {/* Pen Canvas for drawing */}
@@ -1635,54 +1644,8 @@ export default function Viewer() {
                       }
                     });
                   })()}
-                  {/* Active selection highlight - 줄별 하이라이트 */}
-                  {activeModal.type === 'wordMenu' && activeModal.data.sentenceWords && activeModal.data.sentenceWords.length > 0 ? (
-                    (() => {
-                      const words = activeModal.data.sentenceWords;
-                      const lines = [];
-                      let currentLine = [words[0]];
-
-                      for (let i = 1; i < words.length; i++) {
-                        const prev = currentLine[currentLine.length - 1];
-                        const curr = words[i];
-                        const avgHeight = (prev.bbox.height + curr.bbox.height) / 2;
-
-                        if (Math.abs(curr.bbox.y - prev.bbox.y) > avgHeight * 0.5) {
-                          lines.push(currentLine);
-                          currentLine = [curr];
-                        } else {
-                          currentLine.push(curr);
-                        }
-                      }
-                      lines.push(currentLine);
-
-                      return lines.map((lineWords, i) => {
-                        const minX = Math.min(...lineWords.map(w => w.bbox.x));
-                        const maxX = Math.max(...lineWords.map(w => w.bbox.x + w.bbox.width));
-                        const minY = Math.min(...lineWords.map(w => w.bbox.y));
-                        const maxY = Math.max(...lineWords.map(w => w.bbox.y + w.bbox.height));
-
-                        return (
-                          <rect
-                            key={`sel-line-${i}`}
-                            x={`${minX}%`}
-                            y={`${minY}%`}
-                            width={`${maxX - minX}%`}
-                            height={`${maxY - minY}%`}
-                            className="selection-highlight"
-                          />
-                        );
-                      });
-                    })()
-                  ) : activeModal.type === 'wordMenu' && activeModal.data.wordBbox && (
-                    <rect
-                      x={`${activeModal.data.wordBbox.x}%`}
-                      y={`${activeModal.data.wordBbox.y}%`}
-                      width={`${activeModal.data.wordBbox.width}%`}
-                      height={`${activeModal.data.wordBbox.height}%`}
-                      className="selection-highlight"
-                    />
-                  )}
+                  {/* Active selection highlight */}
+                  {renderSelectionHighlight()}
                   {/* Grammar tooltip active - 문장 파란 배경 깜빡임 */}
                   {activeModal.type === 'grammarTooltip' && activeModal.data.annotation && (() => {
                     try {
