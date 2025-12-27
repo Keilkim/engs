@@ -110,7 +110,10 @@ export default function Viewer() {
 
   const wordTapTimer = useRef(null); // For long-press detection
   const wordTapStart = useRef(null); // { x, y, time, word, bbox }
+  const longPressTriggered = useRef(false); // Prevent short tap after long press
   const menuJustOpened = useRef(false); // Prevent menu from closing immediately
+  const handleWordTapRef = useRef(null); // Stable reference to handleWordTap
+  const activeModalRef = useRef(activeModal); // Track modal state for touch handlers
 
   // Delete vocabulary annotation
   async function handleDeleteVocabAnnotation() {
@@ -483,6 +486,16 @@ export default function Viewer() {
       isGrammarMode: false,
     });
   }, [penModeActive, findWordAtPoint, findAnnotationAtPoint, findSentenceFromWord, openModal, activeModal, closeModal]);
+
+  // Keep handleWordTapRef updated (prevents touch handler re-registration on modal state change)
+  useEffect(() => {
+    handleWordTapRef.current = handleWordTap;
+  }, [handleWordTap]);
+
+  // Keep activeModalRef updated (for touch handlers to check modal state)
+  useEffect(() => {
+    activeModalRef.current = activeModal;
+  }, [activeModal]);
 
   // Close word menu (with protection against immediate close)
   const closeWordMenu = useCallback((force = false) => {
@@ -942,7 +955,13 @@ export default function Viewer() {
         };
       }
 
+      // 모달이 열려있으면 탭/롱프레스 감지 건너뛰기
+      if (activeModalRef.current.type === 'wordMenu') {
+        return;
+      }
+
       // 1손가락: 탭/롱프레스 감지 시작
+      longPressTriggered.current = false; // 리셋
       wordTapStart.current = {
         x: touch.clientX,
         y: touch.clientY,
@@ -954,10 +973,11 @@ export default function Viewer() {
       wordTapTimer.current = setTimeout(() => {
         if (wordTapStart.current && !wordTapStart.current.moved) {
           // 롱프레스 성공 - grammar mode
+          longPressTriggered.current = true; // 롱프레스 트리거됨
           const tapData = wordTapStart.current;
           wordTapStart.current = null; // 먼저 null로 설정하여 중복 호출 방지
           wordTapTimer.current = null; // 타이머도 클리어
-          handleWordTap(tapData.x, tapData.y, true);
+          handleWordTapRef.current?.(tapData.x, tapData.y, true);
         }
       }, LONG_PRESS_DURATION);
     };
@@ -1024,6 +1044,21 @@ export default function Viewer() {
         wordTapTimer.current = null;
       }
 
+      // 모달이 열려있으면 모든 탭 처리 건너뛰기
+      if (activeModalRef.current.type === 'wordMenu') {
+        wordTapStart.current = null;
+        singleFingerPanRef.current = null;
+        longPressTriggered.current = false;
+        return;
+      }
+
+      // 롱프레스가 이미 트리거됨 - 모든 추가 처리 건너뛰기
+      if (longPressTriggered.current) {
+        wordTapStart.current = null;
+        singleFingerPanRef.current = null;
+        return;
+      }
+
       // 2손가락 pinch 종료
       if (pinchStartRef.current || twoFingerPanRef.current) {
         pinchStartRef.current = null;
@@ -1067,7 +1102,7 @@ export default function Viewer() {
           setTimeout(() => {
             if (lastTapRef.current && Date.now() - lastTapRef.current.time >= DOUBLE_TAP_DELAY) {
               // 더블탭 아님 - 단일 탭 처리
-              handleWordTap(tapData.x, tapData.y, false);
+              handleWordTapRef.current?.(tapData.x, tapData.y, false);
               lastTapRef.current = null;
             }
           }, DOUBLE_TAP_DELAY);
@@ -1112,7 +1147,35 @@ export default function Viewer() {
         clearTimeout(wordTapTimer.current);
       }
     };
-  }, [source, currentPage, handleImagePointerDown, handleImagePointerMove, triggerShake, handleWordTap, zoomScale, panOffset, clampPanOffset]);
+  }, [source, currentPage, handleImagePointerDown, handleImagePointerMove, triggerShake, zoomScale, panOffset, clampPanOffset]);
+
+  // Render vocabulary markers (shared helper)
+  function renderVocabMarkers(vocabAnnotations) {
+    return vocabAnnotations.map(annotation => {
+      const selectionData = JSON.parse(annotation.selection_rect);
+      const bounds = selectionData.bounds || selectionData;
+
+      const padX = 0.3;
+      const heightScale = 0.7;
+      const x = Math.max(0, bounds.x - padX);
+      const y = bounds.y + bounds.height * (1 - heightScale) / 2;
+      const w = bounds.width + padX * 2;
+      const h = bounds.height * heightScale;
+
+      const isHighlighted = highlightedVocabId === annotation.id;
+      return (
+        <g key={`vocab-${annotation.id}`}>
+          <rect
+            x={`${x}%`} y={`${y}%`}
+            width={`${w}%`} height={`${h}%`}
+            rx="0.5" ry="0.5"
+            className={`vocab-marker-bg${isHighlighted ? ' highlighted' : ''}`}
+            style={{ pointerEvents: 'none' }}
+          />
+        </g>
+      );
+    });
+  }
 
   // Render captured screenshot viewer
   function renderContent() {
@@ -1240,32 +1303,8 @@ export default function Viewer() {
                         />
                       );
                     })}
-                  {/* Vocabulary markers (green shadow + rounded) - 이벤트는 이미지 레벨에서 통합 처리 */}
-                  {getVocabularyAnnotations(currentPage).map(annotation => {
-                    const selectionData = JSON.parse(annotation.selection_rect);
-                    const bounds = selectionData.bounds || selectionData;
-                    console.log('[VocabMarker] annotation:', annotation.selected_text, 'bounds:', bounds);
-
-                    // Padding for visual effect
-                    const pad = 0.3;
-                    const x = Math.max(0, bounds.x - pad);
-                    const y = Math.max(0, bounds.y - pad);
-                    const w = bounds.width + pad * 2;
-                    const h = bounds.height + pad * 2;
-
-                    const isHighlighted = highlightedVocabId === annotation.id;
-                    return (
-                      <g key={`vocab-${annotation.id}`}>
-                        <rect
-                          x={`${x}%`} y={`${y}%`}
-                          width={`${w}%`} height={`${h}%`}
-                          rx="0.5" ry="0.5"
-                          className={`vocab-marker-bg${isHighlighted ? ' highlighted' : ''}`}
-                          style={{ pointerEvents: 'none' }}
-                        />
-                      </g>
-                    );
-                  })}
+                  {/* Vocabulary markers (green shadow + rounded) */}
+                  {renderVocabMarkers(getVocabularyAnnotations(currentPage))}
                   {/* Grammar pattern arcs */}
                   {(() => {
                     const grammarAnns = getGrammarAnnotations(currentPage);
@@ -1449,27 +1488,8 @@ export default function Viewer() {
                 />
 
                 <svg className="highlighter-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-                  {/* Vocabulary markers - 이벤트는 이미지 레벨에서 통합 처리 */}
-                  {getVocabularyAnnotations().map(annotation => {
-                    const selectionData = JSON.parse(annotation.selection_rect);
-                    const bounds = selectionData.bounds || selectionData;
-                    const pad = 0.3;
-                    const x = Math.max(0, bounds.x - pad);
-                    const y = Math.max(0, bounds.y - pad);
-                    const w = bounds.width + pad * 2;
-                    const h = bounds.height + pad * 2;
-                    return (
-                      <g key={`vocab-${annotation.id}`}>
-                        <rect
-                          x={`${x}%`} y={`${y}%`}
-                          width={`${w}%`} height={`${h}%`}
-                          rx="0.5" ry="0.5"
-                          className="vocab-marker-bg"
-                          style={{ pointerEvents: 'none' }}
-                        />
-                      </g>
-                    );
-                  })}
+                  {/* Vocabulary markers */}
+                  {renderVocabMarkers(getVocabularyAnnotations())}
                   {/* Grammar patterns */}
                   {getGrammarAnnotations().map(annotation => {
                     try {
@@ -1603,31 +1623,8 @@ export default function Viewer() {
                         />
                       );
                     })}
-                  {/* Vocabulary markers (green shadow + rounded) - 이벤트는 이미지 레벨에서 통합 처리 */}
-                  {getVocabularyAnnotations().map(annotation => {
-                    const selectionData = JSON.parse(annotation.selection_rect);
-                    const bounds = selectionData.bounds || selectionData;
-
-                    // Padding for visual effect
-                    const pad = 0.3;
-                    const x = Math.max(0, bounds.x - pad);
-                    const y = Math.max(0, bounds.y - pad);
-                    const w = bounds.width + pad * 2;
-                    const h = bounds.height + pad * 2;
-
-                    const isHighlighted = highlightedVocabId === annotation.id;
-                    return (
-                      <g key={`vocab-${annotation.id}`}>
-                        <rect
-                          x={`${x}%`} y={`${y}%`}
-                          width={`${w}%`} height={`${h}%`}
-                          rx="0.5" ry="0.5"
-                          className={`vocab-marker-bg${isHighlighted ? ' highlighted' : ''}`}
-                          style={{ pointerEvents: 'none' }}
-                        />
-                      </g>
-                    );
-                  })}
+                  {/* Vocabulary markers (green shadow + rounded) */}
+                  {renderVocabMarkers(getVocabularyAnnotations())}
                   {/* Grammar pattern arcs */}
                   {(() => {
                     const grammarAnns = getGrammarAnnotations();
@@ -2054,6 +2051,9 @@ export default function Viewer() {
         currentPage={currentPage}
         existingAnnotation={activeModal.data.existingAnnotation || null}
         isGrammarMode={activeModal.data.isGrammarMode || false}
+        containerRef={zoomWrapperRef}
+        zoomScale={zoomScale}
+        panOffset={panOffset}
         onClose={closeWordMenu}
         onSaved={handleWordMenuSaved}
         onDeleted={handleWordMenuDelete}

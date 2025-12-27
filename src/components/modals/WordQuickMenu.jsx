@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useTapToClose } from '../../hooks/useTapToClose';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { speakText, stopSpeaking as stopTTS } from '../../utils/tts';
 import { cleanDisplayText } from '../../utils/textUtils';
 import { calculateModalPosition, getArrowClass } from '../../utils/positioning';
@@ -17,6 +16,9 @@ export default function WordQuickMenu({
   currentPage,
   existingAnnotation,
   isGrammarMode,
+  containerRef,
+  zoomScale,
+  panOffset,
   onClose,
   onSaved,
   onDeleted,
@@ -27,6 +29,10 @@ export default function WordQuickMenu({
   const [checkedPatterns, setCheckedPatterns] = useState([]);
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState('');
+  const [dynamicPosition, setDynamicPosition] = useState(null);
+  const rafRef = useRef(null);
+  const modalRef = useRef(null);
+  const touchStartRef = useRef({ time: 0, x: 0, y: 0 });
 
   // 모달 상태 리셋 함수
   const resetModalState = useCallback(() => {
@@ -38,8 +44,101 @@ export default function WordQuickMenu({
     setError('');
   }, []);
 
-  // 탭 감지용 훅 (줌/이동과 구분)
-  const { handleTouchStart: handleOverlayTouchStart, handleTouchEnd: handleOverlayTouchEnd, handleClick: handleOverlayClick } = useTapToClose(onClose);
+  // 위치 업데이트 함수 (wordBbox % 기반으로 뷰포트 좌표 계산)
+  const updatePosition = useCallback(() => {
+    if (!wordBbox || !containerRef?.current) {
+      setDynamicPosition(null);
+      return;
+    }
+
+    const containerRect = containerRef.current.getBoundingClientRect();
+
+    // bbox는 %로 저장됨 (0-100)
+    const centerX = wordBbox.x + wordBbox.width / 2;
+    const bottomY = wordBbox.y + wordBbox.height;
+    const topY = wordBbox.y;
+
+    const newX = containerRect.left + (centerX * containerRect.width / 100);
+    const newY = placement === 'below'
+      ? containerRect.top + (bottomY * containerRect.height / 100) + 12
+      : containerRect.top + (topY * containerRect.height / 100) - 12;
+
+    setDynamicPosition({ x: newX, y: newY });
+  }, [wordBbox, containerRef, placement]);
+
+  // zoomScale/panOffset 변경 시 위치 재계산
+  useEffect(() => {
+    if (!isOpen || !wordBbox || !containerRef?.current) return;
+    updatePosition();
+  }, [isOpen, wordBbox, containerRef, updatePosition, zoomScale, panOffset]);
+
+  // 스크롤/리사이즈 시 위치 업데이트
+  useEffect(() => {
+    if (!isOpen || !wordBbox || !containerRef?.current) return;
+
+    const handleUpdate = () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(updatePosition);
+    };
+
+    window.addEventListener('scroll', handleUpdate, true);
+    window.addEventListener('resize', handleUpdate);
+
+    return () => {
+      window.removeEventListener('scroll', handleUpdate, true);
+      window.removeEventListener('resize', handleUpdate);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [isOpen, wordBbox, containerRef, updatePosition]);
+
+  // 외부 클릭/탭 감지 (overlay 없이 document 레벨에서)
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleTouchStart = (e) => {
+      touchStartRef.current = {
+        time: Date.now(),
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+      };
+    };
+
+    const handleTouchEnd = (e) => {
+      // 모달 내부 터치면 무시
+      if (modalRef.current?.contains(e.target)) return;
+
+      const { time, x, y } = touchStartRef.current;
+      const duration = Date.now() - time;
+      const dx = Math.abs(e.changedTouches[0].clientX - x);
+      const dy = Math.abs(e.changedTouches[0].clientY - y);
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // < 200ms + < 10px = 탭 (스크롤/줌 아님)
+      if (duration < 200 && distance < 10) {
+        onClose();
+      }
+    };
+
+    const handleClick = (e) => {
+      // 모달 내부 클릭이면 무시
+      if (modalRef.current?.contains(e.target)) return;
+      onClose();
+    };
+
+    // 충분한 딜레이 후 리스너 등록 (synthetic click 이벤트 회피)
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('touchstart', handleTouchStart, { passive: true });
+      document.addEventListener('touchend', handleTouchEnd, { passive: true });
+      document.addEventListener('click', handleClick); // mousedown 대신 click 사용
+    }, 350); // 300ms double-tap delay + 50ms 버퍼
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('click', handleClick);
+    };
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -279,13 +378,14 @@ export default function WordQuickMenu({
 
   if (!isOpen) return null;
 
-  // 위치 계산
+  // 위치 계산 (dynamicPosition 우선, 없으면 초기 position 사용)
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const menuWidth = isGrammarMode ? Math.min(340, vw - 24) : Math.min(300, vw - 24);
+  const effectivePosition = dynamicPosition || position;
 
   const { left, top, transform, arrowLeft } = calculateModalPosition({
-    position,
+    position: effectivePosition,
     menuWidth,
     margin: 12,
     placement,
@@ -304,158 +404,94 @@ export default function WordQuickMenu({
 
   const arrowClass = getArrowClass(placement);
 
-  // Overlay 컴포넌트 (탭으로 닫기)
-  const Overlay = () => (
-    <div
-      className="word-menu-overlay"
-      onTouchStart={handleOverlayTouchStart}
-      onTouchEnd={handleOverlayTouchEnd}
-      onClick={handleOverlayClick}
-    />
-  );
-
   // Existing vocabulary annotation view
   if (existingAnnotation && !isGrammarMode) {
     return (
-      <>
-        <Overlay />
-        <div className={`word-quick-menu existing ${arrowClass}`} style={menuStyle}>
-          {error && <div className="modal-error">{error}</div>}
-          <div className="word-menu-header">
-            <span className="word-text">{cleanDisplayText(existingAnnotation.selected_text)}</span>
-            <button
-              className={`listen-btn ${speaking ? 'speaking' : ''}`}
-              onClick={() => speaking ? stopSpeaking() : speak(existingAnnotation.selected_text)}
-            >
-              {speaking ? '■' : '🔊'}
-            </button>
-          </div>
-          <div className="word-definition">
-            {definition || 'No definition'}
-          </div>
-          <div className="word-menu-actions">
-            <button className="delete-btn" onClick={onDeleted} disabled={loading}>
-              Delete
-            </button>
-            <button className="close-btn" onClick={onClose}>
-              Close
-            </button>
-          </div>
+      <div ref={modalRef} className={`word-quick-menu existing ${arrowClass}`} style={menuStyle}>
+        {error && <div className="modal-error">{error}</div>}
+        <div className="word-menu-header">
+          <span className="word-text">{cleanDisplayText(existingAnnotation.selected_text)}</span>
+          <button
+            className={`listen-btn ${speaking ? 'speaking' : ''}`}
+            onClick={() => speaking ? stopSpeaking() : speak(existingAnnotation.selected_text)}
+          >
+            {speaking ? '■' : '🔊'}
+          </button>
         </div>
-      </>
+        <div className="word-definition">
+          {definition || 'No definition'}
+        </div>
+        <div className="word-menu-actions">
+          <button className="delete-btn" onClick={onDeleted} disabled={loading}>
+            Delete
+          </button>
+          <button className="close-btn" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
     );
   }
 
   // Existing grammar annotation view
   if (existingAnnotation && isGrammarMode && grammarData) {
     return (
-      <>
-        <Overlay />
-        <div className={`word-quick-menu grammar existing ${arrowClass}`} style={menuStyle}>
-          <div className="word-menu-header">
-            <span className="sentence-text">{grammarData.originalText}</span>
-            <button
-              className={`listen-btn ${speaking ? 'speaking' : ''}`}
-              onClick={() => speaking ? stopSpeaking() : speak(grammarData.originalText)}
-            >
-              {speaking ? '■' : '🔊'}
-            </button>
-          </div>
-          <div className="grammar-translation">
-            {grammarData.translation}
-          </div>
-          <div className="grammar-patterns">
-            {grammarData.patterns?.map((pattern, i) => (
-              <div key={i} className="pattern-item saved">
-                <span className="pattern-color" style={{ background: pattern.color }} />
-                <div className="pattern-content">
-                  <span className="pattern-name" style={{ color: pattern.color }}>{pattern.typeKr || pattern.type}</span>
-                  {pattern.words && <span className="pattern-words">{pattern.words.join(' ')}</span>}
-                  {pattern.explanation && <span className="pattern-explanation">{pattern.explanation}</span>}
-                </div>
+      <div ref={modalRef} className={`word-quick-menu grammar existing ${arrowClass}`} style={menuStyle}>
+        <div className="grammar-patterns">
+          {grammarData.patterns?.map((pattern, i) => (
+            <div key={i} className="pattern-item">
+              <div className="pattern-content">
+                <span className="pattern-words">{pattern.words?.join(' ')}</span>
+                <span className="pattern-explanation">{pattern.explanation}</span>
               </div>
-            ))}
-          </div>
-          <div className="word-menu-actions">
-            <button className="delete-btn" onClick={onDeleted} disabled={loading}>
-              Delete
-            </button>
-            <button className="close-btn" onClick={onClose}>
-              Close
-            </button>
-          </div>
+            </div>
+          ))}
         </div>
-      </>
+        <div className="word-menu-actions">
+          <button className="delete-btn" onClick={onDeleted} disabled={loading}>
+            Delete
+          </button>
+          <button className="close-btn" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
     );
   }
 
   // Grammar mode - analysis view
   if (isGrammarMode) {
+    const hasPatterns = grammarData?.patterns?.length > 0;
     return (
-      <>
-        <Overlay />
-        <div className={`word-quick-menu grammar ${arrowClass}`} style={menuStyle}>
-          {loading ? (
-            <div className="loading-state">분석 중...</div>
-          ) : grammarData ? (
-            <>
+      <div ref={modalRef} className={`word-quick-menu grammar ${arrowClass}`} style={menuStyle}>
+        {loading ? (
+          <div className="loading-state">분석 중...</div>
+        ) : grammarData ? (
+          <>
+            {hasPatterns ? (
               <div className="grammar-patterns">
-                {grammarData.patterns?.map((pattern, i) => (
+                {grammarData.patterns.map((pattern, i) => (
                   <label key={i} className="pattern-checkbox">
                     <input
                       type="checkbox"
                       checked={checkedPatterns.includes(i)}
                       onChange={() => togglePattern(i)}
                     />
-                    <span className="pattern-color" style={{ background: pattern.color }} />
-                    <span className="pattern-name">{pattern.typeKr || pattern.type}</span>
+                    <div className="pattern-content">
+                      <span className="pattern-words">{pattern.words?.join(' ')}</span>
+                      <span className="pattern-explanation">{pattern.explanation}</span>
+                    </div>
                   </label>
                 ))}
               </div>
-              <div className="word-menu-actions">
-                <button
-                  className="save-btn"
-                  onClick={handleSaveGrammar}
-                  disabled={checkedPatterns.length === 0 || loading}
-                >
-                  Save
-                </button>
-                <button className="close-btn" onClick={onClose}>
-                  Close
-                </button>
-              </div>
-            </>
-          ) : (
-            <div className="modal-error-state">{error || '분석 실패'}</div>
-          )}
-        </div>
-      </>
-    );
-  }
-
-  // New word - quick save menu
-  return (
-    <>
-      <Overlay />
-      <div className={`word-quick-menu ${arrowClass}`} style={menuStyle}>
-        <div className="word-menu-header">
-          <span className="word-text">{cleanDisplayText(word)}</span>
-          <button
-            className={`listen-btn ${speaking ? 'speaking' : ''}`}
-            onClick={() => speaking ? stopSpeaking() : speak(word)}
-          >
-            {speaking ? '■' : '🔊'}
-          </button>
-        </div>
-        {loading ? (
-          <div className="loading-state">조회 중...</div>
-        ) : (
-          <>
-            {definition && <div className="word-definition">{definition}</div>}
+            ) : (
+              <div className="empty-state">분석된 표현이 없습니다</div>
+            )}
             <div className="word-menu-actions">
               <button
                 className="save-btn"
-                onClick={handleSaveVocabulary}
+                onClick={handleSaveGrammar}
+                disabled={!hasPatterns || checkedPatterns.length === 0 || loading}
               >
                 Save
               </button>
@@ -464,8 +500,43 @@ export default function WordQuickMenu({
               </button>
             </div>
           </>
+        ) : (
+          <div className="modal-error-state">{error || '분석 실패'}</div>
         )}
       </div>
-    </>
+    );
+  }
+
+  // New word - quick save menu
+  return (
+    <div ref={modalRef} className={`word-quick-menu ${arrowClass}`} style={menuStyle}>
+      <div className="word-menu-header">
+        <span className="word-text">{cleanDisplayText(word)}</span>
+        <button
+          className={`listen-btn ${speaking ? 'speaking' : ''}`}
+          onClick={() => speaking ? stopSpeaking() : speak(word)}
+        >
+          {speaking ? '■' : '🔊'}
+        </button>
+      </div>
+      {loading ? (
+        <div className="loading-state">조회 중...</div>
+      ) : (
+        <>
+          {definition && <div className="word-definition">{definition}</div>}
+          <div className="word-menu-actions">
+            <button
+              className="save-btn"
+              onClick={handleSaveVocabulary}
+            >
+              Save
+            </button>
+            <button className="close-btn" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

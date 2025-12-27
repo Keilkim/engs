@@ -4,14 +4,6 @@
  * ===========================================
  */
 
-.word-menu-overlay {
-  position: fixed;
-  inset: 0;
-  background: transparent;
-  z-index: 999;
-  pointer-events: auto;
-}
-
 .word-quick-menu {
   background-color: var(--color-base-sub);
   border: 1px solid var(--color-accent);
@@ -111,7 +103,7 @@
 
 .word-definition {
   font-size: var(--font-sm);
-  color: var(--color-text-light);
+  color: var(--color-text);
   line-height: 1.5;
   margin-bottom: var(--spacing-md);
   white-space: pre-wrap;
@@ -171,7 +163,7 @@
 
 .pattern-checkbox {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-md);
@@ -183,22 +175,30 @@
   background-color: var(--color-base-dark);
 }
 
-.pattern-checkbox input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--color-highlight);
+/* Saved pattern item (review mode - with bullet) */
+.pattern-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  padding-left: var(--spacing-md);
+  position: relative;
 }
 
-.pattern-color {
-  width: 12px;
-  height: 12px;
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-}
-
-.pattern-name {
-  font-size: var(--font-sm);
+.pattern-item::before {
+  content: '•';
+  position: absolute;
+  left: var(--spacing-xs);
   color: var(--color-text);
+  font-size: var(--font-sm);
+}
+
+.pattern-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-highlight);
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .pattern-content {
@@ -210,20 +210,15 @@
 
 .pattern-words {
   font-size: var(--font-sm);
-  color: var(--color-text-sub);
-  font-style: italic;
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
 }
 
 .pattern-explanation {
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
   color: var(--color-text);
-  line-height: var(--line-height-relaxed);
 }
 
-.grammar-translation {
-  font-size: var(--font-sm);
-  color: var(--color-text-sub);
-  margin-bottom: var(--spacing-sm);
-  padding-bottom: var(--spacing-sm);
-  border-bottom: 1px solid var(--color-accent);
+.pattern-explanation::before {
+  content: '→ ';
 }

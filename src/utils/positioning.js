@@ -59,8 +59,9 @@ export function calculateModalPosition({
   const translateY = placement === 'below' ? '0' : '-100%';
   const transformOrigin = placement === 'below' ? 'top center' : 'bottom center';
 
-  // Arrow position (percentage within modal)
-  const arrowLeft = Math.min(Math.max(((position.x - left) / menuWidth) * 100, 15), 85);
+  // Arrow position (percentage within modal, avoiding border-radius corners)
+  // radius-lg is ~12px, so on a 300px menu that's ~4%, we use 10% margin for safety
+  const arrowLeft = Math.min(Math.max(((position.x - left) / menuWidth) * 100, 10), 90);
 
   return {
     left,

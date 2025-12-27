@@ -166,78 +166,41 @@ export function analyzeGrammar(text) {
  * AI-based grammar pattern analysis (Gemini API)
  */
 export async function analyzeGrammarPatterns(text) {
-  const prompt = `Analyze the following English sentence and identify ONLY intermediate-to-advanced grammar patterns worth studying.
+  const prompt = `Extract useful English expressions/idioms from this sentence for Korean learners.
 
 Sentence: "${text}"
 
-IMPORTANT RULES:
-1. ONLY return patterns that are genuinely useful for English learners at intermediate level or above
-2. DO NOT include basic/trivial patterns like:
-   - Compound nouns (e.g., "bus stop", "coffee shop")
-   - Simple modal + verb (e.g., "can be", "will go", "should do")
-   - Basic subject-verb agreement
-   - Simple present/past tense
-   - Basic article usage (a, an, the)
-   - Simple prepositional phrases
-3. If NO meaningful intermediate+ patterns exist, return {"patterns": []}
-4. Quality over quantity - only include patterns that would actually help a learner
+RULES:
+1. Extract ONLY expressions worth memorizing (idioms, phrasal verbs, collocations, useful patterns)
+2. Use A, B, C as placeholders for variable parts
+3. Return simple format for flashcard-style learning
+4. Skip basic grammar - focus on expressions/phrases that native speakers actually use
+5. If no useful expressions, return {"patterns": []}
 
-Return a JSON object with this structure:
+Return JSON:
 {
   "patterns": [
-    {
-      "type": "pattern name in English",
-      "typeKr": "한국어 패턴명",
-      "keywords": [
-        { "word": "not", "index": 5 },
-        { "word": "but", "index": 9 }
-      ],
-      "parts": [
-        { "label": "A", "text": "with a schedule", "startIndex": 6, "endIndex": 8 },
-        { "label": "B", "text": "with a question", "startIndex": 10, "endIndex": 12 }
-      ],
-      "explanation": "Brief explanation in Korean (1-2 sentences)",
-      "color": "#hex"
-    }
+    { "words": ["regardless of A"], "explanation": "A에 상관없이" },
+    { "words": ["be likely to V"], "explanation": "V할 것 같다" }
   ]
 }
 
-STRUCTURE EXPLANATION:
-- "keywords": The key grammatical markers (e.g., "not", "but", "if", "then", "so...that", "too...to")
-  - These will be highlighted and connected with a dashed arc
-- "parts": The meaningful segments of the pattern (e.g., A/B in "not A but B", condition/result in conditionals)
-  - These will be underlined with labels when user clicks the pattern
-- "index", "startIndex", "endIndex" are 0-based word positions in the sentence
+GOOD examples:
+- regardless of A → A에 상관없이
+- be likely to V → V할 것 같다
+- end up Ving → 결국 V하게 되다
+- be supposed to V → V하기로 되어있다
+- not A but B → A가 아니라 B
+- as long as → ~하는 한
+- in terms of A → A의 관점에서
+- at the expense of A → A를 희생하여
 
-Color suggestions:
-- not A but B / either...or / neither...nor: #60a5fa (blue)
-- so...that / such...that: #f87171 (red)
-- too...to / enough to: #fb923c (orange)
-- the more...the more: #facc15 (yellow)
-- not only...but also: #c084fc (purple)
-- conditionals (if...then): #4ade80 (green)
-- as...as: #2dd4bf (teal)
-- whether...or: #ec4899 (pink)
-- both...and: #8b5cf6 (violet)
+BAD (don't include):
+- Descriptive grammar like "분사구문", "가정법", "관계대명사"
+- Simple verb tenses
+- Basic prepositions
 
-ONLY include these types of correlative/paired patterns:
-- not A but B (A가 아니라 B)
-- not only A but also B (A뿐만 아니라 B도)
-- either A or B (A 또는 B)
-- neither A nor B (A도 B도 아닌)
-- both A and B (A와 B 둘 다)
-- so + adj/adv + that (너무 ~해서 ~하다)
-- such + noun + that (너무 ~해서 ~하다)
-- too + adj + to V (너무 ~해서 V할 수 없다)
-- adj + enough + to V (~하기에 충분히 ~하다)
-- the + 비교급, the + 비교급 (~할수록 더 ~하다)
-- as + adj + as (~만큼 ~한)
-- whether A or B (A이든 B이든)
-- if/when conditionals with clear condition-result structure
-- Passive voice with clear agent (수동태: be + p.p + by)
-- Relative clauses (관계대명사절)
-
-Return ONLY valid JSON, no markdown code blocks or extra text.`;
+Return ONLY valid JSON, no markdown.`;
 
   try {
     const response = await fetch(`${GEMINI_API_URL}?key=${GOOGLE_API_KEY}`, {

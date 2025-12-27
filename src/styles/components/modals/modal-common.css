@@ -30,3 +30,19 @@
   color: var(--color-error);
   font-size: var(--font-sm);
 }
+
+/* 빈 상태 */
+.empty-state {
+  padding: var(--spacing-md);
+  text-align: center;
+  color: var(--color-text);
+  font-size: var(--font-sm);
+}
+
+/* 로딩 상태 (인라인) */
+.loading-state {
+  padding: var(--spacing-md);
+  text-align: center;
+  color: var(--color-text);
+  font-size: var(--font-sm);
+}
