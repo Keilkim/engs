@@ -25,7 +25,8 @@ export default function Viewer() {
   const touchStartRef = useRef(null); // For swipe detection
   const [isShaking, setIsShaking] = useState(false); // Boundary shake effect
   const [zoomScale, setZoomScale] = useState(1); // Pinch zoom scale
-  const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 }); // Zoom origin point (%)
+  // zoomOrigin fixed at (0,0) - pan handles zoom point instead
+const zoomOrigin = { x: 0, y: 0 };
   const pinchStartRef = useRef(null); // For pinch zoom tracking
   const mobileNavRef = useRef(null); // For auto-scrolling mobile nav
   const scrollContainerRef = useRef(null); // For scroll tracking
@@ -358,19 +359,50 @@ export default function Viewer() {
 
       // 단어(vocab) 탭 - vocab tooltip 표시
       if (isVocab && !isLongPress) {
-        const definition = existingAnnotation.ai_analysis_json
-          ? JSON.parse(existingAnnotation.ai_analysis_json).definition || ''
-          : '';
-        // 클릭 위치 기준으로 tooltip 표시
-        const fakeRect = {
-          left: clientX - 20,
-          right: clientX + 20,
-          top: clientY - 10,
-          bottom: clientY + 10,
-          width: 40,
-        };
-        showVocabWord(existingAnnotation.selected_text, definition, fakeRect, existingAnnotation);
-        return;
+        try {
+          const selectionData = JSON.parse(existingAnnotation.selection_rect);
+          const bounds = selectionData.bounds || selectionData;
+
+          // bounds(%)로 위치 계산
+          const markerTopPx = rect.top + bounds.y * rect.height / 100;
+          const markerBottomPx = rect.top + (bounds.y + bounds.height) * rect.height / 100;
+
+          // 위/아래 공간 비교하여 placement 결정
+          const viewportHeight = window.innerHeight;
+          const safeAreaBottom = getMobileSafeAreaBottom();
+          const spaceAbove = markerTopPx;
+          const spaceBelow = viewportHeight - markerBottomPx - safeAreaBottom;
+          const placement = spaceBelow >= 200 || spaceBelow > spaceAbove ? 'below' : 'above';
+
+          const posX = clientX;
+          const posY = placement === 'below'
+            ? Math.min(markerBottomPx + 12, viewportHeight - safeAreaBottom - 50)
+            : Math.max(markerTopPx - 12, 50);
+
+          openModal('wordMenu', {
+            word: existingAnnotation.selected_text,
+            existingAnnotation,
+            isGrammarMode: false,
+            position: { x: posX, y: posY },
+            placement,
+            wordBbox: bounds, // 줌/팬 시 동적 위치 업데이트용
+          });
+          return;
+        } catch {
+          // fallback: 기존 방식
+          const definition = existingAnnotation.ai_analysis_json
+            ? JSON.parse(existingAnnotation.ai_analysis_json).definition || ''
+            : '';
+          const fakeRect = {
+            left: clientX - 20,
+            right: clientX + 20,
+            top: clientY - 10,
+            bottom: clientY + 10,
+            width: 40,
+          };
+          showVocabWord(existingAnnotation.selected_text, definition, fakeRect, existingAnnotation);
+          return;
+        }
       }
 
       // 문법(grammar) 롱프레스 - 저장된 문법 tooltip 표시 (다시 분석하지 않음)
@@ -593,31 +625,28 @@ export default function Viewer() {
     if (e.touches && e.touches.length >= 2) {
       touchStartRef.current = null;
 
-      // Calculate pinch center point relative to container
       const rect = imageContainerRef.current.getBoundingClientRect();
       const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
       const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      const originX = ((centerX - rect.left) / rect.width) * 100;
-      const originY = ((centerY - rect.top) / rect.height) * 100;
 
-      // Compensate panOffset for origin change to prevent jump
-      const deltaOriginX = (originX - zoomOrigin.x) * rect.width / 100;
-      const deltaOriginY = (originY - zoomOrigin.y) * rect.height / 100;
-      const compensatedPanX = panOffset.x + deltaOriginX * (zoomScale - 1);
-      const compensatedPanY = panOffset.y + deltaOriginY * (zoomScale - 1);
+      // Calculate touch point in image coordinates (for zoom pivot)
+      const imageX = (centerX - rect.left - panOffset.x) / zoomScale;
+      const imageY = (centerY - rect.top - panOffset.y) / zoomScale;
 
-      setZoomOrigin({ x: originX, y: originY });
-      setPanOffset({ x: compensatedPanX, y: compensatedPanY });
       pinchStartRef.current = {
         distance: getTouchDistance(e.touches),
-        scale: zoomScale
+        scale: zoomScale,
+        imageX,  // Touch point in image coords
+        imageY,
+        panX: panOffset.x,
+        panY: panOffset.y,
       };
-      // Also track for pan detection (use compensated values)
+      // Track for pan detection
       twoFingerPanRef.current = {
         centerX,
         centerY,
-        startPanX: compensatedPanX,
-        startPanY: compensatedPanY,
+        startPanX: panOffset.x,
+        startPanY: panOffset.y,
       };
       return;
     }
@@ -642,7 +671,7 @@ export default function Viewer() {
         }
       }, 500);
     }
-  }, [getEventCoords, getTouchDistance, zoomScale, zoomOrigin, panOffset, handleWordTap]);
+  }, [getEventCoords, getTouchDistance, zoomScale, panOffset, handleWordTap]);
 
   const handleImagePointerMove = useCallback((e) => {
     // Desktop panning (middle button or spacebar + drag)
@@ -663,32 +692,35 @@ export default function Viewer() {
     if (e.touches && e.touches.length >= 2) {
       touchStartRef.current = null;
 
+      const rect = imageContainerRef.current.getBoundingClientRect();
       const currentDistance = getTouchDistance(e.touches);
       const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
       const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
 
-      // Pinch zoom
-      let newScale = zoomScale;
       if (pinchStartRef.current) {
+        // Calculate new scale
         const scaleFactor = currentDistance / pinchStartRef.current.distance;
-        newScale = Math.min(3, Math.max(1, pinchStartRef.current.scale * scaleFactor));
+        const newScale = Math.min(6, Math.max(1, pinchStartRef.current.scale * scaleFactor));
+
+        // Calculate pan so touch point stays fixed on screen
+        // Touch point in image coords: (imageX, imageY)
+        // Screen position = rect.left + imageX * scale + panX
+        // We want: centerX = rect.left + imageX * newScale + newPanX
+        const newPanX = centerX - rect.left - pinchStartRef.current.imageX * newScale;
+        const newPanY = centerY - rect.top - pinchStartRef.current.imageY * newScale;
+
+        const newOffset = clampPanOffset(newPanX, newPanY, newScale);
         setZoomScale(newScale);
+        setPanOffset(newOffset);
 
         // Update reference for continuous zoom
         pinchStartRef.current.distance = currentDistance;
         pinchStartRef.current.scale = newScale;
-      }
-
-      // Two-finger pan (both fingers moving together) - with bounds
-      if (twoFingerPanRef.current) {
-        const deltaX = centerX - twoFingerPanRef.current.centerX;
-        const deltaY = centerY - twoFingerPanRef.current.centerY;
-        const newOffset = clampPanOffset(
-          twoFingerPanRef.current.startPanX + deltaX,
-          twoFingerPanRef.current.startPanY + deltaY,
-          newScale
-        );
-        setPanOffset(newOffset);
+        pinchStartRef.current.panX = newOffset.x;
+        pinchStartRef.current.panY = newOffset.y;
+        // Recalculate image coords based on current touch center
+        pinchStartRef.current.imageX = (centerX - rect.left - newOffset.x) / newScale;
+        pinchStartRef.current.imageY = (centerY - rect.top - newOffset.y) / newScale;
       }
       return;
     }
@@ -882,7 +914,6 @@ export default function Viewer() {
   // Reset zoom and pan when page changes
   useEffect(() => {
     setZoomScale(1);
-    setZoomOrigin({ x: 50, y: 50 });
     setPanOffset({ x: 0, y: 0 });
   }, [currentPage]);
 
