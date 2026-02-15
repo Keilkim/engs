@@ -148,13 +148,15 @@ export async function captureWebpageScreenshot(url) {
     access_key: import.meta.env.VITE_APIFLASH_KEY,
     url: url,
     full_page: 'true',
-    width: '1920',
+    width: '430',
+    height: '932',
     format: 'png',
     response_type: 'json',
     fresh: 'true',
-    scroll_delay: '500',
-    delay: '3',
+    scroll_delay: '3000',
+    delay: '5',
     scale_factor: '2',
+    user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
   });
 
   const apiUrl = `https://api.apiflash.com/v1/urltoimage?${params.toString()}`;

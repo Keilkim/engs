@@ -79,12 +79,25 @@ export function useAnnotationHelpers(annotations, currentPage) {
         if (data.page !== undefined && data.page !== currentPage) continue;
 
         const bounds = data.bounds || data;
-        if (
-          x >= bounds.x &&
-          x <= bounds.x + bounds.width &&
-          y >= bounds.y &&
-          y <= bounds.y + bounds.height
-        ) {
+        const lines = data.lines;
+
+        // lines가 있으면 줄별 정밀 히트 판정
+        let hit = false;
+        if (lines && lines.length > 0) {
+          hit = lines.some(line =>
+            x >= line.x &&
+            x <= line.x + line.width &&
+            y >= line.y &&
+            y <= line.y + line.height
+          );
+        } else {
+          hit = x >= bounds.x &&
+            x <= bounds.x + bounds.width &&
+            y >= bounds.y &&
+            y <= bounds.y + bounds.height;
+        }
+
+        if (hit) {
           const area = bounds.width * bounds.height;
           const isVocab = isVocabularyAnnotation(annotation);
           matchingAnnotations.push({ annotation, area, isVocab });
