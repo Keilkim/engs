@@ -74,10 +74,10 @@ export function useChat({ sourceId, sourceContext = '', topicTitle = '' }) {
         { languageOverride, conversationMode }
       );
 
-      setStreamingText('');
-
-      // Save AI response
+      // Save AI response first, then clear streaming text together with adding message
+      // This ensures both updates batch in one render so TTS useEffect can detect the transition
       const savedAi = await saveChatMessage(fullText, 'assistant', sourceId);
+      setStreamingText('');
       setMessages(prev => [...prev, savedAi]);
     } catch {
       setStreamingText('');

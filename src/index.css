@@ -1262,3 +1262,18 @@
   background: var(--color-sub-accent);
   animation: blink 1.5s infinite;
 }
+.chat-conversation-bar.paused {
+  background: #f59e0b;
+}
+
+/* Interactive words in chat messages */
+.chat-message .interactive-word {
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.15s;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.chat-message .interactive-word:active {
+  background: rgba(255, 255, 255, 0.15);
+}

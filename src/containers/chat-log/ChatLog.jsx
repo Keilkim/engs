@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { scrapMessage, unscrapMessage } from '../../services/chat';
 import { useTranslation } from '../../i18n';
+import InteractiveMessageText from '../../components/chat/InteractiveMessageText';
 
-export default function ChatLog({ messages, onScrapToggle, streamingText = '' }) {
+export default function ChatLog({ messages, onScrapToggle, streamingText = '', interactive, onWordPress, onSentenceLongPress, onPressStart, onPressEndNoMenu }) {
   const { ko } = useTranslation();
   const bottomRef = useRef(null);
 
@@ -44,7 +45,15 @@ export default function ChatLog({ messages, onScrapToggle, streamingText = '' })
           </div>
           <div className="message-content">
             <div className="message-text">
-              {message.message}
+              {interactive ? (
+                <InteractiveMessageText
+                  text={message.message}
+                  onWordPress={onWordPress}
+                  onLongPress={onSentenceLongPress}
+                  onPressStart={onPressStart}
+                  onPressEndNoMenu={onPressEndNoMenu}
+                />
+              ) : message.message}
             </div>
             {message.role === 'assistant' && message.id && (
               <button

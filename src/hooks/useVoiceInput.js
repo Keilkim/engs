@@ -45,7 +45,13 @@ export function useVoiceInput({ onAutoSend } = {}) {
   }, []);
 
   const startListening = useCallback(() => {
-    if (!isSupported || isListening) return;
+    if (!isSupported) return;
+
+    // Clean up existing recognition if any (allows restart without waiting for state)
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch {}
+      recognitionRef.current = null;
+    }
 
     const recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
@@ -104,10 +110,19 @@ export function useVoiceInput({ onAutoSend } = {}) {
     setTranscript('');
     setInterimText('');
     recognition.start();
-  }, [isSupported, isListening, resetSilenceTimer]);
+  }, [isSupported, resetSilenceTimer]);
 
   const stopListening = useCallback(() => {
     clearTimeout(silenceTimerRef.current);
+    recognitionRef.current?.stop();
+  }, []);
+
+  // Stop listening without triggering auto-send (for pause/external stop)
+  const stopListeningQuiet = useCallback(() => {
+    clearTimeout(silenceTimerRef.current);
+    finalTextRef.current = ''; // Clear so onend won't auto-send
+    setTranscript('');
+    setInterimText('');
     recognitionRef.current?.stop();
   }, []);
 
@@ -124,6 +139,7 @@ export function useVoiceInput({ onAutoSend } = {}) {
     isSupported,
     startListening,
     stopListening,
+    stopListeningQuiet,
     clearTranscript,
   };
 }

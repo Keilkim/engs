@@ -119,14 +119,21 @@ export default function CaptionLine({
     }
   }, [clearTimer]);
 
-  const handlePointerUp = useCallback(() => {
+  const handlePointerUp = useCallback((e) => {
     clearTimer();
     if (!touchStateRef.current) return;
 
     const { moved, executed, startTime, wordIndex } = touchStateRef.current;
     const duration = Date.now() - startTime;
 
-    if (!moved && !executed && duration < LONG_PRESS_DURATION) {
+    // Long press already fired (menu opened) → prevent synthetic mouse events
+    if (executed) {
+      e.preventDefault?.();
+      touchStateRef.current = null;
+      return;
+    }
+
+    if (!moved && duration < LONG_PRESS_DURATION) {
       // Short tap → seek + resume video
       if (wordIndex !== undefined && wordIndex >= 0 && wordTimings[wordIndex]) {
         onSeek?.(wordTimings[wordIndex].start);
@@ -134,7 +141,7 @@ export default function CaptionLine({
         onSeek?.(segment.start);
       }
       onPressEndNoMenu?.();
-    } else if (moved && !executed) {
+    } else if (moved) {
       // Drag cancelled, no menu opened → resume video
       onPressEndNoMenu?.();
     }

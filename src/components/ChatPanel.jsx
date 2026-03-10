@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ChatLog from '../containers/chat-log/ChatLog';
+import WordQuickMenu from './modals/WordQuickMenu';
 import { speakText, stopSpeaking, preloadVoices } from '../utils/tts';
 import { getSetting, SETTINGS_KEYS, LEVEL_OPTIONS } from '../services/settings';
 import { useVoiceInput } from '../hooks';
@@ -27,22 +28,29 @@ export default function ChatPanel({ chat, sourceTitle }) {
     return saved ? parseFloat(saved) : 1.0;
   });
   const [speaking, setSpeaking] = useState(false);
+  const [conversationPaused, setConversationPaused] = useState(false);
+  // Word quick menu state
+  const [selectedWord, setSelectedWord] = useState(null);
+  const [wordPosition, setWordPosition] = useState(null);
+  const [isGrammarMode, setIsGrammarMode] = useState(false);
   const inputRef = useRef(null);
   const prevStreamingRef = useRef('');
   const conversationModeRef = useRef(false);
+  const conversationPausedRef = useRef(false);
   const loadingRef = useRef(false);
   const speechRateRef = useRef(speechRate);
-  const stopListeningRef = useRef(null);
+  const stopListeningQuietRef = useRef(null);
 
   // Keep refs in sync
   useEffect(() => { conversationModeRef.current = conversationMode; }, [conversationMode]);
+  useEffect(() => { conversationPausedRef.current = conversationPaused; }, [conversationPaused]);
   useEffect(() => { loadingRef.current = loading; }, [loading]);
   useEffect(() => { speechRateRef.current = speechRate; }, [speechRate]);
 
-  // Auto-send callback for voice input - stop listening, force English
+  // Auto-send callback for voice input - stop listening quietly, force English
   const handleAutoSend = useCallback((text) => {
     if (text.trim() && !loadingRef.current) {
-      stopListeningRef.current?.();
+      stopListeningQuietRef.current?.();
       handleSend(text, { languageOverride: 'English', conversationMode: true });
     }
   }, [handleSend]);
@@ -55,11 +63,12 @@ export default function ChatPanel({ chat, sourceTitle }) {
     isSupported: voiceSupported,
     startListening,
     stopListening,
+    stopListeningQuiet,
     clearTranscript,
   } = useVoiceInput({ onAutoSend: handleAutoSend });
 
-  // Keep stopListening ref in sync
-  useEffect(() => { stopListeningRef.current = stopListening; }, [stopListening]);
+  // Keep ref in sync
+  useEffect(() => { stopListeningQuietRef.current = stopListeningQuiet; }, [stopListeningQuiet]);
 
   const level = getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate');
   const levelLabel = LEVEL_OPTIONS.find(o => o.value === level)?.label || level;
@@ -72,10 +81,10 @@ export default function ChatPanel({ chat, sourceTitle }) {
   // Auto-resume listening after TTS finishes in conversation mode
   const resumeListeningAfterTts = useCallback(() => {
     setSpeaking(false);
-    if (conversationModeRef.current) {
+    if (conversationModeRef.current && !conversationPausedRef.current) {
       // Small delay before resuming listening
       setTimeout(() => {
-        if (conversationModeRef.current) {
+        if (conversationModeRef.current && !conversationPausedRef.current) {
           startListening();
         }
       }, 500);
@@ -90,11 +99,19 @@ export default function ChatPanel({ chat, sourceTitle }) {
     if (prevStreamingRef.current && !streamingText) {
       const lastMsg = messages[messages.length - 1];
       if (lastMsg?.role === 'assistant') {
+        let ttsStarted = false;
         speakText(lastMsg.message, {
           rate: speechRateRef.current,
-          onStart: () => setSpeaking(true),
+          onStart: () => { ttsStarted = true; setSpeaking(true); },
           onEnd: resumeListeningAfterTts,
+          onError: resumeListeningAfterTts,
         });
+        // Fallback: if TTS doesn't start within 2s (e.g. mobile Safari blocks), resume listening
+        setTimeout(() => {
+          if (!ttsStarted && conversationModeRef.current && !conversationPausedRef.current) {
+            resumeListeningAfterTts();
+          }
+        }, 2000);
       }
     }
     prevStreamingRef.current = streamingText;
@@ -150,6 +167,63 @@ export default function ChatPanel({ chat, sourceTitle }) {
     setConversationMode(false);
     setSpeaking(false);
   }, [setShowPanel, stopListening]);
+
+  // Pause conversation (word lookup in progress)
+  const pauseConversation = useCallback(() => {
+    if (!conversationModeRef.current) return;
+    setConversationPaused(true);
+    conversationPausedRef.current = true;
+    stopSpeaking();
+    setSpeaking(false);
+    stopListeningQuiet(); // Stop without auto-sending accumulated text
+  }, [stopListeningQuiet]);
+
+  // Resume conversation (word lookup closed)
+  const resumeConversation = useCallback(() => {
+    if (!conversationModeRef.current || !conversationPausedRef.current) return;
+    setConversationPaused(false);
+    conversationPausedRef.current = false;
+    setTimeout(() => {
+      if (conversationModeRef.current && !conversationPausedRef.current) {
+        startListening();
+      }
+    }, 300);
+  }, [startListening]);
+
+  // Chat message word short press → vocabulary lookup
+  const handleChatWordPress = useCallback((word, rect) => {
+    if (!word) return;
+    pauseConversation();
+    setSelectedWord(word);
+    setIsGrammarMode(false);
+    setWordPosition({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
+  }, [pauseConversation]);
+
+  // Chat message long press → grammar analysis
+  const handleChatSentenceLongPress = useCallback((text, rect) => {
+    if (!text) return;
+    pauseConversation();
+    setSelectedWord(text);
+    setIsGrammarMode(true);
+    setWordPosition({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
+  }, [pauseConversation]);
+
+  // Close word modal → resume conversation
+  const closeWordModal = useCallback(() => {
+    setSelectedWord(null);
+    setWordPosition(null);
+    setIsGrammarMode(false);
+    resumeConversation();
+  }, [resumeConversation]);
+
+  // Press started but no menu opened (cancelled)
+  const handlePressStart = useCallback(() => {
+    pauseConversation();
+  }, [pauseConversation]);
+
+  const handlePressEndNoMenu = useCallback(() => {
+    resumeConversation();
+  }, [resumeConversation]);
 
   // Display text: show interim voice text while listening
   const displayText = isListening ? (interimText || transcript || '') : '';
@@ -225,16 +299,18 @@ export default function ChatPanel({ chat, sourceTitle }) {
             {/* Conversation mode status bar */}
             {conversationMode && (
               <div
-                className={`chat-conversation-bar ${speaking ? 'speaking' : isListening ? 'listening' : loading ? 'thinking' : ''}`}
+                className={`chat-conversation-bar ${conversationPaused ? 'paused' : speaking ? 'speaking' : isListening ? 'listening' : loading ? 'thinking' : ''}`}
                 onClick={speaking ? handleStopSpeaking : undefined}
               >
-                {speaking
-                  ? 'AI is speaking... (tap to stop)'
-                  : isListening
-                    ? (displayText || 'Listening...')
-                    : loading
-                      ? 'Thinking...'
-                      : 'Ready'}
+                {conversationPaused
+                  ? '일시정지 - 단어 검색 중...'
+                  : speaking
+                    ? 'AI is speaking... (tap to stop)'
+                    : isListening
+                      ? (displayText || 'Listening...')
+                      : loading
+                        ? 'Thinking...'
+                        : 'Ready'}
               </div>
             )}
 
@@ -244,6 +320,11 @@ export default function ChatPanel({ chat, sourceTitle }) {
                 messages={messages}
                 streamingText={streamingText}
                 onScrapToggle={refreshHistory}
+                interactive
+                onWordPress={handleChatWordPress}
+                onSentenceLongPress={handleChatSentenceLongPress}
+                onPressStart={handlePressStart}
+                onPressEndNoMenu={handlePressEndNoMenu}
               />
             </div>
 
@@ -298,6 +379,27 @@ export default function ChatPanel({ chat, sourceTitle }) {
                 )}
               </button>
             </div>
+
+            {/* Word/grammar lookup modal */}
+            <WordQuickMenu
+              isOpen={!!selectedWord}
+              position={wordPosition}
+              placement="below"
+              word={selectedWord || ''}
+              wordBbox={null}
+              sentenceWords={null}
+              sourceId={null}
+              currentPage={null}
+              existingAnnotation={null}
+              isGrammarMode={isGrammarMode}
+              containerRef={null}
+              zoomScale={1}
+              panOffset={null}
+              onClose={closeWordModal}
+              onSaved={null}
+              onDeleted={null}
+              sourceType="chat"
+            />
           </div>
         </div>
       )}

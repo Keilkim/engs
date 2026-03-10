@@ -35,7 +35,12 @@ export default function WordQuickMenu({
   const [positionReady, setPositionReady] = useState(false);
   const rafRef = useRef(null);
   const modalRef = useRef(null);
-  const touchStartRef = useRef({ time: 0, x: 0, y: 0 });
+  const openTimeRef = useRef(0);
+
+  // Track when menu opens (to ignore synthetic mouse events from the long-press touch)
+  useEffect(() => {
+    if (isOpen) openTimeRef.current = Date.now();
+  }, [isOpen]);
 
   const vocab = useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp });
   const grammar = useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp });
@@ -90,47 +95,6 @@ export default function WordQuickMenu({
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, [isOpen, wordBbox, containerRef, updatePosition]);
-
-  // Outside click/tap detection
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleTouchStart = (e) => {
-      touchStartRef.current = {
-        time: Date.now(),
-        x: e.touches[0].clientX,
-        y: e.touches[0].clientY,
-      };
-    };
-
-    const handleTouchEnd = (e) => {
-      if (modalRef.current?.contains(e.target)) return;
-      const { time, x, y } = touchStartRef.current;
-      const dx = Math.abs(e.changedTouches[0].clientX - x);
-      const dy = Math.abs(e.changedTouches[0].clientY - y);
-      if (Date.now() - time < 200 && Math.sqrt(dx * dx + dy * dy) < 10) {
-        onClose();
-      }
-    };
-
-    const handleClick = (e) => {
-      if (modalRef.current?.contains(e.target)) return;
-      onClose();
-    };
-
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('touchstart', handleTouchStart, { passive: true });
-      document.addEventListener('touchend', handleTouchEnd, { passive: true });
-      document.addEventListener('click', handleClick);
-    }, 350);
-
-    return () => {
-      clearTimeout(timeoutId);
-      document.removeEventListener('touchstart', handleTouchStart);
-      document.removeEventListener('touchend', handleTouchEnd);
-      document.removeEventListener('click', handleClick);
-    };
-  }, [isOpen, onClose]);
 
   // Load data on open / reset on close
   useEffect(() => {
@@ -198,6 +162,22 @@ export default function WordQuickMenu({
   const existingClass = existingAnnotation ? ' existing' : '';
 
   return (
+    <>
+    <div
+      className="word-quick-menu-backdrop"
+      onTouchStart={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }}
+      onMouseDown={(e) => {
+        // Ignore synthetic mouse events from the touch that triggered this menu
+        if (Date.now() - openTimeRef.current < 500) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }}
+    />
     <div ref={modalRef} className={`word-quick-menu${grammarClass}${existingClass} ${arrowClass}`} style={menuStyle}>
       {isGrammarMode ? (
         <GrammarModeContent
@@ -229,5 +209,6 @@ export default function WordQuickMenu({
         />
       )}
     </div>
+    </>
   );
 }
