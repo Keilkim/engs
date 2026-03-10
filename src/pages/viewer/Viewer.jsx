@@ -103,6 +103,7 @@ const zoomOrigin = { x: 0, y: 0 };
   } = useAnnotationHelpers(annotations, currentPage);
 
   const menuJustOpened = useRef(false); // Prevent menu from closing immediately
+  const menuJustClosed = useRef(false); // Prevent new lookup when closing menu
 
   // Delete vocabulary annotation
   async function handleDeleteVocabAnnotation() {
@@ -183,9 +184,16 @@ const zoomOrigin = { x: 0, y: 0 };
   const handleWordTap = useCallback((clientX, clientY, isLongPress = false) => {
     console.log(`[handleWordTap] ${isLongPress ? 'LONG PRESS' : 'SHORT TAP'} at (${clientX}, ${clientY})`);
 
+    // 메뉴가 방금 닫혔으면 새 검색 방지
+    if (menuJustClosed.current) {
+      return;
+    }
+
     // 모달이 열려있으면 닫기만 하고 return
     if (activeModal.type === 'wordMenu' || activeModal.type === 'grammarTooltip') {
       closeModal();
+      menuJustClosed.current = true;
+      setTimeout(() => { menuJustClosed.current = false; }, 400);
       return;
     }
 
@@ -398,6 +406,8 @@ const zoomOrigin = { x: 0, y: 0 };
       return;
     }
     closeModal();
+    menuJustClosed.current = true;
+    setTimeout(() => { menuJustClosed.current = false; }, 400);
   }, [closeModal]);
 
   // Handle word menu saved (with optimistic update)
