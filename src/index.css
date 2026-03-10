@@ -38,6 +38,32 @@
   background-color: var(--color-base);
 }
 
+/* Loading screen */
+.loading-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-base);
+  color: var(--color-signature);
+  font-size: 16px;
+}
+
+.loading-screen::after {
+  content: '';
+  width: 24px;
+  height: 24px;
+  margin-left: 12px;
+  border: 2px solid var(--color-signature-dark);
+  border-top-color: var(--color-signature-light);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Screen base */
 .screen {
   min-height: 100vh;
