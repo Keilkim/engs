@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ChatLog from '../containers/chat-log/ChatLog';
-import { speakText, stopSpeaking, isSpeaking } from '../utils/tts';
+import { speakText, stopSpeaking } from '../utils/tts';
 import { getSetting, SETTINGS_KEYS, LEVEL_OPTIONS } from '../services/settings';
+import { useVoiceInput } from '../hooks';
 
 /**
  * Shared ChatPanel component for Viewer and YouTubeViewer
- * Bottom sheet style chat panel with text + voice input
+ * Supports both text chat and conversational voice mode
  */
-export default function ChatPanel({ chat, voice, sourceTitle }) {
+export default function ChatPanel({ chat, sourceTitle }) {
   const {
     messages,
     loading,
@@ -19,17 +20,8 @@ export default function ChatPanel({ chat, voice, sourceTitle }) {
     refreshHistory,
   } = chat;
 
-  const {
-    isListening,
-    transcript,
-    isSupported: voiceSupported,
-    startListening,
-    stopListening,
-    clearTranscript,
-  } = voice;
-
   const [input, setInput] = useState('');
-  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [conversationMode, setConversationMode] = useState(false);
   const [speechRate, setSpeechRate] = useState(() => {
     const saved = localStorage.getItem('chat_speech_rate');
     return saved ? parseFloat(saved) : 1.0;
@@ -37,47 +29,86 @@ export default function ChatPanel({ chat, voice, sourceTitle }) {
   const [speaking, setSpeaking] = useState(false);
   const inputRef = useRef(null);
   const prevStreamingRef = useRef('');
+  const conversationModeRef = useRef(false);
+  const loadingRef = useRef(false);
+  const speechRateRef = useRef(speechRate);
+
+  // Keep refs in sync
+  useEffect(() => { conversationModeRef.current = conversationMode; }, [conversationMode]);
+  useEffect(() => { loadingRef.current = loading; }, [loading]);
+  useEffect(() => { speechRateRef.current = speechRate; }, [speechRate]);
+
+  // Auto-send callback for voice input
+  const handleAutoSend = useCallback((text) => {
+    if (text.trim() && !loadingRef.current) {
+      handleSend(text);
+    }
+  }, [handleSend]);
+
+  // Voice input with auto-send
+  const {
+    isListening,
+    transcript,
+    interimText,
+    isSupported: voiceSupported,
+    startListening,
+    stopListening,
+    clearTranscript,
+  } = useVoiceInput({ onAutoSend: handleAutoSend });
 
   const level = getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate');
   const levelLabel = LEVEL_OPTIONS.find(o => o.value === level)?.label || level;
 
-  // Handle voice transcript → input
-  useEffect(() => {
-    if (transcript) {
-      setInput(transcript);
+  // Auto-resume listening after TTS finishes in conversation mode
+  const resumeListeningAfterTts = useCallback(() => {
+    setSpeaking(false);
+    if (conversationModeRef.current) {
+      // Small delay before resuming listening
+      setTimeout(() => {
+        if (conversationModeRef.current) {
+          startListening();
+        }
+      }, 500);
     }
-  }, [transcript]);
+  }, [startListening]);
 
-  // TTS for AI responses
+  // TTS for AI responses - auto-speak in conversation mode
   useEffect(() => {
-    if (!ttsEnabled) return;
+    if (!conversationMode) return;
 
     // When streaming finishes (streamingText becomes empty and we have a new message)
     if (prevStreamingRef.current && !streamingText) {
       const lastMsg = messages[messages.length - 1];
       if (lastMsg?.role === 'assistant') {
         speakText(lastMsg.message, {
-          rate: speechRate,
+          rate: speechRateRef.current,
           onStart: () => setSpeaking(true),
-          onEnd: () => setSpeaking(false),
+          onEnd: resumeListeningAfterTts,
         });
       }
     }
     prevStreamingRef.current = streamingText;
-  }, [streamingText, messages, ttsEnabled, speechRate]);
+  }, [streamingText, messages, conversationMode, resumeListeningAfterTts]);
+
+  // Start/stop conversation mode
+  const toggleConversationMode = useCallback(() => {
+    if (conversationMode) {
+      // Stop everything
+      stopListening();
+      stopSpeaking();
+      setSpeaking(false);
+      setConversationMode(false);
+    } else {
+      // Start conversation mode
+      setConversationMode(true);
+      startListening();
+    }
+  }, [conversationMode, startListening, stopListening]);
 
   const handleSpeedChange = useCallback((rate) => {
     setSpeechRate(rate);
     localStorage.setItem('chat_speech_rate', rate.toString());
   }, []);
-
-  const handleToggleTts = useCallback(() => {
-    if (ttsEnabled) {
-      stopSpeaking();
-      setSpeaking(false);
-    }
-    setTtsEnabled(prev => !prev);
-  }, [ttsEnabled]);
 
   const handleSubmit = useCallback(() => {
     if (!input.trim()) return;
@@ -93,18 +124,21 @@ export default function ChatPanel({ chat, voice, sourceTitle }) {
     }
   }, [handleSubmit]);
 
-  const handleVoiceToggle = useCallback(() => {
-    if (isListening) {
-      stopListening();
-    } else {
-      startListening();
-    }
-  }, [isListening, startListening, stopListening]);
-
   const handleStopSpeaking = useCallback(() => {
     stopSpeaking();
     setSpeaking(false);
   }, []);
+
+  const handleClose = useCallback(() => {
+    setShowPanel(false);
+    stopSpeaking();
+    stopListening();
+    setConversationMode(false);
+    setSpeaking(false);
+  }, [setShowPanel, stopListening]);
+
+  // Display text: show interim voice text while listening
+  const displayText = isListening ? (interimText || transcript || '') : '';
 
   const SPEED_OPTIONS = [0.5, 0.75, 1.0, 1.25, 1.5];
 
@@ -137,39 +171,16 @@ export default function ChatPanel({ chat, voice, sourceTitle }) {
                 )}
               </div>
               <div className="chat-panel-header-right">
-                {/* TTS toggle */}
-                <button
-                  className={`chat-header-btn ${ttsEnabled ? 'active' : ''}`}
-                  onClick={handleToggleTts}
-                  title={ttsEnabled ? 'Disable voice' : 'Enable voice'}
+                {/* Speed control */}
+                <select
+                  className="chat-speed-select"
+                  value={speechRate}
+                  onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
                 >
-                  {ttsEnabled ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-                      <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-                    </svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                      <line x1="23" y1="9" x2="17" y2="15"/>
-                      <line x1="17" y1="9" x2="23" y2="15"/>
-                    </svg>
-                  )}
-                </button>
-
-                {/* Speed control (only when TTS enabled) */}
-                {ttsEnabled && (
-                  <select
-                    className="chat-speed-select"
-                    value={speechRate}
-                    onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
-                  >
-                    {SPEED_OPTIONS.map(s => (
-                      <option key={s} value={s}>{s}x</option>
-                    ))}
-                  </select>
-                )}
+                  {SPEED_OPTIONS.map(s => (
+                    <option key={s} value={s}>{s}x</option>
+                  ))}
+                </select>
 
                 {/* Clear chat */}
                 <button
@@ -186,7 +197,7 @@ export default function ChatPanel({ chat, voice, sourceTitle }) {
                 {/* Close */}
                 <button
                   className="chat-header-btn"
-                  onClick={() => { setShowPanel(false); stopSpeaking(); }}
+                  onClick={handleClose}
                   title="Close"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -197,10 +208,19 @@ export default function ChatPanel({ chat, voice, sourceTitle }) {
               </div>
             </div>
 
-            {/* Speaking indicator */}
-            {speaking && (
-              <div className="chat-speaking-bar" onClick={handleStopSpeaking}>
-                <span className="speaking-wave">~</span> Speaking... (tap to stop)
+            {/* Conversation mode status bar */}
+            {conversationMode && (
+              <div
+                className={`chat-conversation-bar ${speaking ? 'speaking' : isListening ? 'listening' : loading ? 'thinking' : ''}`}
+                onClick={speaking ? handleStopSpeaking : undefined}
+              >
+                {speaking
+                  ? 'AI is speaking... (tap to stop)'
+                  : isListening
+                    ? (displayText || 'Listening...')
+                    : loading
+                      ? 'Thinking...'
+                      : 'Ready'}
               </div>
             )}
 
@@ -215,38 +235,44 @@ export default function ChatPanel({ chat, voice, sourceTitle }) {
 
             {/* Input area */}
             <div className="chat-panel-input">
+              {/* Conversation mode toggle (big mic button) */}
+              {voiceSupported && (
+                <button
+                  className={`chat-conversation-btn ${conversationMode ? 'active' : ''}`}
+                  onClick={toggleConversationMode}
+                  title={conversationMode ? 'Stop conversation' : 'Start conversation'}
+                >
+                  {conversationMode ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                      <rect x="6" y="6" width="12" height="12" rx="2"/>
+                    </svg>
+                  ) : (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                      <line x1="12" y1="19" x2="12" y2="23"/>
+                      <line x1="8" y1="23" x2="16" y2="23"/>
+                    </svg>
+                  )}
+                </button>
+              )}
+
               <textarea
                 ref={inputRef}
                 className="chat-input-field"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={isListening ? 'Listening...' : 'Ask about this content...'}
+                placeholder={conversationMode ? 'Voice mode active...' : 'Ask about this content...'}
                 rows={1}
-                disabled={loading}
+                disabled={loading || conversationMode}
               />
-
-              {/* Voice input button */}
-              {voiceSupported && (
-                <button
-                  className={`chat-voice-btn ${isListening ? 'listening' : ''}`}
-                  onClick={handleVoiceToggle}
-                  title={isListening ? 'Stop listening' : 'Voice input'}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                    <line x1="12" y1="19" x2="12" y2="23"/>
-                    <line x1="8" y1="23" x2="16" y2="23"/>
-                  </svg>
-                </button>
-              )}
 
               {/* Send button */}
               <button
                 className="chat-send-btn"
                 onClick={handleSubmit}
-                disabled={!input.trim() || loading}
+                disabled={!input.trim() || loading || conversationMode}
               >
                 {loading ? (
                   <span className="chat-loading-dot">...</span>

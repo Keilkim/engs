@@ -6,7 +6,7 @@ import WordQuickMenu from '../../components/modals/WordQuickMenu';
 import ChatPanel from '../../components/ChatPanel';
 import { TranslatableText } from '../../components/translatable';
 import { PenModeToggle, ColorPalette, usePenStrokes } from '../../components/pen-mode';
-import { useChat, useVoiceInput } from '../../hooks';
+import { useChat } from '../../hooks';
 import { extractOcrText } from '../../services/ai/chat';
 import { useSourceData, useOcrWords, useSentenceFinder, useMinimap, useAnnotationHelpers, useModalState, useVocabularyPanel, usePageNavigation, useDesktopGestures, useTouchStateMachine } from './hooks';
 import { ImageContentView, VocabPanel } from './components';
@@ -26,8 +26,6 @@ export default function Viewer() {
   // Chat integration
   const sourceContext = source ? extractOcrText(source) : '';
   const chatHook = useChat({ sourceId: id, sourceContext, topicTitle: source?.title || '' });
-  const voiceHook = useVoiceInput();
-
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const contentRef = useRef(null);
@@ -769,7 +767,7 @@ const zoomOrigin = { x: 0, y: 0 };
         scrollContainerRef={scrollContainerRef}
       />
 
-      <ChatPanel chat={chatHook} voice={voiceHook} sourceTitle={source?.title} />
+      <ChatPanel chat={chatHook} sourceTitle={source?.title} />
 
 
       {/* Delete confirmation modal */}

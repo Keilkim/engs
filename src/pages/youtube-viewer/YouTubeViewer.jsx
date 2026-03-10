@@ -4,7 +4,7 @@ import YouTube from 'react-youtube';
 import { getSource, deleteSource } from '../../services/source';
 import { getAnnotations, deleteAnnotation } from '../../services/annotation';
 import useYouTubePlayer, { PLAYBACK_SPEEDS } from '../../hooks/useYouTubePlayer';
-import { useChat, useVoiceInput } from '../../hooks';
+import { useChat } from '../../hooks';
 import CaptionDisplay from '../../components/youtube/CaptionDisplay';
 import WordQuickMenu from '../../components/modals/WordQuickMenu';
 import ChatPanel from '../../components/ChatPanel';
@@ -179,7 +179,6 @@ export default function YouTubeViewer() {
     [segments]
   );
   const chatHook = useChat({ sourceId: id, sourceContext: captionContext, topicTitle: source?.title || '' });
-  const voiceHook = useVoiceInput();
 
   const opts = {
     height: '100%',
@@ -280,7 +279,7 @@ export default function YouTubeViewer() {
         onDeleted={handleWordDeleted}
       />
 
-      <ChatPanel chat={chatHook} voice={voiceHook} sourceTitle={source?.title} />
+      <ChatPanel chat={chatHook} sourceTitle={source?.title} />
 
       {showDeleteConfirm && (
         <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>

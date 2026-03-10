@@ -1216,3 +1216,47 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
+
+/* Conversation mode button */
+.chat-conversation-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--color-accent);
+  background: transparent;
+  color: var(--color-text-sub);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.chat-conversation-btn.active {
+  border-color: var(--color-error, #FF453A);
+  background: var(--color-error, #FF453A);
+  color: white;
+  animation: pulse 1.5s infinite;
+}
+
+/* Conversation status bar */
+.chat-conversation-bar {
+  padding: 8px 14px;
+  font-size: 13px;
+  text-align: center;
+  flex-shrink: 0;
+  transition: background 0.3s;
+  color: white;
+  background: var(--color-sub-accent);
+}
+.chat-conversation-bar.listening {
+  background: var(--color-highlight);
+}
+.chat-conversation-bar.speaking {
+  background: var(--color-success, #30D158);
+  cursor: pointer;
+}
+.chat-conversation-bar.thinking {
+  background: var(--color-sub-accent);
+  animation: blink 1.5s infinite;
+}
