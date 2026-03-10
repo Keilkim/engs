@@ -130,24 +130,39 @@ export default function YouTubeViewer() {
     });
   }, [annotations]);
 
-  // Caption word long press → show word menu (grammar mode with sentence text)
-  const handleWordLongPress = useCallback((word, rect, segmentIndex, wordIdx, timestamp, sentenceText) => {
+  // Word long-press → vocab search
+  const handleWordLongPress = useCallback((word, rect, segmentIndex, wordIdx, timestamp) => {
     if (!word) return;
     const existing = findExistingAnnotation(word);
 
-    // Auto-pause video
     wasPlayingRef.current = isPlaying;
     pauseVideo();
 
-    setSelectedWord(sentenceText || word);
-    setIsGrammarMode(true);
-    setSelectedSentenceText(sentenceText);
+    setSelectedWord(word);
+    setIsGrammarMode(false);
     setWordPosition({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
     setSelectedSegmentIndex(segmentIndex);
     setSelectedWordIndex(wordIdx);
     setSelectedTimestamp(timestamp);
     setExistingAnnotationForWord(existing || null);
   }, [findExistingAnnotation, isPlaying, pauseVideo]);
+
+  // Line long-press → grammar search
+  const handleLineLongPress = useCallback((sentenceText, rect, segmentIndex, timestamp) => {
+    if (!sentenceText) return;
+
+    wasPlayingRef.current = isPlaying;
+    pauseVideo();
+
+    setSelectedWord(sentenceText);
+    setIsGrammarMode(true);
+    setSelectedSentenceText(sentenceText);
+    setWordPosition({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
+    setSelectedSegmentIndex(segmentIndex);
+    setSelectedWordIndex(null);
+    setSelectedTimestamp(timestamp);
+    setExistingAnnotationForWord(null);
+  }, [isPlaying, pauseVideo]);
 
   const closeWordModal = useCallback(() => {
     setSelectedWord(null);
@@ -291,6 +306,7 @@ export default function YouTubeViewer() {
             isPlaying={isPlaying}
             onSeek={seekTo}
             onWordLongPress={handleWordLongPress}
+            onLineLongPress={handleLineLongPress}
             savedWords={savedWordsSet}
           />
         </div>

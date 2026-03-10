@@ -8,6 +8,7 @@ export default function CaptionDisplay({
   isPlaying,
   onSeek,
   onWordLongPress,
+  onLineLongPress,
   savedWords,
 }) {
   const scrollContainerRef = useRef(null);
@@ -50,6 +51,7 @@ export default function CaptionDisplay({
           currentTime={currentTime}
           onSeek={onSeek}
           onWordLongPress={onWordLongPress}
+          onLineLongPress={onLineLongPress}
           savedWords={savedWords}
         />
       ))}

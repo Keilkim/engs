@@ -18,6 +18,7 @@ export default function CaptionLine({
   currentTime,
   onSeek,
   onWordLongPress,
+  onLineLongPress,
   savedWords,
 }) {
   const touchStateRef = useRef(null);
@@ -83,17 +84,23 @@ export default function CaptionLine({
       executed: false,
     };
 
-    if (word) {
-      timerRef.current = setTimeout(() => {
-        if (touchStateRef.current && !touchStateRef.current.moved && !touchStateRef.current.executed) {
-          touchStateRef.current.executed = true;
+    timerRef.current = setTimeout(() => {
+      if (touchStateRef.current && !touchStateRef.current.moved && !touchStateRef.current.executed) {
+        touchStateRef.current.executed = true;
+        if (word) {
+          // Word long-press → vocab search
           const wIdx = touchStateRef.current.wordIndex;
           const timestamp = wordTimings[wIdx]?.start;
-          onWordLongPress?.(word, target.getBoundingClientRect(), index, wIdx, timestamp, segment.text);
+          onWordLongPress?.(word, target.getBoundingClientRect(), index, wIdx, timestamp);
+        } else {
+          // Line long-press (non-word area) → grammar search
+          const lineEl = target.closest('.caption-line');
+          const rect = lineEl ? lineEl.getBoundingClientRect() : target.getBoundingClientRect();
+          onLineLongPress?.(segment.text, rect, index, segment.start);
         }
-      }, LONG_PRESS_DURATION);
-    }
-  }, [onWordLongPress, index, wordTimings]);
+      }
+    }, LONG_PRESS_DURATION);
+  }, [onWordLongPress, onLineLongPress, index, wordTimings, segment]);
 
   const handlePointerMove = useCallback((e) => {
     if (!touchStateRef.current) return;
