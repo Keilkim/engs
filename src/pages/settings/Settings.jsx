@@ -187,19 +187,20 @@ export default function Settings() {
           <TranslatableText textKey="nav.back">Back</TranslatableText>
         </button>
         <h1><TranslatableText textKey="settings.settings">Settings</TranslatableText></h1>
+        <span style={{ width: 40 }} />
       </header>
 
       <main className="settings-content">
         {message.text && (
-          <div className={`message ${message.type}`}>
+          <div className={`settings-toast ${message.type}`}>
             {message.text}
           </div>
         )}
 
-        {/* Language Settings Section */}
+        {/* Language Settings */}
         <section className="settings-section">
           <div className="section-title">Language</div>
-          <div className="section-content always-visible">
+          <div className="settings-card">
             <div className="setting-row">
               <label>AI Chat Language</label>
               <select
@@ -242,82 +243,82 @@ export default function Settings() {
           </div>
         </section>
 
-        {/* Profile Section */}
+        {/* Account - Edit Profile & Change Password */}
         <section className="settings-section">
-          <button
-            className="section-header"
-            onClick={() => setActiveSection(
-              activeSection === 'profile' ? null : 'profile'
+          <div className="section-title">Account</div>
+          <div className="settings-card">
+            <button
+              className={`section-header${activeSection === 'profile' ? ' expanded' : ''}`}
+              onClick={() => setActiveSection(
+                activeSection === 'profile' ? null : 'profile'
+              )}
+            >
+              <span><TranslatableText textKey="settings.editProfile">Edit Profile</TranslatableText></span>
+              <span className="chevron">›</span>
+            </button>
+            {activeSection === 'profile' && (
+              <form className="section-content" onSubmit={handleUpdateProfile}>
+                <div className="input-group">
+                  <label><TranslatableText textKey="settings.nickname">Nickname</TranslatableText></label>
+                  <input
+                    type="text"
+                    value={nickname}
+                    onChange={(e) => setNickname(e.target.value)}
+                    placeholder="Nickname"
+                  />
+                </div>
+                <button type="submit" disabled={loading}>
+                  {loading ? 'Saving...' : <TranslatableText textKey="settings.save">Save</TranslatableText>}
+                </button>
+              </form>
             )}
-          >
-            <span><TranslatableText textKey="settings.editProfile">Edit Profile</TranslatableText></span>
-            <span>{activeSection === 'profile' ? '▲' : '▼'}</span>
-          </button>
-          {activeSection === 'profile' && (
-            <form className="section-content" onSubmit={handleUpdateProfile}>
-              <div className="input-group">
-                <label><TranslatableText textKey="settings.nickname">Nickname</TranslatableText></label>
-                <input
-                  type="text"
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                  placeholder="Nickname"
-                />
-              </div>
-              <button type="submit" disabled={loading}>
-                {loading ? 'Saving...' : <TranslatableText textKey="settings.save">Save</TranslatableText>}
-              </button>
-            </form>
-          )}
+            <button
+              className={`section-header${activeSection === 'password' ? ' expanded' : ''}`}
+              onClick={() => setActiveSection(
+                activeSection === 'password' ? null : 'password'
+              )}
+            >
+              <span><TranslatableText textKey="settings.changePassword">Change Password</TranslatableText></span>
+              <span className="chevron">›</span>
+            </button>
+            {activeSection === 'password' && (
+              <form className="section-content" onSubmit={handleChangePassword}>
+                <div className="input-group">
+                  <label><TranslatableText textKey="settings.newPassword">New Password</TranslatableText></label>
+                  <input
+                    type="password"
+                    value={passwords.new}
+                    onChange={(e) => setPasswords({
+                      ...passwords,
+                      new: e.target.value,
+                    })}
+                    placeholder="8+ characters"
+                  />
+                </div>
+                <div className="input-group">
+                  <label><TranslatableText textKey="settings.confirmNewPassword">Confirm New Password</TranslatableText></label>
+                  <input
+                    type="password"
+                    value={passwords.confirm}
+                    onChange={(e) => setPasswords({
+                      ...passwords,
+                      confirm: e.target.value,
+                    })}
+                    placeholder="Confirm password"
+                  />
+                </div>
+                <button type="submit" disabled={loading}>
+                  {loading ? 'Changing...' : <TranslatableText textKey="settings.change">Change</TranslatableText>}
+                </button>
+              </form>
+            )}
+          </div>
         </section>
 
-        <section className="settings-section">
-          <button
-            className="section-header"
-            onClick={() => setActiveSection(
-              activeSection === 'password' ? null : 'password'
-            )}
-          >
-            <span><TranslatableText textKey="settings.changePassword">Change Password</TranslatableText></span>
-            <span>{activeSection === 'password' ? '▲' : '▼'}</span>
-          </button>
-          {activeSection === 'password' && (
-            <form className="section-content" onSubmit={handleChangePassword}>
-              <div className="input-group">
-                <label><TranslatableText textKey="settings.newPassword">New Password</TranslatableText></label>
-                <input
-                  type="password"
-                  value={passwords.new}
-                  onChange={(e) => setPasswords({
-                    ...passwords,
-                    new: e.target.value,
-                  })}
-                  placeholder="8+ characters"
-                />
-              </div>
-              <div className="input-group">
-                <label><TranslatableText textKey="settings.confirmNewPassword">Confirm New Password</TranslatableText></label>
-                <input
-                  type="password"
-                  value={passwords.confirm}
-                  onChange={(e) => setPasswords({
-                    ...passwords,
-                    confirm: e.target.value,
-                  })}
-                  placeholder="Confirm password"
-                />
-              </div>
-              <button type="submit" disabled={loading}>
-                {loading ? 'Changing...' : <TranslatableText textKey="settings.change">Change</TranslatableText>}
-              </button>
-            </form>
-          )}
-        </section>
-
-        {/* Data Management Section */}
+        {/* Data Management */}
         <section className="settings-section">
           <div className="section-title">Data Management</div>
-          <div className="section-content always-visible">
+          <div className="settings-card">
             <button
               className="danger-button"
               onClick={handleResetProject}
@@ -335,10 +336,9 @@ export default function Settings() {
           </div>
         </section>
 
-        {/* Account Section */}
+        {/* Logout */}
         <section className="settings-section">
-          <div className="section-title">Account</div>
-          <div className="section-content always-visible">
+          <div className="settings-card">
             <button
               className="logout-button"
               onClick={handleLogout}
@@ -349,38 +349,44 @@ export default function Settings() {
           </div>
         </section>
 
+        {/* App Info */}
         <section className="settings-section">
-          <button
-            className="section-header"
-            onClick={() => setActiveSection(
-              activeSection === 'info' ? null : 'info'
+          <div className="settings-card">
+            <button
+              className={`section-header${activeSection === 'info' ? ' expanded' : ''}`}
+              onClick={() => setActiveSection(
+                activeSection === 'info' ? null : 'info'
+              )}
+            >
+              <span><TranslatableText textKey="settings.appInfo">App Info</TranslatableText></span>
+              <span className="chevron">›</span>
+            </button>
+            {activeSection === 'info' && (
+              <div className="section-content info-content">
+                <p><strong><TranslatableText textKey="settings.version">Version:</TranslatableText></strong> 1.0.0</p>
+                <p><strong><TranslatableText textKey="settings.developedBy">Developed by:</TranslatableText></strong> LangBuddy Team</p>
+                <a href="/terms" target="_blank">
+                  <TranslatableText textKey="settings.termsOfService">Terms of Service</TranslatableText>
+                </a>
+                <a href="/privacy" target="_blank">
+                  <TranslatableText textKey="settings.privacyPolicy">Privacy Policy</TranslatableText>
+                </a>
+              </div>
             )}
-          >
-            <span><TranslatableText textKey="settings.appInfo">App Info</TranslatableText></span>
-            <span>{activeSection === 'info' ? '▲' : '▼'}</span>
-          </button>
-          {activeSection === 'info' && (
-            <div className="section-content info-content">
-              <p><strong><TranslatableText textKey="settings.version">Version:</TranslatableText></strong> 1.0.0</p>
-              <p><strong><TranslatableText textKey="settings.developedBy">Developed by:</TranslatableText></strong> LangBuddy Team</p>
-              <a href="/terms" target="_blank">
-                <TranslatableText textKey="settings.termsOfService">Terms of Service</TranslatableText>
-              </a>
-              <a href="/privacy" target="_blank">
-                <TranslatableText textKey="settings.privacyPolicy">Privacy Policy</TranslatableText>
-              </a>
-            </div>
-          )}
+          </div>
         </section>
 
-        <section className="settings-section danger">
-          <button
-            className="section-header"
-            onClick={handleDeleteAccount}
-            disabled={loading}
-          >
-            <span><TranslatableText textKey="settings.deleteAccount">Delete Account</TranslatableText></span>
-          </button>
+        {/* Delete Account */}
+        <section className="settings-section">
+          <div className="settings-card">
+            <button
+              className="danger-button"
+              onClick={handleDeleteAccount}
+              disabled={loading}
+            >
+              <TranslatableText textKey="settings.deleteAccount">Delete Account</TranslatableText>
+            </button>
+          </div>
         </section>
       </main>
     </div>

@@ -89,34 +89,37 @@ export default function Mypage() {
         </section>
 
         <section className="menu-section">
-          <button
-            className="menu-item"
-            onClick={() => navigate('/settings')}
-          >
-            <span><TranslatableText textKey="mypage.settings">Settings</TranslatableText></span>
-            <span className="arrow">→</span>
-          </button>
-          <button
-            className="menu-item"
-            onClick={() => navigate('/onboarding')}
-          >
-            <span><TranslatableText textKey="settings.viewOnboarding">View Guide</TranslatableText></span>
-            <span className="arrow">→</span>
-          </button>
-          <button
-            className="menu-item logout-item"
-            onClick={handleLogout}
-            disabled={loggingOut}
-          >
-            <span>
-              {loggingOut ? (
-                <TranslatableText textKey="mypage.signingOut">Signing out...</TranslatableText>
-              ) : (
-                <TranslatableText textKey="mypage.signOut">Sign Out</TranslatableText>
-              )}
-            </span>
-            <span className="arrow">→</span>
-          </button>
+          <div className="menu-list">
+            <button
+              className="menu-item"
+              onClick={() => navigate('/settings')}
+            >
+              <span><TranslatableText textKey="mypage.settings">Settings</TranslatableText></span>
+              <span className="arrow">›</span>
+            </button>
+            <button
+              className="menu-item"
+              onClick={() => navigate('/onboarding')}
+            >
+              <span><TranslatableText textKey="settings.viewOnboarding">View Guide</TranslatableText></span>
+              <span className="arrow">›</span>
+            </button>
+          </div>
+          <div className="menu-list">
+            <button
+              className="menu-item logout-item"
+              onClick={handleLogout}
+              disabled={loggingOut}
+            >
+              <span>
+                {loggingOut ? (
+                  <TranslatableText textKey="mypage.signingOut">Signing out...</TranslatableText>
+                ) : (
+                  <TranslatableText textKey="mypage.signOut">Sign Out</TranslatableText>
+                )}
+              </span>
+            </button>
+          </div>
         </section>
       </main>
     </div>
