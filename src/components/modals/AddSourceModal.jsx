@@ -378,7 +378,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
               )}
               {captionStatus === 'not_found' && !isWhisperAvailable() && (
                 <p className="file-hint" style={{ color: '#fb923c' }}>
-                  캡션이 없습니다. Whisper 전사를 사용하려면 VITE_OPENAI_API_KEY를 설정하세요.
+                  캡션이 없습니다. Whisper 전사를 사용하려면 OPENAI_API_KEY를 서버 환경변수에 설정하세요.
                 </p>
               )}
 

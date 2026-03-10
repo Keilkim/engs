@@ -180,31 +180,21 @@ function blobToBase64(blob: Blob): Promise<string> {
 }
 
 export async function captureWebpageScreenshot(url: string) {
-  const params = new URLSearchParams({
-    access_key: import.meta.env.VITE_APIFLASH_KEY,
-    url: url,
-    full_page: 'true',
-    width: '430',
-    height: '932',
-    format: 'png',
-    response_type: 'json',
-    fresh: 'true',
-    scroll_delay: '3000',
-    delay: '5',
-    scale_factor: '2',
-    user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+  // Call server-side API route (keeps APIFlash key secure)
+  const response = await fetch('/api/screenshot', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
   });
 
-  const apiUrl = `https://api.apiflash.com/v1/urltoimage?${params.toString()}`;
-  const response = await fetch(apiUrl);
-  const data = await response.json();
-
-  if (!data.url) {
-    console.error('ApiFlash response:', data);
+  if (!response.ok) {
     throw new Error('Screenshot capture failed');
   }
 
-  const imgResponse = await fetch(data.url);
+  const data = await response.json();
+
+  // Download the screenshot image and convert to base64
+  const imgResponse = await fetch(data.imageUrl);
   const blob = await imgResponse.blob();
   const base64 = await blobToBase64(blob);
 

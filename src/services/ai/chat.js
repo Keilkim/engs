@@ -1,6 +1,6 @@
 import { getSetting, SETTINGS_KEYS } from '../settings';
 import { getVocabulary, getGrammarPatterns } from '../annotation';
-import { GOOGLE_API_KEY, GEMINI_API_URL, GEMINI_STREAM_URL, LANGUAGE_NAMES } from './config';
+import { fetchGemini, fetchGeminiStream, LANGUAGE_NAMES } from './config';
 import { safeJsonParse, logError } from '../../utils/errors';
 
 /**
@@ -251,23 +251,12 @@ Format your response as:
 5. 1 similar example sentence`,
   };
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${GOOGLE_API_KEY}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [{
-        parts: [{ text: prompts[type] }],
-      }],
-    }),
+  const data = await fetchGemini({
+    contents: [{
+      parts: [{ text: prompts[type] }],
+    }],
   });
 
-  if (!response.ok) {
-    throw new Error('AI 분석에 실패했습니다');
-  }
-
-  const data = await response.json();
   return data.candidates[0].content.parts[0].text;
 }
 
@@ -292,38 +281,37 @@ export async function chat(message, context = '', conversationHistory = []) {
       ]
     : [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + message }] }];
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${GOOGLE_API_KEY}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const data = await fetchGemini({
+    contents,
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 1024,
     },
-    body: JSON.stringify({
-      contents,
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 1024,
-      },
-    }),
   });
 
-  if (!response.ok) {
-    throw new Error('AI 응답에 실패했습니다');
-  }
-
-  const data = await response.json();
   return data.candidates[0].content.parts[0].text;
 }
 
 /**
  * Streaming AI chat (real-time typing effect)
  */
-export async function chatStream(message, context = '', conversationHistory = [], onChunk) {
-  const chatLang = getSetting(SETTINGS_KEYS.AI_CHAT_LANGUAGE, 'Korean');
+export async function chatStream(message, context = '', conversationHistory = [], onChunk, { languageOverride, conversationMode } = {}) {
+  const chatLang = languageOverride || getSetting(SETTINGS_KEYS.AI_CHAT_LANGUAGE, 'Korean');
   const level = getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate');
   const myDictContext = await buildMyDictionaryContext(chatLang);
 
   const systemPrompts = getSystemPrompts(context, level);
-  const systemPrompt = (systemPrompts[chatLang] || systemPrompts.Korean) + myDictContext;
+  let systemPrompt = (systemPrompts[chatLang] || systemPrompts.Korean) + myDictContext;
+
+  if (conversationMode) {
+    systemPrompt += `\n\n[CONVERSATION MODE]
+You are having a real-time voice conversation with the user for English practice.
+- Keep responses SHORT (1-3 sentences max) so the conversation flows naturally
+- Speak naturally like a real conversation partner, not a textbook
+- If the user makes grammar or pronunciation mistakes, gently correct them inline
+- Ask follow-up questions to keep the conversation going
+- Do NOT use markdown, bullet points, or formatting - just natural spoken English`;
+  }
 
   const history = buildConversationHistory(conversationHistory);
 
@@ -335,25 +323,13 @@ export async function chatStream(message, context = '', conversationHistory = []
       ]
     : [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + message }] }];
 
-  const streamUrl = `${GEMINI_STREAM_URL}?alt=sse&key=${GOOGLE_API_KEY}`;
-
-  const response = await fetch(streamUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await fetchGeminiStream({
+    contents,
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 1024,
     },
-    body: JSON.stringify({
-      contents,
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 1024,
-      },
-    }),
   });
-
-  if (!response.ok) {
-    throw new Error('AI 응답에 실패했습니다');
-  }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();

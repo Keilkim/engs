@@ -1,10 +1,5 @@
 // YouTube Service - URL parsing, metadata, captions, Whisper transcription
 
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-
-// Railway backend server for YouTube audio extraction
-const RAILWAY_AUDIO_SERVER = import.meta.env.VITE_RAILWAY_AUDIO_URL || 'https://youtube-audio-server-production-711c.up.railway.app';
-
 /**
  * Parse YouTube URL and extract video ID
  * Supports: youtube.com/watch?v=, youtu.be/, youtube.com/shorts/
@@ -221,102 +216,24 @@ function parseYouTubeCaptionData(data, lang) {
 }
 
 /**
- * Check if Whisper transcription is available
- */
-export async function checkWhisperAvailability() {
-  try {
-    const response = await fetch(`${RAILWAY_AUDIO_SERVER}/`, { method: 'GET' });
-    if (response.ok) return { available: true };
-    return { available: false, error: '오디오 서버에 연결할 수 없습니다' };
-  } catch {
-    return { available: false, error: '오디오 서버 연결 실패' };
-  }
-}
-
-/**
- * Extract audio from YouTube using Railway backend server with yt-dlp
- */
-export async function extractYouTubeAudio(videoId) {
-  console.log('[YouTube] Extracting audio for:', videoId);
-
-  const response = await fetch(`${RAILWAY_AUDIO_SERVER}/api/extract-audio`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ videoId }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || 'Failed to extract audio');
-  }
-
-  const data = await response.json();
-  if (!data.audioBase64) throw new Error('No audio data returned');
-
-  const binaryString = atob(data.audioBase64);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return new Blob([bytes], { type: data.mimeType || 'audio/mp3' });
-}
-
-/**
- * Full Whisper transcription flow: extract audio + transcribe
+ * Full Whisper transcription flow via server-side API route
+ * Audio extraction + transcription happens entirely on the server
  */
 export async function transcribeYouTubeWithWhisper(videoId, language = 'en', onProgress) {
-  onProgress?.('오디오 추출 중...');
-  const audioBlob = await extractYouTubeAudio(videoId);
-  onProgress?.('음성 인식 중...');
-  return await transcribeWithWhisper(audioBlob, language);
-}
+  onProgress?.('오디오 추출 + 음성 인식 중...');
 
-/**
- * Transcribe audio using OpenAI Whisper API
- */
-export async function transcribeWithWhisper(audioBlob, language = 'en') {
-  if (!OPENAI_API_KEY) {
-    throw new Error('OpenAI API key not configured');
-  }
-
-  const formData = new FormData();
-  formData.append('file', audioBlob, 'audio.mp3');
-  formData.append('model', 'whisper-1');
-  formData.append('language', language);
-  formData.append('response_format', 'verbose_json');
-  formData.append('timestamp_granularities[]', 'segment');
-  formData.append('timestamp_granularities[]', 'word');
-
-  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+  const response = await fetch('/api/whisper', {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-    body: formData,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ videoId, language }),
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || 'Whisper transcription failed');
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || 'Whisper transcription failed');
   }
 
-  const data = await response.json();
-
-  const segments = (data.segments || []).map((seg, index) => {
-    const segmentWords = (data.words || []).filter(
-      w => w.start >= seg.start && w.end <= seg.end
-    );
-    return {
-      id: index,
-      start: seg.start,
-      end: seg.end,
-      text: seg.text.trim(),
-      words: segmentWords.map(w => ({ word: w.word, start: w.start, end: w.end })),
-    };
-  });
-
-  const durationMinutes = data.duration ? data.duration / 60 : 0;
-  const cost = durationMinutes * 0.006;
-
-  return { segments, language: data.language || language, source: 'whisper', duration: data.duration, cost };
+  return await response.json();
 }
 
 /**
@@ -381,8 +298,8 @@ export function calculateWhisperCost(durationSeconds) {
 }
 
 /**
- * Check if Whisper API key is configured
+ * Check if Whisper is available (server-side key, always true if API route exists)
  */
 export function isWhisperAvailable() {
-  return !!OPENAI_API_KEY;
+  return true;
 }

@@ -3,10 +3,8 @@
  * WebSocket을 통한 실시간 음성/영상 스트리밍
  */
 
-const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
-
-// Gemini Live API WebSocket URL
-const LIVE_API_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GOOGLE_API_KEY}`;
+// WebSocket URL is fetched at runtime from server-side API route
+let cachedWsUrl = null;
 
 export class GeminiLiveSession {
   constructor(options = {}) {
@@ -48,9 +46,16 @@ export class GeminiLiveSession {
   }
 
   async connect() {
+    // Fetch WebSocket URL from server (keeps API key out of bundle)
+    if (!cachedWsUrl) {
+      const res = await fetch('/api/gemini-ws-url');
+      const data = await res.json();
+      cachedWsUrl = data.url;
+    }
+
     return new Promise((resolve, reject) => {
       try {
-        this.ws = new WebSocket(LIVE_API_URL);
+        this.ws = new WebSocket(cachedWsUrl);
 
         this.ws.onopen = () => {
           console.log('[GeminiLive] WebSocket connected');

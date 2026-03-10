@@ -1,7 +1,4 @@
-// API Configuration
-export const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
-export const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
-export const GEMINI_STREAM_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent';
+// API Configuration - keys are now server-side only
 
 // Language name mapping for prompts
 export const LANGUAGE_NAMES = {
@@ -30,3 +27,37 @@ export const GRAMMAR_COLORS = {
   Conjunction: '#2dd4bf',  // 청록색 - 접속사
   Determiner: '#94a3b8',   // 회색 - 관사/한정사
 };
+
+/**
+ * Call Gemini API via server-side proxy (non-streaming)
+ */
+export async function fetchGemini(body) {
+  const response = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error('Gemini API request failed');
+  }
+
+  return response.json();
+}
+
+/**
+ * Call Gemini API via server-side proxy (streaming SSE)
+ */
+export async function fetchGeminiStream(body) {
+  const response = await fetch('/api/gemini-stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error('Gemini streaming request failed');
+  }
+
+  return response;
+}

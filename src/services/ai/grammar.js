@@ -1,5 +1,5 @@
 import nlp from 'compromise';
-import { GRAMMAR_COLORS, GOOGLE_API_KEY, GEMINI_API_URL } from './config';
+import { GRAMMAR_COLORS, fetchGemini } from './config';
 import { parseGeminiJSON } from './gemini';
 import { getSetting, SETTINGS_KEYS } from '../settings';
 import { logError } from '../../utils/errors';
@@ -216,26 +216,15 @@ BAD (don't include):
 Return ONLY valid JSON, no markdown.`;
 
   try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${GOOGLE_API_KEY}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const data = await fetchGemini({
+      contents: [{
+        parts: [{ text: prompt }],
+      }],
+      generationConfig: {
+        temperature: 0.3,
       },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: prompt }],
-        }],
-        generationConfig: {
-          temperature: 0.3,
-        },
-      }),
     });
 
-    if (!response.ok) {
-      throw new Error('AI 문법 분석에 실패했습니다');
-    }
-
-    const data = await response.json();
     const responseText = data.candidates[0].content.parts[0].text;
 
     const result = parseGeminiJSON(responseText);
