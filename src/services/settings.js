@@ -1,15 +1,18 @@
 import { supabase } from './supabase';
+import { safeJsonParse } from '../utils/errors';
 
 // Settings keys
 export const SETTINGS_KEYS = {
   AI_CHAT_LANGUAGE: 'ai_chat_language',
   TRANSLATION_LANGUAGE: 'translation_language',
+  ENGLISH_LEVEL: 'english_level',
 };
 
 // Default values
 export const DEFAULTS = {
   [SETTINGS_KEYS.AI_CHAT_LANGUAGE]: 'Korean',
   [SETTINGS_KEYS.TRANSLATION_LANGUAGE]: 'Korean',
+  [SETTINGS_KEYS.ENGLISH_LEVEL]: 'intermediate',
 };
 
 // Language options
@@ -26,6 +29,13 @@ export const LANGUAGE_OPTIONS = {
     { value: 'German', label: 'Deutsch' },
   ],
 };
+
+// English level options
+export const LEVEL_OPTIONS = [
+  { value: 'beginner', label: 'Beginner (초급)' },
+  { value: 'intermediate', label: 'Intermediate (중급)' },
+  { value: 'advanced', label: 'Advanced (고급)' },
+];
 
 // Get setting from localStorage
 export function getSetting(key, defaultValue = null) {
@@ -98,12 +108,8 @@ export async function resetVocabulary() {
   // Filter vocabulary items by ai_analysis_json.isVocabulary
   const vocabIds = (allHighlights || [])
     .filter(item => {
-      try {
-        const json = JSON.parse(item.ai_analysis_json || '{}');
-        return json.isVocabulary === true;
-      } catch {
-        return false;
-      }
+      const json = safeJsonParse(item.ai_analysis_json, {});
+      return json.isVocabulary === true;
     })
     .map(item => item.id);
 

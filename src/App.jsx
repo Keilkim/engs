@@ -1,20 +1,21 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { TranslationProvider } from './i18n';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 
-// Pages
-import Login from './pages/login/Login';
-import Register from './pages/register/Register';
-import Home from './pages/home/Home';
-import Viewer from './pages/viewer/Viewer';
-import Review from './pages/review/Review';
-import Chat from './pages/chat/Chat';
-import LiveChat from './pages/live-chat/LiveChat';
-import Mypage from './pages/mypage/Mypage';
-import Settings from './pages/settings/Settings';
-import Onboarding from './pages/onboarding/Onboarding';
+// Lazy-loaded pages
+const Login = lazy(() => import('./pages/login/Login'));
+const Register = lazy(() => import('./pages/register/Register'));
+const Home = lazy(() => import('./pages/home/Home'));
+const Viewer = lazy(() => import('./pages/viewer/Viewer'));
+const Review = lazy(() => import('./pages/review/Review'));
+const Chat = lazy(() => import('./pages/chat/Chat'));
+const LiveChat = lazy(() => import('./pages/live-chat/LiveChat'));
+const Mypage = lazy(() => import('./pages/mypage/Mypage'));
+const Settings = lazy(() => import('./pages/settings/Settings'));
+const Onboarding = lazy(() => import('./pages/onboarding/Onboarding'));
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
       <TranslationProvider>
         <AuthProvider>
           <BrowserRouter>
+          <Suspense fallback={<div className="loading-screen">Loading...</div>}>
           <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
@@ -96,6 +98,7 @@ function App() {
           {/* Catch-all route */}
           <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
+          </Suspense>
           </BrowserRouter>
         </AuthProvider>
       </TranslationProvider>

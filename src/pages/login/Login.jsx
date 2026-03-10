@@ -53,7 +53,7 @@ export default function Login() {
     <div className="login-screen">
       <div className="login-container">
         <div className="app-logo">
-          <h1>랭버디</h1>
+          <h1><TranslatableText textKey="login.appName">LangBuddy</TranslatableText></h1>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">

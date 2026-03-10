@@ -1,11 +1,8 @@
 import { useState, useRef } from 'react';
 import { createSource, uploadFile, captureWebpageScreenshot } from '../../services/source';
-import { extractTextWithWordPositions } from '../../services/ai';
+import { convertPdfToImages } from '../../utils/pdfUtils';
+import { generateImageThumbnail, generateThumbnailFromPage, ocrAllPages } from './sourceHelpers';
 import { TranslatableText } from '../translatable';
-import * as pdfjsLib from 'pdfjs-dist';
-
-// PDF.js worker 설정 - use unpkg for better ESM compatibility
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
   const [activeTab, setActiveTab] = useState('file');
@@ -17,139 +14,6 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
   const fileInputRef = useRef(null);
 
   if (!isOpen) return null;
-
-  // Generate thumbnail from image file
-  async function generateImageThumbnail(file) {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const maxSize = 800;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > maxSize) {
-              height = (height * maxSize) / width;
-              width = maxSize;
-            }
-          } else {
-            if (height > maxSize) {
-              width = (width * maxSize) / height;
-              height = maxSize;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.7));
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
-  // Convert all PDF pages to high-quality images
-  async function convertPdfToImages(file, onProgress) {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const numPages = pdf.numPages;
-    const pages = [];
-
-    for (let i = 1; i <= numPages; i++) {
-      onProgress?.(`Converting page ${i}/${numPages}...`);
-
-      const page = await pdf.getPage(i);
-      const scale = 2.0; // 고화질
-      const viewport = page.getViewport({ scale });
-
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-
-      await page.render({
-        canvasContext: context,
-        viewport: viewport,
-      }).promise;
-
-      // 고화질 JPEG로 저장
-      const imageData = canvas.toDataURL('image/jpeg', 0.9);
-      pages.push(imageData);
-    }
-
-    return pages;
-  }
-
-  // OCR all pages and extract word positions
-  async function ocrAllPages(pages, onProgress) {
-    const ocrData = { pages: [] };
-
-    for (let i = 0; i < pages.length; i++) {
-      onProgress?.(`OCR 처리 중 (${i + 1}/${pages.length})...`);
-
-      try {
-        const result = await extractTextWithWordPositions(pages[i]);
-        if (result && result.words) {
-          ocrData.pages.push({
-            pageIndex: i,
-            words: result.words.map(w => ({
-              text: w.text,
-              bbox: {
-                x: w.bbox.x,
-                y: w.bbox.y,
-                width: w.bbox.width,
-                height: w.bbox.height,
-              },
-            })),
-          });
-        } else {
-          ocrData.pages.push({ pageIndex: i, words: [] });
-        }
-      } catch {
-        ocrData.pages.push({ pageIndex: i, words: [] });
-      }
-    }
-
-    return ocrData;
-  }
-
-  // Generate thumbnail from first page
-  function generateThumbnailFromPage(pageImage) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxSize = 800;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > maxSize) {
-            height = (height * maxSize) / width;
-            width = maxSize;
-          }
-        } else {
-          if (height > maxSize) {
-            width = (width * maxSize) / height;
-            height = maxSize;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
-      };
-      img.src = pageImage;
-    });
-  }
 
   async function handleFileUpload(e) {
     const file = e.target.files[0];
@@ -168,31 +32,23 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
       let ocrData = null;
 
       if (fileType === 'image') {
-        // For images, generate thumbnail and read as base64 for OCR
         setLoadingStatus('Generating preview...');
         screenshot = await generateImageThumbnail(file);
 
-        // Read full image for OCR
         const fullImage = await new Promise((resolve) => {
           const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target.result);
+          reader.onload = (ev) => resolve(ev.target.result);
           reader.readAsDataURL(file);
         });
         pages = [fullImage];
-
-        // OCR the image
         ocrData = await ocrAllPages(pages, setLoadingStatus);
       } else if (fileType === 'pdf') {
-        // For PDFs, convert all pages to images
         try {
           pages = await convertPdfToImages(file, setLoadingStatus);
-          // Use first page as thumbnail
           if (pages.length > 0) {
             setLoadingStatus('Generating thumbnail...');
             screenshot = await generateThumbnailFromPage(pages[0]);
           }
-
-          // OCR all pages
           ocrData = await ocrAllPages(pages, setLoadingStatus);
         } catch (captureErr) {
           console.warn('Could not convert PDF pages:', captureErr);
@@ -219,7 +75,6 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
     }
   }
 
-  // 웹페이지 스크린샷 캡처 (메인 콘텐츠만)
   async function handleScreenshotSubmit(e) {
     e.preventDefault();
 
@@ -233,16 +88,12 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
 
     try {
       setLoadingStatus('Capturing screenshot...');
-
-      // Microlink API로 Full Page 스크린샷 캡처 후 메인 콘텐츠 크롭
       const result = await captureWebpageScreenshot(url);
       const pages = [result.image];
 
-      // 썸네일 생성
       setLoadingStatus('Generating thumbnail...');
       const thumbnail = await generateThumbnailFromPage(result.image);
 
-      // OCR
       const ocrData = await ocrAllPages(pages, setLoadingStatus);
 
       setLoadingStatus('Saving source...');

@@ -1,14 +1,15 @@
+import { useTranslation } from '../../i18n';
 import './ColorPalette.css';
 
 const COLORS = [
-  { id: 'blue', value: '#0A84FF', name: '파랑' },
-  { id: 'red', value: '#FF453A', name: '빨강' },
-  { id: 'green', value: '#30D158', name: '초록' },
-  { id: 'yellow', value: '#FFD60A', name: '노랑' },
-  { id: 'orange', value: '#FF9F0A', name: '주황' },
-  { id: 'purple', value: '#BF5AF2', name: '보라' },
-  { id: 'white', value: '#FFFFFF', name: '흰색' },
-  { id: 'black', value: '#1D1D1F', name: '검정' },
+  { id: 'blue', value: '#0A84FF', nameKey: 'penMode.blue' },
+  { id: 'red', value: '#FF453A', nameKey: 'penMode.red' },
+  { id: 'green', value: '#30D158', nameKey: 'penMode.green' },
+  { id: 'yellow', value: '#FFD60A', nameKey: 'penMode.yellow' },
+  { id: 'orange', value: '#FF9F0A', nameKey: 'penMode.orange' },
+  { id: 'purple', value: '#BF5AF2', nameKey: 'penMode.purple' },
+  { id: 'white', value: '#FFFFFF', nameKey: 'penMode.white' },
+  { id: 'black', value: '#1D1D1F', nameKey: 'penMode.black' },
 ];
 
 export default function ColorPalette({
@@ -19,6 +20,8 @@ export default function ColorPalette({
   onStrokeWidthChange,
   onClose,
 }) {
+  const { ko } = useTranslation();
+
   if (!isOpen) return null;
 
   const handleBackdropClick = (e) => {
@@ -33,7 +36,7 @@ export default function ColorPalette({
         {/* 두께 조절 슬라이더 */}
         <div className="stroke-width-section">
           <div className="stroke-width-header">
-            <span className="stroke-width-label">두께</span>
+            <span className="stroke-width-label">{ko('penMode.thickness')}</span>
             <span className="stroke-width-value">{strokeWidth}</span>
           </div>
           <input
@@ -69,7 +72,7 @@ export default function ColorPalette({
               onClick={() => {
                 onColorSelect(color.value);
               }}
-              aria-label={color.name}
+              aria-label={ko(color.nameKey)}
             />
           ))}
         </div>

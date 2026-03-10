@@ -8,3 +8,5 @@ export { useMinimap } from './useMinimap';
 export { useAnnotationHelpers } from './useAnnotationHelpers';
 export { useVocabularyPanel } from './useVocabularyPanel';
 export { useImageGestures } from './useImageGestures';
+export { useDesktopGestures } from './useDesktopGestures';
+export { useTouchStateMachine } from './useTouchStateMachine';

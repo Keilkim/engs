@@ -1,4 +1,14 @@
-import Tesseract from 'tesseract.js';
+import { logError } from '../../utils/errors';
+
+// Dynamically import tesseract.js to avoid bundling in main chunk
+let Tesseract = null;
+async function loadTesseract() {
+  if (!Tesseract) {
+    const mod = await import('tesseract.js');
+    Tesseract = mod.default;
+  }
+  return Tesseract;
+}
 
 /**
  * Levenshtein distance calculation for string similarity
@@ -69,7 +79,8 @@ function correctTextWithWordBag(text, wordBag) {
  */
 export async function extractTextFromImage(base64Image, wordBag = null) {
   try {
-    const result = await Tesseract.recognize(base64Image, 'eng', {
+    const tess = await loadTesseract();
+    const result = await tess.recognize(base64Image, 'eng', {
       logger: (m) => {
         if (m.status === 'recognizing text') {
           console.log('Tesseract:', Math.round(m.progress * 100) + '%');
@@ -87,8 +98,7 @@ export async function extractTextFromImage(base64Image, wordBag = null) {
 
     return text || null;
   } catch (err) {
-    console.error('Tesseract OCR failed:', err);
-    return null;
+    throw new Error(`Tesseract OCR failed: ${err.message}`);
   }
 }
 
@@ -101,7 +111,8 @@ export async function extractWordBagFromImages(images) {
   for (let i = 0; i < images.length; i++) {
     try {
       console.log(`OCR processing page ${i + 1}/${images.length}...`);
-      const result = await Tesseract.recognize(images[i], 'eng', {
+      const tess = await loadTesseract();
+      const result = await tess.recognize(images[i], 'eng', {
         logger: (m) => {
           if (m.status === 'recognizing text' && m.progress === 1) {
             console.log(`Page ${i + 1} OCR complete`);
@@ -116,7 +127,7 @@ export async function extractWordBagFromImages(images) {
 
       words.forEach(w => wordSet.add(w));
     } catch (err) {
-      console.error(`Page ${i + 1} OCR failed:`, err);
+      logError(`extractWordBag.page${i + 1}`, err);
     }
   }
 
@@ -138,7 +149,8 @@ export async function extractTextWithWordPositions(base64Image) {
     const { width: imageWidth, height: imageHeight } = await imgLoadPromise;
     console.log('[OCR-Extract] Image dimensions:', imageWidth, 'x', imageHeight);
 
-    const worker = await Tesseract.createWorker('eng', 1);
+    const tess = await loadTesseract();
+    const worker = await tess.createWorker('eng', 1);
 
     const result = await worker.recognize(base64Image, {}, {
       text: true,
@@ -231,8 +243,7 @@ export async function extractTextWithWordPositions(base64Image) {
       imageSize: { width: imageWidth, height: imageHeight },
     };
   } catch (err) {
-    console.error('Tesseract OCR failed:', err);
-    return null;
+    throw new Error(`Tesseract OCR failed: ${err.message}`);
   }
 }
 

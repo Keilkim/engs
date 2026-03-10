@@ -2,3 +2,4 @@
 
 export { speakText, stopSpeaking, isSpeaking, preloadVoices } from './tts';
 export { cleanDisplayText, isWordOrPhrase, escapeRegex } from './textUtils';
+export { safeJsonParse, logError } from './errors';

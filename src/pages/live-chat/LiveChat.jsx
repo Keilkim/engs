@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GeminiLiveSession, AudioCapture, VideoCapture } from '../../services/geminiLive';
+import { useTranslation } from '../../i18n';
 import './LiveChat.css';
 
 export default function LiveChat() {
   const navigate = useNavigate();
+  const { ko } = useTranslation();
 
   // Connection state
   const [isConnected, setIsConnected] = useState(false);
@@ -73,11 +75,11 @@ export default function LiveChat() {
       return true;
     } catch (err) {
       if (err.name === 'NotAllowedError') {
-        setError('카메라와 마이크 권한을 허용해주세요');
+        setError(ko('liveChat.permissionRequired'));
       } else if (err.name === 'NotFoundError') {
-        setError('카메라 또는 마이크를 찾을 수 없습니다');
+        setError(ko('liveChat.deviceNotFound'));
       } else {
-        setError('미디어 장치 접근에 실패했습니다');
+        setError(ko('liveChat.mediaAccessFailed'));
       }
       return false;
     }
@@ -120,7 +122,7 @@ export default function LiveChat() {
           });
         },
         onError: () => {
-          setError('연결 중 오류가 발생했습니다');
+          setError(ko('liveChat.connectionError'));
         },
       });
 
@@ -152,9 +154,9 @@ export default function LiveChat() {
 
     } catch (err) {
       if (err.message?.includes('not found') || err.message?.includes('not supported')) {
-        setError('Gemini Live API를 사용할 수 없습니다. API 키를 확인하거나 나중에 다시 시도해주세요.');
+        setError(ko('liveChat.apiUnavailable'));
       } else {
-        setError(err.message || '통화 시작에 실패했습니다');
+        setError(err.message || ko('liveChat.callStartFailed'));
       }
       setIsConnecting(false);
     }
@@ -230,15 +232,15 @@ export default function LiveChat() {
           {isConnected ? (
             <span className="call-status-inline">
               <span className="status-dot connected" />
-              통화 중
+              {ko('liveChat.inCall')}
             </span>
           ) : isConnecting ? (
             <span className="call-status-inline">
               <span className="status-dot connecting" />
-              연결 중...
+              {ko('liveChat.connecting')}
             </span>
           ) : (
-            'AI 화상통화'
+            ko('liveChat.videoChat')
           )}
         </h1>
         <div style={{ width: 40 }} />
@@ -315,7 +317,7 @@ export default function LiveChat() {
             <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
               <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
             </svg>
-            <span>통화 시작</span>
+            <span>{ko('liveChat.startCall')}</span>
           </button>
         ) : (
           <>
@@ -363,14 +365,13 @@ export default function LiveChat() {
       {/* Tips */}
       {!isConnected && !isConnecting && (
         <div className="tips-area">
-          <h3>💡 사용 팁</h3>
+          <h3>{ko('liveChat.tipsTitle')}</h3>
           <ul>
-            <li>마이크와 카메라 권한을 허용해주세요</li>
-            <li>AI가 카메라로 보이는 것을 보고 대화합니다</li>
-            <li>자연스럽게 영어로 대화해보세요</li>
-            <li>말을 끊으면 AI도 즉시 멈춥니다</li>
+            <li>{ko('liveChat.tip1')}</li>
+            <li>{ko('liveChat.tip2')}</li>
+            <li>{ko('liveChat.tip3')}</li>
+            <li>{ko('liveChat.tip4')}</li>
           </ul>
-
         </div>
       )}
 
@@ -379,13 +380,13 @@ export default function LiveChat() {
         <div className="warning-modal-overlay">
           <div className="warning-modal">
             <div className="warning-modal-icon">⚠️</div>
-            <h2>주의사항</h2>
+            <h2>{ko('liveChat.warningTitle')}</h2>
             <ul className="warning-list">
-              <li>이 기능은 AI와 실시간 화상통화를 제공합니다</li>
-              <li>카메라와 마이크 권한이 필요합니다</li>
-              <li>영상은 AI 분석에만 사용되며 저장되지 않습니다</li>
-              <li>안정적인 인터넷 연결이 필요합니다</li>
-              <li>조용한 환경에서 사용하시면 더 좋습니다</li>
+              <li>{ko('liveChat.warning1')}</li>
+              <li>{ko('liveChat.warning2')}</li>
+              <li>{ko('liveChat.warning3')}</li>
+              <li>{ko('liveChat.warning4')}</li>
+              <li>{ko('liveChat.warning5')}</li>
             </ul>
             <div className="warning-modal-buttons">
               <button className="warning-btn skip" onClick={handleWarningSkip}>

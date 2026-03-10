@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { getUserStats, getWeeklyStats } from '../../services/stats';
+import { useTranslation } from '../../i18n';
 
 export default function StatsDashboard() {
+  const { ko } = useTranslation();
   const [stats, setStats] = useState(null);
   const [weeklyStats, setWeeklyStats] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +73,7 @@ export default function StatsDashboard() {
       </div>
 
       <div className="weekly-chart">
-        <h3>주간 복습 현황</h3>
+        <h3>{ko('stats.weeklyReview')}</h3>
         <div className="chart-bars">
           {weeklyStats.map((day) => (
             <div key={day.date} className="chart-bar-container">

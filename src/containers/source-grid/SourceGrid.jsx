@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { deleteSource } from '../../services/source';
 import { TranslatableText } from '../../components/translatable';
+
+const SKELETON_ITEMS = Array.from({ length: 6 }, (_, i) => i);
 
 export default function SourceGrid({ sources, loading, columnCount = 2, onSourceDeleted, onSourceUpdated, selectMode = false, selectedIds = [], onSelectToggle }) {
   const navigate = useNavigate();
@@ -9,12 +11,12 @@ export default function SourceGrid({ sources, loading, columnCount = 2, onSource
   const [deleting, setDeleting] = useState(false);
 
   // 즐겨찾기 토글
-  function handlePinToggle(e, source) {
+  const handlePinToggle = useCallback((e, source) => {
     e.stopPropagation();
     if (onSourceUpdated) {
       onSourceUpdated(source.id, { pinned: !source.pinned });
     }
-  }
+  }, [onSourceUpdated]);
 
   // 컬럼 수에 따른 버튼 크기 계산
   const buttonScale = Math.max(0.6, 1 - (columnCount - 2) * 0.1);
@@ -22,7 +24,7 @@ export default function SourceGrid({ sources, loading, columnCount = 2, onSource
   if (loading) {
     return (
       <div className="source-grid" style={{ '--grid-columns': columnCount }}>
-        {[...Array(6)].map((_, i) => (
+        {SKELETON_ITEMS.map((i) => (
           <div key={i} className="source-card source-card-skeleton">
             <div className="source-thumbnail skeleton-shimmer" />
           </div>

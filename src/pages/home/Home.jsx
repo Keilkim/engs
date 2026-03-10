@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSources, updateSource } from '../../services/source';
@@ -59,24 +59,21 @@ export default function Home() {
   }, [sources, searchQuery, statusFilter]);
 
   // 소스 상태 업데이트 핸들러
-  async function handleSourceUpdated(sourceId, updates) {
-    // 1. 즉시 UI 업데이트 (optimistic)
+  const handleSourceUpdated = useCallback(async (sourceId, updates) => {
     setSources(prev => prev.map(source =>
       source.id === sourceId ? { ...source, ...updates } : source
     ));
 
-    // 2. API 호출 (백그라운드)
     try {
       await updateSource(sourceId, updates);
-    } catch (err) {
-      // 실패시 롤백
+    } catch {
       setSources(prev => prev.map(source =>
         source.id === sourceId
           ? { ...source, ...Object.fromEntries(Object.keys(updates).map(k => [k, !updates[k]])) }
           : source
       ));
     }
-  }
+  }, []);
 
   useEffect(() => {
     // 페이지 진입 시 스크롤 상단으로 이동
@@ -136,19 +133,19 @@ export default function Home() {
   }
 
   // 채팅 선택 모드 취소
-  function handleCancelChatSelect() {
+  const handleCancelChatSelect = useCallback(() => {
     setChatSelectMode(false);
     setSelectedSourceIds([]);
-  }
+  }, []);
 
   // 소스 선택 토글
-  function handleSourceSelect(sourceId) {
+  const handleSourceSelect = useCallback((sourceId) => {
     setSelectedSourceIds(prev =>
       prev.includes(sourceId)
         ? prev.filter(id => id !== sourceId)
         : [...prev, sourceId]
     );
-  }
+  }, []);
 
   return (
     <div className="home-screen">

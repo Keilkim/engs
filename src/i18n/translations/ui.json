@@ -19,6 +19,8 @@
     "reviewAgain": { "en": "Review Again", "ko": "다시 보기" }
   },
   "login": {
+    "appName": { "en": "LangBuddy", "ko": "랭버디" },
+    "autoLogin": { "en": "Auto Login", "ko": "자동 로그인" },
     "email": { "en": "Email", "ko": "이메일" },
     "password": { "en": "Password", "ko": "비밀번호" },
     "enterEmail": { "en": "Enter your email", "ko": "이메일을 입력하세요" },
@@ -60,7 +62,13 @@
     "unableToLoad": { "en": "Unable to load source", "ko": "소스를 불러올 수 없습니다" },
     "loading": { "en": "Loading...", "ko": "불러오는 중..." },
     "sourceNotFound": { "en": "Source not found", "ko": "소스를 찾을 수 없습니다" },
-    "goHome": { "en": "Go Home", "ko": "홈으로" }
+    "goHome": { "en": "Go Home", "ko": "홈으로" },
+    "savedWords": { "en": "Saved Words", "ko": "저장한 단어" },
+    "confirmDeleteVocab": { "en": "Delete this word?", "ko": "삭제하시겠습니까?" }
+  },
+  "source": {
+    "deleteTitle": { "en": "Delete Source", "ko": "소스 삭제" },
+    "deleteMessage": { "en": "Are you sure you want to delete this source? This action cannot be undone.", "ko": "이 소스를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다." }
   },
   "review": {
     "loadingItems": { "en": "Loading review items...", "ko": "복습 항목 불러오는 중..." },
@@ -77,7 +85,11 @@
     "aiChat": { "en": "AI Chat", "ko": "AI 대화" },
     "typeMessage": { "en": "Type a message...", "ko": "메시지를 입력하세요..." },
     "send": { "en": "Send", "ko": "전송" },
+    "responseFailed": { "en": "Response failed. Please try again.", "ko": "응답에 실패했습니다. 다시 시도해주세요." },
     "aiResponseFailed": { "en": "AI response failed. Please try again.", "ko": "AI 응답에 실패했습니다. 다시 시도해주세요." },
+    "clearTitle": { "en": "Clear Chat", "ko": "대화 삭제" },
+    "clearMessage": { "en": "Delete chat history? Bookmarked messages will also be deleted.", "ko": "대화 기록을 삭제하시겠습니까? 스크랩된 메시지도 함께 삭제됩니다." },
+    "clear": { "en": "Clear", "ko": "삭제" },
     "startConversation": { "en": "Start a conversation with AI!", "ko": "AI와 대화를 시작해보세요!" },
     "askQuestions": { "en": "Ask questions about your materials or practice English.", "ko": "학습한 내용에 대해 질문하거나 영어로 대화해보세요." },
     "removeBookmark": { "en": "Remove bookmark", "ko": "스크랩 해제" },
@@ -166,6 +178,66 @@
   "sourceGrid": {
     "noSources": { "en": "No sources added yet", "ko": "아직 추가된 소스가 없습니다" },
     "addFirst": { "en": "Add your first source!", "ko": "새 소스를 추가해보세요!" }
+  },
+  "common": {
+    "loading": { "en": "Loading...", "ko": "로딩 중..." },
+    "cancel": { "en": "Cancel", "ko": "취소" },
+    "delete": { "en": "Delete", "ko": "삭제" },
+    "close": { "en": "Close", "ko": "닫기" },
+    "save": { "en": "Save", "ko": "저장" }
+  },
+  "liveChat": {
+    "permissionRequired": { "en": "Please allow camera and microphone permissions", "ko": "카메라와 마이크 권한을 허용해주세요" },
+    "deviceNotFound": { "en": "Camera or microphone not found", "ko": "카메라 또는 마이크를 찾을 수 없습니다" },
+    "mediaAccessFailed": { "en": "Failed to access media devices", "ko": "미디어 장치 접근에 실패했습니다" },
+    "connectionError": { "en": "An error occurred during connection", "ko": "연결 중 오류가 발생했습니다" },
+    "callStartFailed": { "en": "Failed to start call", "ko": "통화 시작에 실패했습니다" },
+    "apiUnavailable": { "en": "Gemini Live API is unavailable. Please check your API key or try again later.", "ko": "Gemini Live API를 사용할 수 없습니다. API 키를 확인하거나 나중에 다시 시도해주세요." },
+    "inCall": { "en": "In Call", "ko": "통화 중" },
+    "connecting": { "en": "Connecting...", "ko": "연결 중..." },
+    "videoChat": { "en": "AI Video Chat", "ko": "AI 화상통화" },
+    "startCall": { "en": "Start Call", "ko": "통화 시작" },
+    "tipsTitle": { "en": "💡 Tips", "ko": "💡 사용 팁" },
+    "tip1": { "en": "Please allow camera and microphone permissions", "ko": "마이크와 카메라 권한을 허용해주세요" },
+    "tip2": { "en": "AI will see through your camera and have a conversation", "ko": "AI가 카메라로 보이는 것을 보고 대화합니다" },
+    "tip3": { "en": "Try speaking naturally in English", "ko": "자연스럽게 영어로 대화해보세요" },
+    "tip4": { "en": "If you interrupt, AI will stop immediately", "ko": "말을 끊으면 AI도 즉시 멈춥니다" },
+    "warningTitle": { "en": "Warning", "ko": "주의사항" },
+    "warning1": { "en": "This feature provides real-time video chat with AI", "ko": "이 기능은 AI와 실시간 화상통화를 제공합니다" },
+    "warning2": { "en": "Camera and microphone permissions are required", "ko": "카메라와 마이크 권한이 필요합니다" },
+    "warning3": { "en": "Video is only used for AI analysis and is not stored", "ko": "영상은 AI 분석에만 사용되며 저장되지 않습니다" },
+    "warning4": { "en": "A stable internet connection is required", "ko": "안정적인 인터넷 연결이 필요합니다" },
+    "warning5": { "en": "Works better in a quiet environment", "ko": "조용한 환경에서 사용하시면 더 좋습니다" }
+  },
+  "wordMenu": {
+    "annotationLoadFailed": { "en": "Failed to load annotation data", "ko": "주석 데이터 로드 실패" },
+    "lookupFailed": { "en": "Word lookup failed", "ko": "단어 검색 실패" },
+    "grammarFailed": { "en": "Grammar analysis failed", "ko": "문법 분석 실패" },
+    "analyzing": { "en": "Analyzing...", "ko": "분석 중..." },
+    "noPatterns": { "en": "No expressions found", "ko": "분석된 표현이 없습니다" },
+    "analysisFailed": { "en": "Analysis failed", "ko": "분석 실패" },
+    "lookingUp": { "en": "Looking up...", "ko": "조회 중..." }
+  },
+  "grammar": {
+    "saving": { "en": "Saving...", "ko": "저장 중..." },
+    "saveCount": { "en": "Save", "ko": "저장하기" },
+    "analyzing": { "en": "Analyzing grammar...", "ko": "문법 분석 중..." },
+    "noPatterns": { "en": "No grammar patterns found for this text.", "ko": "이 텍스트에서 학습할 문법 패턴을 찾지 못했습니다." },
+    "noPatternsSub": { "en": "Try selecting a sentence.", "ko": "문장 형태의 텍스트를 선택해보세요." },
+    "listenAgain": { "en": "Listen again", "ko": "다시 듣기" }
+  },
+  "penMode": {
+    "thickness": { "en": "Thickness", "ko": "두께" },
+    "enablePen": { "en": "Enable pen mode", "ko": "펜 모드 켜기" },
+    "disablePen": { "en": "Disable pen mode", "ko": "펜 모드 끄기" },
+    "blue": { "en": "Blue", "ko": "파랑" },
+    "red": { "en": "Red", "ko": "빨강" },
+    "green": { "en": "Green", "ko": "초록" },
+    "yellow": { "en": "Yellow", "ko": "노랑" },
+    "orange": { "en": "Orange", "ko": "주황" },
+    "purple": { "en": "Purple", "ko": "보라" },
+    "white": { "en": "White", "ko": "흰색" },
+    "black": { "en": "Black", "ko": "검정" }
   },
   "errors": {
     "loadDataFailed": { "en": "Failed to load data:", "ko": "데이터 로드 실패:" },

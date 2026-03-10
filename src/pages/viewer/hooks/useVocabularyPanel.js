@@ -1,30 +1,25 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import { getMobileSafeAreaBottom } from '../../../utils/positioning';
 
 /**
- * Hook for vocabulary panel state and interactions
+ * Hook for vocabulary panel UI state and interactions
+ * Data (vocabulary list) is provided externally (from useSourceData or Viewer)
+ * highlightedVocabId / highlightVocab are managed by useModalState
  */
-export function useVocabularyPanel(openModal, closeModal) {
-  const [vocabulary, setVocabulary] = useState([]);
+export function useVocabularyPanel(openModal, vocabulary) {
   const [showVocabPanel, setShowVocabPanel] = useState(false);
-  const [highlightedVocabId, setHighlightedVocabId] = useState(null);
   const [deletingVocab, setDeletingVocab] = useState(false);
 
-  const vocabTooltipTimer = useRef(null);
-  const highlightTimer = useRef(null);
-
-  // Show vocabulary tooltip with smart positioning
+  // Show vocabulary word via wordMenu modal with smart positioning
   const showVocabWord = useCallback((word, definition, markerRect = null, annotation = null) => {
-    if (vocabTooltipTimer.current) {
-      clearTimeout(vocabTooltipTimer.current);
-    }
-
     let position = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     let placement = 'below';
 
     if (markerRect) {
       const viewportHeight = window.innerHeight;
+      const safeAreaBottom = getMobileSafeAreaBottom();
       const spaceAbove = markerRect.top;
-      const spaceBelow = viewportHeight - markerRect.bottom;
+      const spaceBelow = viewportHeight - markerRect.bottom - safeAreaBottom;
 
       placement = spaceBelow >= 200 || spaceBelow > spaceAbove ? 'below' : 'above';
 
@@ -40,42 +35,14 @@ export function useVocabularyPanel(openModal, closeModal) {
       position = { x, y };
     }
 
-    openModal('vocabTooltip', { word, definition, position, placement, annotation });
-
-    if (!annotation) {
-      vocabTooltipTimer.current = setTimeout(() => {
-        closeModal();
-      }, 5000);
-    }
-  }, [openModal, closeModal]);
-
-  // Close vocabulary tooltip
-  const closeVocabTooltip = useCallback(() => {
-    if (vocabTooltipTimer.current) {
-      clearTimeout(vocabTooltipTimer.current);
-    }
-    closeModal();
-  }, [closeModal]);
-
-  // Highlight vocabulary item temporarily
-  const highlightVocab = useCallback((vocabId, duration = 2000) => {
-    setHighlightedVocabId(vocabId);
-    if (highlightTimer.current) {
-      clearTimeout(highlightTimer.current);
-    }
-    highlightTimer.current = setTimeout(() => {
-      setHighlightedVocabId(null);
-    }, duration);
-  }, []);
-
-  // Clear highlight
-  const clearHighlight = useCallback(() => {
-    setHighlightedVocabId(null);
-    if (highlightTimer.current) {
-      clearTimeout(highlightTimer.current);
-      highlightTimer.current = null;
-    }
-  }, []);
+    openModal('wordMenu', {
+      word,
+      existingAnnotation: annotation,
+      isGrammarMode: false,
+      position,
+      placement,
+    });
+  }, [openModal]);
 
   // Escape special regex characters
   const escapeRegex = (string) => {
@@ -97,31 +64,12 @@ export function useVocabularyPanel(openModal, closeModal) {
     return result;
   }, [vocabulary]);
 
-  // Cleanup timers on unmount
-  useEffect(() => {
-    return () => {
-      if (vocabTooltipTimer.current) {
-        clearTimeout(vocabTooltipTimer.current);
-      }
-      if (highlightTimer.current) {
-        clearTimeout(highlightTimer.current);
-      }
-    };
-  }, []);
-
   return {
-    vocabulary,
-    setVocabulary,
     showVocabPanel,
     setShowVocabPanel,
-    highlightedVocabId,
-    setHighlightedVocabId,
     deletingVocab,
     setDeletingVocab,
     showVocabWord,
-    closeVocabTooltip,
-    highlightVocab,
-    clearHighlight,
     highlightVocabularyWords,
   };
 }

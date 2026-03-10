@@ -3,6 +3,15 @@
  * Uses Web Speech API with preferred high-quality voices.
  */
 
+interface SpeakOptions {
+  rate?: number;
+  pitch?: number;
+  volume?: number;
+  onStart?: () => void;
+  onEnd?: () => void;
+  onError?: (event: SpeechSynthesisErrorEvent) => void;
+}
+
 // Preferred voices list (in priority order)
 const PREFERRED_VOICES = [
   'Samantha', 'Karen', 'Daniel', 'Moira', // macOS high-quality
@@ -12,9 +21,8 @@ const PREFERRED_VOICES = [
 
 /**
  * Find the best available English voice.
- * @returns {SpeechSynthesisVoice|null}
  */
-function findBestVoice() {
+function findBestVoice(): SpeechSynthesisVoice | null {
   const voices = window.speechSynthesis.getVoices();
 
   // Try preferred voices first
@@ -31,16 +39,8 @@ function findBestVoice() {
 
 /**
  * Speak text using Web Speech API with natural English pronunciation.
- * @param {string} text - Text to speak
- * @param {Object} options - Optional settings
- * @param {number} options.rate - Speech rate (default: 1.0, range: 0.1-10)
- * @param {number} options.pitch - Speech pitch (default: 1.0, range: 0-2)
- * @param {number} options.volume - Speech volume (default: 1.0, range: 0-1)
- * @param {Function} options.onStart - Callback when speech starts
- * @param {Function} options.onEnd - Callback when speech ends
- * @param {Function} options.onError - Callback on error
  */
-export function speakText(text, options = {}) {
+export function speakText(text: string, options: SpeakOptions = {}): void {
   if (!text || !window.speechSynthesis) return;
 
   // Cancel any ongoing speech
@@ -76,7 +76,7 @@ export function speakText(text, options = {}) {
 /**
  * Stop any ongoing speech.
  */
-export function stopSpeaking() {
+export function stopSpeaking(): void {
   if (window.speechSynthesis) {
     window.speechSynthesis.cancel();
   }
@@ -84,18 +84,15 @@ export function stopSpeaking() {
 
 /**
  * Check if speech synthesis is currently speaking.
- * @returns {boolean}
  */
-export function isSpeaking() {
+export function isSpeaking(): boolean {
   return window.speechSynthesis?.speaking || false;
 }
 
 /**
  * Preload voices (call early to avoid delays on first speech).
- * Voices load asynchronously, so this ensures they're ready.
- * @returns {Promise<void>}
  */
-export function preloadVoices() {
+export function preloadVoices(): Promise<void> {
   return new Promise((resolve) => {
     const voices = window.speechSynthesis?.getVoices();
     if (voices && voices.length > 0) {
@@ -107,5 +104,3 @@ export function preloadVoices() {
     }
   });
 }
-
-export default speakText;

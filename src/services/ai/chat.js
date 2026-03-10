@@ -1,6 +1,7 @@
 import { getSetting, SETTINGS_KEYS } from '../settings';
 import { getVocabulary, getGrammarPatterns } from '../annotation';
 import { GOOGLE_API_KEY, GEMINI_API_URL, GEMINI_STREAM_URL, LANGUAGE_NAMES } from './config';
+import { safeJsonParse, logError } from '../../utils/errors';
 
 /**
  * Extract text from OCR data with page information
@@ -50,22 +51,14 @@ async function buildMyDictionaryContext(chatLang) {
     }
 
     const vocabList = vocabItems.slice(0, 30).map(item => {
-      try {
-        const json = JSON.parse(item.ai_analysis_json || '{}');
-        return `${item.selected_text}: ${json.definition || ''}`;
-      } catch {
-        return item.selected_text;
-      }
+      const json = safeJsonParse(item.ai_analysis_json, {});
+      return `${item.selected_text}: ${json.definition || ''}`;
     });
 
     const grammarList = grammarItems.slice(0, 15).map(item => {
-      try {
-        const json = JSON.parse(item.ai_analysis_json || '{}');
-        const patternNames = json.patterns?.map(p => p.typeKr || p.type).join(', ') || '';
-        return `"${json.originalText}": ${patternNames}`;
-      } catch {
-        return '';
-      }
+      const json = safeJsonParse(item.ai_analysis_json, {});
+      const patternNames = json.patterns?.map(p => p.typeKr || p.type).join(', ') || '';
+      return json.originalText ? `"${json.originalText}": ${patternNames}` : '';
     }).filter(Boolean);
 
     const contextByLang = {
@@ -101,7 +94,7 @@ Saved grammar patterns: ${grammarList.join(' / ') || 'None'}
 
     return contextByLang[chatLang] || contextByLang.Korean;
   } catch (err) {
-    console.error('Failed to load My Dictionary context:', err);
+    logError('buildMyDictionaryContext', err);
     return '';
   }
 }

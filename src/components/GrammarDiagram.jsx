@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTapToClose } from '../hooks/useTapToClose';
 import { speakText } from '../utils/tts';
+import { useTranslation } from '../i18n';
 
 export default function GrammarDiagram({
   grammarData,
@@ -11,6 +12,7 @@ export default function GrammarDiagram({
   onClose,
   onSave,  // 저장 콜백
 }) {
+  const { ko } = useTranslation();
   const patterns = aiPatterns?.patterns || [];
   const originalText = grammarData?.originalText || grammarData?.words?.map(w => w.text).join(' ') || '';
 
@@ -134,7 +136,7 @@ export default function GrammarDiagram({
               <button
                 className="speak-btn"
                 onClick={() => speakText(originalText)}
-                title="다시 듣기"
+                title={ko('grammar.listenAgain')}
               >
                 🔊
               </button>
@@ -180,7 +182,7 @@ export default function GrammarDiagram({
                   onClick={handleSave}
                   disabled={selectedPatterns.size === 0 || saving}
                 >
-                  {saving ? '저장 중...' : `저장하기 (${selectedPatterns.size})`}
+                  {saving ? ko('grammar.saving') : `${ko('grammar.saveCount')} (${selectedPatterns.size})`}
                 </button>
               )}
             </div>
@@ -190,16 +192,16 @@ export default function GrammarDiagram({
           {loading && (
             <div className="grammar-loading">
               <div className="loading-spinner"></div>
-              <span>문법 분석 중...</span>
+              <span>{ko('grammar.analyzing')}</span>
             </div>
           )}
 
           {/* No patterns message */}
           {patterns.length === 0 && !loading && (
             <div className="grammar-no-connections">
-              이 텍스트에서 학습할 문법 패턴을 찾지 못했습니다.
+              {ko('grammar.noPatterns')}
               <br />
-              <small>문장 형태의 텍스트를 선택해보세요.</small>
+              <small>{ko('grammar.noPatternsSub')}</small>
             </div>
           )}
         </div>

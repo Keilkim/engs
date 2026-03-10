@@ -1,6 +1,8 @@
 import nlp from 'compromise';
 import { GRAMMAR_COLORS, GOOGLE_API_KEY, GEMINI_API_URL } from './config';
 import { parseGeminiJSON } from './gemini';
+import { getSetting, SETTINGS_KEYS } from '../settings';
+import { logError } from '../../utils/errors';
 
 /**
  * Check if tags contains any of the target tags
@@ -166,9 +168,19 @@ export function analyzeGrammar(text) {
  * AI-based grammar pattern analysis (Gemini API)
  */
 export async function analyzeGrammarPatterns(text) {
+  const level = getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate');
+
+  const levelInstruction = {
+    beginner: 'Target A1-A2 level. Extract only basic, high-frequency expressions that beginners should know first. Skip advanced idioms and complex collocations.',
+    intermediate: 'Target B1-B2 level. Extract useful everyday expressions including common idioms, phrasal verbs, and collocations.',
+    advanced: 'Target C1-C2 level. Extract advanced, sophisticated expressions including nuanced idioms, literary collocations, and complex patterns.',
+  }[level] || '';
+
   const prompt = `Extract useful English expressions/idioms from this sentence for Korean learners.
 
 Sentence: "${text}"
+
+LEVEL: ${levelInstruction}
 
 RULES:
 1. Extract ONLY expressions worth memorizing (idioms, phrasal verbs, collocations, useful patterns)
@@ -176,6 +188,7 @@ RULES:
 3. Return simple format for flashcard-style learning
 4. Skip basic grammar - focus on expressions/phrases that native speakers actually use
 5. If no useful expressions, return {"patterns": []}
+6. Match the difficulty of extracted expressions to the learner's level described above
 
 Return JSON:
 {
@@ -228,7 +241,7 @@ Return ONLY valid JSON, no markdown.`;
     const result = parseGeminiJSON(responseText);
     return result;
   } catch (err) {
-    console.error('Grammar pattern analysis failed:', err);
+    logError('analyzeGrammarPatterns', err);
     return {
       patterns: [],
       sentence_structure: null,

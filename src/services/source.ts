@@ -1,18 +1,17 @@
 import { supabase } from './supabase';
+import type { Source, SourceListItem, OcrData } from '../types';
 
-// 소스 목록 조회 (홈 그리드용 - 필요한 컬럼만)
-export async function getSources() {
+export async function getSources(): Promise<SourceListItem[]> {
   const { data, error } = await supabase
     .from('sources')
     .select('id, title, type, pinned, created_at, last_accessed, thumbnail, screenshot')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data;
+  return data as SourceListItem[];
 }
 
-// 소스 상세 조회
-export async function getSource(id) {
+export async function getSource(id: string): Promise<Source> {
   const { data, error } = await supabase
     .from('sources')
     .select('*')
@@ -25,11 +24,20 @@ export async function getSource(id) {
     `${data.ocr_data.pages?.length} pages, first page: ${data.ocr_data.pages?.[0]?.words?.length || 0} words` :
     'null or undefined');
 
-  return data;
+  return data as Source;
 }
 
-// 소스 추가
-export async function createSource(source) {
+interface CreateSourceInput {
+  title: string;
+  type: string;
+  file_path: string;
+  screenshot?: string | null;
+  pages?: string | null;
+  ocr_data?: OcrData | null;
+  content?: string | null;
+}
+
+export async function createSource(source: CreateSourceInput): Promise<Source> {
   const { data: { user } } = await supabase.auth.getUser();
 
   console.log('[DB] Creating source with ocr_data:', source.ocr_data ?
@@ -40,7 +48,7 @@ export async function createSource(source) {
     .from('sources')
     .insert({
       ...source,
-      user_id: user.id,
+      user_id: user!.id,
     })
     .select()
     .single();
@@ -53,11 +61,10 @@ export async function createSource(source) {
   console.log('[DB] Source created, returned ocr_data:', data.ocr_data ?
     `${data.ocr_data.pages?.length} pages` : 'null');
 
-  return data;
+  return data as Source;
 }
 
-// 소스 삭제
-export async function deleteSource(id) {
+export async function deleteSource(id: string): Promise<void> {
   const { error } = await supabase
     .from('sources')
     .delete()
@@ -66,8 +73,7 @@ export async function deleteSource(id) {
   if (error) throw error;
 }
 
-// 소스 업데이트 (pinned, to_read 등)
-export async function updateSource(id, updates) {
+export async function updateSource(id: string, updates: Partial<Source>) {
   const { data, error } = await supabase
     .from('sources')
     .update(updates)
@@ -76,11 +82,10 @@ export async function updateSource(id, updates) {
     .single();
 
   if (error) throw error;
-  return data;
+  return data as Source;
 }
 
-// 파일 업로드 (PDF, 이미지)
-export async function uploadFile(file, bucket = 'sources') {
+export async function uploadFile(file: File, bucket = 'sources') {
   const fileExt = file.name.split('.').pop();
   const fileName = `${Date.now()}.${fileExt}`;
   const filePath = `${fileName}`;
@@ -91,7 +96,6 @@ export async function uploadFile(file, bucket = 'sources') {
 
   if (error) throw error;
 
-  // Public URL 가져오기
   const { data: { publicUrl } } = supabase.storage
     .from(bucket)
     .getPublicUrl(filePath);
@@ -99,8 +103,7 @@ export async function uploadFile(file, bucket = 'sources') {
   return { path: data.path, url: publicUrl };
 }
 
-// URL에서 콘텐츠 가져오기 (서버리스 함수 호출)
-export async function fetchUrlContent(url) {
+export async function fetchUrlContent(url: string) {
   const { data, error } = await supabase.functions.invoke('fetch-url', {
     body: { url },
   });
@@ -109,18 +112,16 @@ export async function fetchUrlContent(url) {
   return data;
 }
 
-// URL/PDF 스크린샷 캡처 (서버리스 함수 호출)
-export async function captureScreenshot(url, type = 'url') {
+export async function captureScreenshot(url: string, type = 'url') {
   const { data, error } = await supabase.functions.invoke('capture-screenshot', {
     body: { url, type },
   });
 
   if (error) throw error;
-  return data; // { screenshot: base64 or url }
+  return data;
 }
 
-// 소스에 스크린샷 업데이트
-export async function updateSourceScreenshot(id, screenshot) {
+export async function updateSourceScreenshot(id: string, screenshot: string) {
   const { data, error } = await supabase
     .from('sources')
     .update({ screenshot })
@@ -132,18 +133,15 @@ export async function updateSourceScreenshot(id, screenshot) {
   return data;
 }
 
-// Blob을 base64로 변환
-function blobToBase64(blob) {
+function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
+    reader.onloadend = () => resolve(reader.result as string);
     reader.readAsDataURL(blob);
   });
 }
 
-// 웹페이지 Full Page 스크린샷 캡처 (ApiFlash API)
-export async function captureWebpageScreenshot(url) {
-  // ApiFlash API 호출 - 전체 페이지 캡처
+export async function captureWebpageScreenshot(url: string) {
   const params = new URLSearchParams({
     access_key: import.meta.env.VITE_APIFLASH_KEY,
     url: url,
@@ -165,17 +163,12 @@ export async function captureWebpageScreenshot(url) {
 
   if (!data.url) {
     console.error('ApiFlash response:', data);
-    throw new Error('스크린샷 캡처 실패');
+    throw new Error('Screenshot capture failed');
   }
 
-  // 스크린샷 이미지를 base64로 변환
   const imgResponse = await fetch(data.url);
   const blob = await imgResponse.blob();
   const base64 = await blobToBase64(blob);
 
-  // 전체 페이지 그대로 반환
-  return {
-    image: base64,
-    title: url,
-  };
+  return { image: base64, title: url };
 }

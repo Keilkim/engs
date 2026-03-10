@@ -8,6 +8,7 @@ import {
   setSetting,
   SETTINGS_KEYS,
   LANGUAGE_OPTIONS,
+  LEVEL_OPTIONS,
   resetAllSources,
   resetVocabulary,
 } from '../../services/settings';
@@ -36,6 +37,9 @@ export default function Settings() {
   const [translationLang, setTranslationLang] = useState(
     getSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, 'Korean')
   );
+  const [englishLevel, setEnglishLevel] = useState(
+    getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate')
+  );
 
   // Save language settings when changed
   function handleAiChatLangChange(value) {
@@ -49,6 +53,13 @@ export default function Settings() {
     setTranslationLang(value);
     setSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, value);
     setMessage({ type: 'success', text: 'Translation language updated' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 2000);
+  }
+
+  function handleEnglishLevelChange(value) {
+    setEnglishLevel(value);
+    setSetting(SETTINGS_KEYS.ENGLISH_LEVEL, value);
+    setMessage({ type: 'success', text: 'English level updated' });
     setTimeout(() => setMessage({ type: '', text: '' }), 2000);
   }
 
@@ -209,6 +220,19 @@ export default function Settings() {
                 onChange={(e) => handleTranslationLangChange(e.target.value)}
               >
                 {LANGUAGE_OPTIONS.TRANSLATION.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="setting-row">
+              <label>English Level</label>
+              <select
+                value={englishLevel}
+                onChange={(e) => handleEnglishLevelChange(e.target.value)}
+              >
+                {LEVEL_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
                   </option>

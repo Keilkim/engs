@@ -1,14 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { chatStream, extractOcrText } from '../../services/ai';
 import { saveChatMessage, getChatLogs, clearChatLogs } from '../../services/chat';
 import { getSource } from '../../services/source';
 import ChatLog from '../../containers/chat-log/ChatLog';
 import { TranslatableText } from '../../components/translatable';
+import { useTranslation } from '../../i18n';
+import { safeJsonParse } from '../../utils/errors';
 
 export default function Chat() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { ko } = useTranslation();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,38 +34,31 @@ export default function Chat() {
     }
   }, [sourceId]);
 
-  useEffect(() => {
-    if (vocabItems && vocabItems.length > 0) {
-      const context = buildVocabContext(vocabItems, contextType);
-      setVocabContext(context);
-    }
-  }, [vocabItems, contextType]);
+  const computedVocabContext = useMemo(() => {
+    if (!vocabItems || vocabItems.length === 0) return null;
 
-  function buildVocabContext(items, type) {
-    if (type === 'words') {
-      const words = items.map(item => {
-        try {
-          const json = JSON.parse(item.ai_analysis_json || '{}');
-          return `- ${item.selected_text}: ${json.definition || 'No definition'}`;
-        } catch {
-          return `- ${item.selected_text}`;
-        }
+    if (contextType === 'words') {
+      const words = vocabItems.map(item => {
+        const json = safeJsonParse(item.ai_analysis_json, {});
+        return `- ${item.selected_text}: ${json.definition || 'No definition'}`;
       });
       return `User's saved vocabulary words:\n${words.join('\n')}`;
-    } else if (type === 'grammar') {
-      const patterns = items.map(item => {
-        try {
-          const json = JSON.parse(item.ai_analysis_json || '{}');
-          const patternNames = json.patterns?.map(p => p.typeKr || p.type).join(', ') || '';
-          return `- "${json.originalText}": ${patternNames}`;
-        } catch {
-          return `- ${item.selected_text}`;
-        }
+    } else if (contextType === 'grammar') {
+      const patterns = vocabItems.map(item => {
+        const json = safeJsonParse(item.ai_analysis_json, {});
+        const patternNames = json.patterns?.map(p => p.typeKr || p.type).join(', ') || '';
+        return json.originalText ? `- "${json.originalText}": ${patternNames}` : `- ${item.selected_text}`;
       });
       return `User's saved grammar patterns:\n${patterns.join('\n')}`;
     }
     return null;
-  }
+  }, [vocabItems, contextType]);
+
+  useEffect(() => {
+    if (computedVocabContext) {
+      setVocabContext(computedVocabContext);
+    }
+  }, [computedVocabContext]);
 
   useEffect(() => {
     if (initialMessage && messages.length === 0) {
@@ -148,7 +144,7 @@ Do NOT answer questions that are completely unrelated to the material.`;
         {
           tempId: Date.now(),
           role: 'assistant',
-          message: '응답에 실패했습니다. 다시 시도해주세요.',
+          message: ko('chat.responseFailed'),
         },
       ]);
     } finally {

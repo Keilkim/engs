@@ -1,4 +1,5 @@
 import { useRef, useCallback } from 'react';
+import { useTranslation } from '../../i18n';
 import './PenModeToggle.css';
 
 // 마법봉 아이콘 (비활성 상태) - 심플한 스타 + 봉 디자인
@@ -46,6 +47,7 @@ export default function PenModeToggle({
   onLongPress,
   penColor,
 }) {
+  const { ko } = useTranslation();
   const longPressTimer = useRef(null);
   const isLongPressTriggered = useRef(false);
 
@@ -93,7 +95,7 @@ export default function PenModeToggle({
       onPointerLeave={handlePointerLeave}
       onPointerCancel={handlePointerLeave}
       onContextMenu={(e) => e.preventDefault()}
-      aria-label={isActive ? '펜 모드 끄기' : '펜 모드 켜기'}
+      aria-label={isActive ? ko('penMode.disablePen') : ko('penMode.enablePen')}
     >
       {isActive ? <PenIcon /> : <MagicWandIcon />}
       {isActive && (

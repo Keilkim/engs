@@ -1,5 +1,6 @@
 import { getSetting, SETTINGS_KEYS } from '../settings';
 import { LANG_CODES } from './config';
+import { logError } from '../../utils/errors';
 
 /**
  * Google Translate unofficial API (fast)
@@ -18,7 +19,7 @@ async function googleTranslate(text, targetLang = 'ko') {
 export async function lookupWord(word) {
   const cleanWord = word.replace(/[.,;:!?"'()[\]{}]/g, '').trim();
   if (!cleanWord) {
-    return { word, phonetic: '', definition: '단어를 인식할 수 없습니다' };
+    return { word, phonetic: '', definition: '', error: 'UNRECOGNIZED_WORD' };
   }
 
   const translationLang = getSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, 'Korean');
@@ -50,7 +51,7 @@ export async function lookupWord(word) {
       };
     }
   } catch (err) {
-    console.log('Dictionary lookup failed:', err);
+    logError('lookupWord.dictionary', err);
   }
 
   try {
@@ -61,12 +62,12 @@ export async function lookupWord(word) {
       definition: translated,
     };
   } catch (err) {
-    console.error('Word lookup failed:', err);
+    logError('lookupWord.translate', err);
   }
 
   return {
     word: cleanWord,
     phonetic: '',
-    definition: '정의를 찾을 수 없습니다',
+    definition: '', error: 'DEFINITION_NOT_FOUND',
   };
 }

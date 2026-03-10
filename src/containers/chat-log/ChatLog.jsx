@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { scrapMessage, unscrapMessage } from '../../services/chat';
+import { useTranslation } from '../../i18n';
 
 export default function ChatLog({ messages, onScrapToggle, streamingText = '' }) {
+  const { ko } = useTranslation();
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -24,8 +26,8 @@ export default function ChatLog({ messages, onScrapToggle, streamingText = '' })
   if ((!messages || messages.length === 0) && !streamingText) {
     return (
       <div className="chat-log-empty">
-        <p>AI와 대화를 시작해보세요!</p>
-        <p>학습한 내용에 대해 질문하거나 영어로 대화해보세요.</p>
+        <p>{ko('chat.startConversation')}</p>
+        <p>{ko('chat.askQuestions')}</p>
       </div>
     );
   }
@@ -48,7 +50,7 @@ export default function ChatLog({ messages, onScrapToggle, streamingText = '' })
               <button
                 className={`scrap-button ${message.is_scrapped ? 'scrapped' : ''}`}
                 onClick={() => handleScrapToggle(message)}
-                title={message.is_scrapped ? '스크랩 해제' : '스크랩'}
+                title={message.is_scrapped ? ko('chat.removeBookmark') : ko('chat.bookmark')}
               >
                 {message.is_scrapped ? 'Saved' : 'Save'}
               </button>
