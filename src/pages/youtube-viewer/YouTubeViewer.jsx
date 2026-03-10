@@ -130,13 +130,24 @@ export default function YouTubeViewer() {
     });
   }, [annotations]);
 
+  // Press start → pause video immediately
+  const handlePressStart = useCallback(() => {
+    wasPlayingRef.current = isPlaying;
+    pauseVideo();
+  }, [isPlaying, pauseVideo]);
+
+  // Short tap or drag cancel (no menu opened) → resume video
+  const handlePressEndNoMenu = useCallback(() => {
+    if (wasPlayingRef.current) {
+      playVideo();
+      wasPlayingRef.current = false;
+    }
+  }, [playVideo]);
+
   // Word long-press → vocab search
   const handleWordLongPress = useCallback((word, rect, segmentIndex, wordIdx, timestamp) => {
     if (!word) return;
     const existing = findExistingAnnotation(word);
-
-    wasPlayingRef.current = isPlaying;
-    pauseVideo();
 
     setSelectedWord(word);
     setIsGrammarMode(false);
@@ -145,14 +156,11 @@ export default function YouTubeViewer() {
     setSelectedWordIndex(wordIdx);
     setSelectedTimestamp(timestamp);
     setExistingAnnotationForWord(existing || null);
-  }, [findExistingAnnotation, isPlaying, pauseVideo]);
+  }, [findExistingAnnotation]);
 
   // Line long-press → grammar search
   const handleLineLongPress = useCallback((sentenceText, rect, segmentIndex, timestamp) => {
     if (!sentenceText) return;
-
-    wasPlayingRef.current = isPlaying;
-    pauseVideo();
 
     setSelectedWord(sentenceText);
     setIsGrammarMode(true);
@@ -162,7 +170,7 @@ export default function YouTubeViewer() {
     setSelectedWordIndex(null);
     setSelectedTimestamp(timestamp);
     setExistingAnnotationForWord(null);
-  }, [isPlaying, pauseVideo]);
+  }, []);
 
   const closeWordModal = useCallback(() => {
     setSelectedWord(null);
@@ -307,6 +315,8 @@ export default function YouTubeViewer() {
             onSeek={seekTo}
             onWordLongPress={handleWordLongPress}
             onLineLongPress={handleLineLongPress}
+            onPressStart={handlePressStart}
+            onPressEndNoMenu={handlePressEndNoMenu}
             savedWords={savedWordsSet}
           />
         </div>

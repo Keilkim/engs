@@ -19,6 +19,8 @@ export default function CaptionLine({
   onSeek,
   onWordLongPress,
   onLineLongPress,
+  onPressStart,
+  onPressEndNoMenu,
   savedWords,
 }) {
   const touchStateRef = useRef(null);
@@ -84,6 +86,9 @@ export default function CaptionLine({
       executed: false,
     };
 
+    // Pause video immediately on press
+    onPressStart?.();
+
     timerRef.current = setTimeout(() => {
       if (touchStateRef.current && !touchStateRef.current.moved && !touchStateRef.current.executed) {
         touchStateRef.current.executed = true;
@@ -100,7 +105,7 @@ export default function CaptionLine({
         }
       }
     }, LONG_PRESS_DURATION);
-  }, [onWordLongPress, onLineLongPress, index, wordTimings, segment]);
+  }, [onWordLongPress, onLineLongPress, onPressStart, index, wordTimings, segment]);
 
   const handlePointerMove = useCallback((e) => {
     if (!touchStateRef.current) return;
@@ -121,22 +126,29 @@ export default function CaptionLine({
     const { moved, executed, startTime, wordIndex } = touchStateRef.current;
     const duration = Date.now() - startTime;
 
-    // Short tap → seek to word timestamp
     if (!moved && !executed && duration < LONG_PRESS_DURATION) {
+      // Short tap → seek + resume video
       if (wordIndex !== undefined && wordIndex >= 0 && wordTimings[wordIndex]) {
         onSeek?.(wordTimings[wordIndex].start);
       } else {
         onSeek?.(segment.start);
       }
+      onPressEndNoMenu?.();
+    } else if (moved && !executed) {
+      // Drag cancelled, no menu opened → resume video
+      onPressEndNoMenu?.();
     }
 
     touchStateRef.current = null;
-  }, [clearTimer, segment.start, onSeek, wordTimings]);
+  }, [clearTimer, segment.start, onSeek, wordTimings, onPressEndNoMenu]);
 
   const handlePointerCancel = useCallback(() => {
     clearTimer();
+    if (touchStateRef.current && !touchStateRef.current.executed) {
+      onPressEndNoMenu?.();
+    }
     touchStateRef.current = null;
-  }, [clearTimer]);
+  }, [clearTimer, onPressEndNoMenu]);
 
   const renderWords = (text) => {
     if (!text) return null;
