@@ -6,7 +6,8 @@ import { createAnnotation } from '../../services/annotation';
 /**
  * Hook for vocabulary word lookup, TTS, and save logic
  */
-export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose }) {
+export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp }) {
+  const isYouTube = sourceType === 'youtube';
   const [definition, setDefinition] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -38,15 +39,15 @@ export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, 
   }
 
   async function handleSave() {
-    if (!word || !wordBbox || loading) return;
+    if (!word || loading) return;
+    if (!isYouTube && !wordBbox) return;
     setLoading(true);
 
     try {
       const result = await lookupWord(word);
-      const selectionRect = JSON.stringify({
-        bounds: wordBbox,
-        page: currentPage,
-      });
+      const selectionRect = isYouTube
+        ? JSON.stringify({ type: 'youtube_word', segmentIndex, wordIndex, timestamp })
+        : JSON.stringify({ bounds: wordBbox, page: currentPage });
 
       const annotationData = {
         source_id: sourceId,

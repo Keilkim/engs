@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS sources (
   id BIGSERIAL PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   title VARCHAR(255) NOT NULL,
-  type VARCHAR(20) NOT NULL CHECK (type IN ('pdf', 'url', 'image', 'screenshot')),
+  type VARCHAR(20) NOT NULL CHECK (type IN ('pdf', 'url', 'image', 'screenshot', 'youtube')),
   content TEXT,
   thumbnail TEXT,
   screenshot TEXT,
@@ -56,6 +56,42 @@ CREATE TABLE IF NOT EXISTS sources (
 -- END $$;
 -- ALTER TABLE sources ADD CONSTRAINT sources_type_check
 --   CHECK (type IN ('pdf', 'url', 'image', 'screenshot'));
+
+-- Migration: Update type constraint to include 'youtube'
+-- DO $$
+-- DECLARE
+--     constraint_name TEXT;
+-- BEGIN
+--     FOR constraint_name IN
+--         SELECT conname FROM pg_constraint
+--         WHERE conrelid = 'sources'::regclass AND contype = 'c'
+--         AND pg_get_constraintdef(oid) LIKE '%type%'
+--     LOOP
+--         EXECUTE 'ALTER TABLE sources DROP CONSTRAINT ' || constraint_name;
+--     END LOOP;
+-- END $$;
+-- ALTER TABLE sources ADD CONSTRAINT sources_type_check
+--   CHECK (type IN ('pdf', 'url', 'image', 'screenshot', 'youtube'));
+
+-- Migration: Add YouTube-related columns
+-- ALTER TABLE sources ADD COLUMN IF NOT EXISTS youtube_data JSONB;
+-- ALTER TABLE sources ADD COLUMN IF NOT EXISTS captions_data JSONB;
+-- ALTER TABLE sources ADD COLUMN IF NOT EXISTS source_language VARCHAR(10);
+-- youtube_data structure:
+-- {
+--   "video_id": "abc123",
+--   "channel": "Channel Name",
+--   "duration": 300,
+--   "has_captions": true,
+--   "caption_source": "youtube",  -- 'youtube' | 'whisper' | 'manual'
+--   "thumbnail_url": "https://..."
+-- }
+-- captions_data structure:
+-- {
+--   "segments": [{ "start": 0.0, "end": 5.2, "text": "Hello world" }],
+--   "language": "en",
+--   "source": "youtube"  -- 'youtube' | 'whisper' | 'manual'
+-- }
 
 -- 2. annotations (어노테이션 - 하이라이트/메모)
 CREATE TABLE IF NOT EXISTS annotations (

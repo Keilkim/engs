@@ -48,7 +48,11 @@ export default function SourceGrid({ sources, loading, columnCount = 2, onSource
       onSelectToggle?.(source.id);
       return;
     }
-    navigate(`/viewer/${source.id}`);
+    if (source.type === 'youtube') {
+      navigate(`/youtube/${source.id}`);
+    } else {
+      navigate(`/viewer/${source.id}`);
+    }
   }
 
   function handleDeleteClick(e, source) {

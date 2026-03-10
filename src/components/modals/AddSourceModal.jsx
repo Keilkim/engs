@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
-import { createSource, uploadFile, captureWebpageScreenshot } from '../../services/source';
+import { createSource, createYouTubeSource, uploadFile, captureWebpageScreenshot } from '../../services/source';
 import { convertPdfToImages } from '../../utils/pdfUtils';
 import { generateImageThumbnail, generateThumbnailFromPage, ocrAllPages } from './sourceHelpers';
+import { parseYouTubeUrl, getYouTubeMetadata, fetchYouTubeCaptions, transcribeYouTubeWithWhisper, calculateWhisperCost, isWhisperAvailable } from '../../services/ai/youtube';
 import { TranslatableText } from '../translatable';
 
 export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
@@ -12,6 +13,12 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
   const [loadingStatus, setLoadingStatus] = useState('');
   const [error, setError] = useState('');
   const fileInputRef = useRef(null);
+
+  // YouTube state
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [youtubePreview, setYoutubePreview] = useState(null); // { videoId, title, author, thumbnail }
+  const [youtubeCaptions, setYoutubeCaptions] = useState(null);
+  const [captionStatus, setCaptionStatus] = useState(''); // '' | 'loading' | 'found' | 'not_found'
 
   if (!isOpen) return null;
 
@@ -116,10 +123,109 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
     }
   }
 
+  // YouTube URL input handler - auto-detect and load metadata
+  async function handleYoutubeUrlChange(inputUrl) {
+    setYoutubeUrl(inputUrl);
+    setError('');
+    setYoutubePreview(null);
+    setYoutubeCaptions(null);
+    setCaptionStatus('');
+
+    const parsed = parseYouTubeUrl(inputUrl);
+    if (!parsed) return;
+
+    try {
+      setCaptionStatus('loading');
+      const metadata = await getYouTubeMetadata(parsed.video_id);
+      setYoutubePreview({
+        videoId: parsed.video_id,
+        title: metadata.title,
+        author: metadata.author,
+        thumbnail: metadata.thumbnail_url_hq,
+      });
+      if (!title) setTitle(metadata.title);
+
+      // Auto-fetch captions
+      const captions = await fetchYouTubeCaptions(parsed.video_id);
+      if (captions && captions.segments.length > 0) {
+        setYoutubeCaptions(captions);
+        setCaptionStatus('found');
+      } else {
+        setCaptionStatus('not_found');
+      }
+    } catch {
+      setCaptionStatus('not_found');
+    }
+  }
+
+  async function handleYoutubeSubmit(e) {
+    e.preventDefault();
+    if (!youtubePreview) {
+      setError('Please enter a valid YouTube URL');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      setLoadingStatus('Saving YouTube source...');
+      await createYouTubeSource({
+        title: title || youtubePreview.title,
+        youtubeData: {
+          video_id: youtubePreview.videoId,
+          channel: youtubePreview.author,
+          has_captions: !!youtubeCaptions,
+          caption_source: youtubeCaptions?.source || 'manual',
+          thumbnail_url: youtubePreview.thumbnail,
+        },
+        captionsData: youtubeCaptions,
+      });
+
+      onSuccess();
+      handleClose();
+    } catch {
+      setError('Failed to save YouTube source');
+    } finally {
+      setLoading(false);
+      setLoadingStatus('');
+    }
+  }
+
+  async function handleWhisperTranscribe() {
+    if (!youtubePreview) return;
+    setLoading(true);
+    setError('');
+
+    try {
+      const result = await transcribeYouTubeWithWhisper(
+        youtubePreview.videoId,
+        'en',
+        setLoadingStatus
+      );
+
+      if (result && result.segments.length > 0) {
+        setYoutubeCaptions(result);
+        setCaptionStatus('found');
+      } else {
+        setError('Transcription returned no results');
+      }
+    } catch (err) {
+      setError(`Whisper failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+      setLoadingStatus('');
+    }
+  }
+
   function handleClose() {
     setUrl('');
+    setYoutubeUrl('');
     setTitle('');
     setError('');
+    setYoutubePreview(null);
+    setYoutubeCaptions(null);
+    setCaptionStatus('');
     setActiveTab('file');
     onClose();
   }
@@ -146,6 +252,12 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
             onClick={() => setActiveTab('screenshot')}
           >
             Web URL
+          </button>
+          <button
+            className={`tab ${activeTab === 'youtube' ? 'active' : ''}`}
+            onClick={() => setActiveTab('youtube')}
+          >
+            YouTube
           </button>
         </div>
 
@@ -209,6 +321,73 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                 disabled={loading}
               >
                 {loading ? (loadingStatus || 'Capturing...') : <TranslatableText textKey="addSource.capture">Capture</TranslatableText>}
+              </button>
+            </form>
+          )}
+
+          {activeTab === 'youtube' && (
+            <form onSubmit={handleYoutubeSubmit}>
+              <div className="input-group">
+                <label htmlFor="youtube-url">YouTube URL</label>
+                <input
+                  id="youtube-url"
+                  type="url"
+                  value={youtubeUrl}
+                  onChange={(e) => handleYoutubeUrlChange(e.target.value)}
+                  placeholder="https://youtube.com/watch?v=..."
+                  required
+                />
+              </div>
+
+              {/* Preview */}
+              {youtubePreview && (
+                <div className="youtube-preview" style={{ display: 'flex', gap: '12px', margin: '12px 0', padding: '12px', background: 'var(--bg-tertiary, #2a2a2a)', borderRadius: '8px' }}>
+                  <img
+                    src={youtubePreview.thumbnail}
+                    alt=""
+                    style={{ width: '120px', height: '68px', objectFit: 'cover', borderRadius: '6px' }}
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {youtubePreview.title}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary, #888)', marginTop: '4px' }}>
+                      {youtubePreview.author}
+                    </div>
+                    <div style={{ fontSize: '12px', marginTop: '4px' }}>
+                      {captionStatus === 'loading' && <span style={{ color: 'var(--text-secondary)' }}>캡션 확인 중...</span>}
+                      {captionStatus === 'found' && <span style={{ color: '#4ade80' }}>캡션 {youtubeCaptions?.segments?.length}개 발견</span>}
+                      {captionStatus === 'not_found' && <span style={{ color: '#fb923c' }}>캡션 없음</span>}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Whisper transcribe button (when no captions found) */}
+              {captionStatus === 'not_found' && isWhisperAvailable() && (
+                <button
+                  type="button"
+                  className="submit-button"
+                  onClick={handleWhisperTranscribe}
+                  disabled={loading}
+                  style={{ marginBottom: '8px', background: '#7c3aed' }}
+                >
+                  {loading ? (loadingStatus || 'Transcribing...') : 'Whisper로 전사'}
+                </button>
+              )}
+              {captionStatus === 'not_found' && !isWhisperAvailable() && (
+                <p className="file-hint" style={{ color: '#fb923c' }}>
+                  캡션이 없습니다. Whisper 전사를 사용하려면 VITE_OPENAI_API_KEY를 설정하세요.
+                </p>
+              )}
+
+              <button
+                type="submit"
+                className="submit-button"
+                disabled={loading || !youtubePreview}
+              >
+                {loading ? (loadingStatus || 'Saving...') : 'Save'}
               </button>
             </form>
           )}

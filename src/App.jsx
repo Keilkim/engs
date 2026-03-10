@@ -11,11 +11,11 @@ const Register = lazy(() => import('./pages/register/Register'));
 const Home = lazy(() => import('./pages/home/Home'));
 const Viewer = lazy(() => import('./pages/viewer/Viewer'));
 const Review = lazy(() => import('./pages/review/Review'));
-const Chat = lazy(() => import('./pages/chat/Chat'));
-const LiveChat = lazy(() => import('./pages/live-chat/LiveChat'));
+
 const Mypage = lazy(() => import('./pages/mypage/Mypage'));
 const Settings = lazy(() => import('./pages/settings/Settings'));
 const Onboarding = lazy(() => import('./pages/onboarding/Onboarding'));
+const YouTubeViewer = lazy(() => import('./pages/youtube-viewer/YouTubeViewer'));
 
 function App() {
   return (
@@ -54,22 +54,8 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/chat"
-            element={
-              <ProtectedRoute>
-                <Chat />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/live-chat"
-            element={
-              <ProtectedRoute>
-                <LiveChat />
-              </ProtectedRoute>
-            }
-          />
+
+
           <Route
             path="/mypage"
             element={
@@ -91,6 +77,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <Onboarding />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/youtube/:id"
+            element={
+              <ProtectedRoute>
+                <YouTubeViewer />
               </ProtectedRoute>
             }
           />

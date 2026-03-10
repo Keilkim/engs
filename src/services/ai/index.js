@@ -21,5 +21,16 @@ export { analyzeText, chat, chatStream, extractOcrText } from './chat';
 // Constants (for components that need them directly)
 export { GRAMMAR_COLORS, LANGUAGE_NAMES, LANG_CODES } from './config';
 
+// YouTube
+export {
+  parseYouTubeUrl,
+  getYouTubeMetadata,
+  fetchYouTubeCaptions,
+  formatTime,
+  transcribeYouTubeWithWhisper,
+  calculateWhisperCost,
+  isWhisperAvailable,
+} from './youtube';
+
 // Legacy TTS exports (deprecated - use src/utils/tts.js instead)
 export { speakText, stopSpeaking } from '../../utils/tts';

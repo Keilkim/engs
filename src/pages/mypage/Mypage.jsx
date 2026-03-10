@@ -36,14 +36,6 @@ export default function Mypage() {
     }
   }
 
-  function handleStartChat(selectedItems, type) {
-    navigate('/chat', {
-      state: {
-        vocabContext: selectedItems,
-        contextType: type,
-      },
-    });
-  }
 
   return (
     <div className="mypage-screen">
@@ -93,7 +85,7 @@ export default function Mypage() {
             <h2><TranslatableText textKey="mypage.myDictionary">My Dictionary</TranslatableText></h2>
             <span className="toggle-icon">{dictionaryExpanded ? '−' : '+'}</span>
           </button>
-          {dictionaryExpanded && <MyDictionary onSelectForChat={handleStartChat} />}
+          {dictionaryExpanded && <MyDictionary />}
         </section>
 
         <section className="menu-section">

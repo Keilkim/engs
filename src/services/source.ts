@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Source, SourceListItem, OcrData } from '../types';
+import type { Source, SourceListItem, OcrData, YouTubeData, CaptionsData } from '../types';
 
 export async function getSources(): Promise<SourceListItem[]> {
   const { data, error } = await supabase
@@ -131,6 +131,44 @@ export async function updateSourceScreenshot(id: string, screenshot: string) {
 
   if (error) throw error;
   return data;
+}
+
+interface CreateYouTubeSourceInput {
+  title: string;
+  youtubeData: YouTubeData;
+  captionsData: CaptionsData | null;
+}
+
+export async function createYouTubeSource({ title, youtubeData, captionsData }: CreateYouTubeSourceInput): Promise<Source> {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  console.log('[DB] Creating YouTube source:', {
+    videoId: youtubeData.video_id,
+    segmentsCount: captionsData?.segments?.length || 0,
+    captionSource: youtubeData.caption_source,
+  });
+
+  const { data, error } = await supabase
+    .from('sources')
+    .insert({
+      title: title || 'YouTube Video',
+      type: 'youtube',
+      screenshot: youtubeData.thumbnail_url,
+      youtube_data: youtubeData,
+      captions_data: captionsData,
+      source_language: 'en',
+      user_id: user!.id,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[DB] Error creating YouTube source:', error);
+    throw error;
+  }
+
+  console.log('[DB] YouTube source created:', data.id);
+  return data as Source;
 }
 
 function blobToBase64(blob: Blob): Promise<string> {

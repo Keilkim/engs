@@ -114,9 +114,57 @@ function buildConversationHistory(messages, maxTurns = 6) {
 }
 
 /**
+ * Get level-specific instructions
+ */
+function getLevelInstructions(level = 'intermediate') {
+  const instructions = {
+    beginner: {
+      Korean: `- 초급 학습자입니다. 간단한 단어(A1-A2)와 짧은 문장을 사용하세요
+- 어려운 단어가 나오면 괄호 안에 한국어 뜻을 포함하세요
+- 핵심만 간단하게 설명하세요`,
+      Chinese: `- 这是初级学习者。请使用简单词汇(A1-A2)和短句
+- 遇到难词时在括号内标注中文意思
+- 简洁明了地解释重点`,
+      German: `- Dies ist ein Anfänger. Verwenden Sie einfache Wörter (A1-A2) und kurze Sätze
+- Fügen Sie bei schwierigen Wörtern die deutsche Bedeutung in Klammern hinzu
+- Erklären Sie nur das Wesentliche`,
+      English: `- This is a beginner learner. Use simple vocabulary (A1-A2) and short sentences
+- When using difficult words, include simple definitions in parentheses
+- Keep explanations simple and to the point`,
+    },
+    intermediate: {
+      Korean: `- 중급 학습자입니다. 적절한 난이도의 어휘(B1-B2)를 사용하세요
+- 간단한 문장과 복잡한 문장을 적절히 섞어주세요`,
+      Chinese: `- 这是中级学习者。请使用适当难度的词汇(B1-B2)
+- 适当混合简单和复杂的句子结构`,
+      German: `- Dies ist ein Lernender auf mittlerem Niveau. Verwenden Sie Vokabeln auf B1-B2 Niveau
+- Mischen Sie einfache und komplexe Satzstrukturen`,
+      English: `- This is an intermediate learner. Use moderately complex vocabulary (B1-B2)
+- Mix simple and complex sentence structures`,
+    },
+    advanced: {
+      Korean: `- 고급 학습자입니다. 자연스러운 원어민 수준의 표현을 사용하세요
+- 관용구, 구어체, 미묘한 뉘앙스를 포함해도 좋습니다
+- 언어를 단순화하지 마세요`,
+      Chinese: `- 这是高级学习者。请使用自然的母语级别表达
+- 可以包含习语、口语和微妙的语义差别
+- 不需要简化语言`,
+      German: `- Dies ist ein fortgeschrittener Lernender. Verwenden Sie natürliche, muttersprachliche Ausdrücke
+- Idiome, Umgangssprache und feine Nuancen sind willkommen
+- Vereinfachen Sie die Sprache nicht`,
+      English: `- This is an advanced learner. Use natural, native-level vocabulary and expressions
+- Include idioms, colloquialisms, and subtle nuances
+- Don't simplify language unless asked`,
+    },
+  };
+
+  return instructions[level] || instructions.intermediate;
+}
+
+/**
  * Get system prompts by language
  */
-function getSystemPrompts(context = '') {
+function getSystemPrompts(context = '', level = 'intermediate') {
   const hasSourceContext = context && context.includes('[') && context.includes('p.');
 
   const citationInstruction = {
@@ -134,27 +182,33 @@ function getSystemPrompts(context = '') {
 - If the content is not in the material, explicitly state so and provide a general answer` : '',
   };
 
+  const levelInst = getLevelInstructions(level);
+
   return {
     Korean: `당신은 친근하고 도움이 되는 영어 학습 AI 튜터입니다.
 - 반드시 한국어로만 답변해주세요
 - 자연스럽고 대화체로 답변하세요
 - 필요한 경우 이전 대화 내용을 참고하세요
-- 답변은 간결하고 핵심적으로 해주세요${citationInstruction.Korean}${context ? `\n\n[학습 자료]\n${context}` : ''}`,
+- 답변은 간결하고 핵심적으로 해주세요
+${levelInst.Korean}${citationInstruction.Korean}${context ? `\n\n[학습 자료]\n${context}` : ''}`,
     Chinese: `你是一位友好且乐于助人的英语学习AI导师。
 - 必须用中文回答
 - 用自然的对话方式回答
 - 必要时参考之前的对话内容
-- 回答要简洁明了${citationInstruction.Chinese}${context ? `\n\n[学习材料]\n${context}` : ''}`,
+- 回答要简洁明了
+${levelInst.Chinese}${citationInstruction.Chinese}${context ? `\n\n[学习材料]\n${context}` : ''}`,
     German: `Sie sind ein freundlicher und hilfreicher KI-Tutor für das Englischlernen.
 - Antworten Sie ausschließlich auf Deutsch
 - Antworten Sie in natürlicher Konversationsweise
 - Beziehen Sie sich bei Bedarf auf frühere Gespräche
-- Halten Sie Ihre Antworten kurz und prägnant${citationInstruction.German}${context ? `\n\n[Lernmaterial]\n${context}` : ''}`,
+- Halten Sie Ihre Antworten kurz und prägnant
+${levelInst.German}${citationInstruction.German}${context ? `\n\n[Lernmaterial]\n${context}` : ''}`,
     English: `You are a friendly and helpful English learning AI tutor.
 - You must respond only in English
 - Answer in a natural conversational tone
 - Refer to previous conversation when relevant
-- Keep your answers concise and focused${citationInstruction.English}${context ? `\n\n[Learning Material]\n${context}` : ''}`,
+- Keep your answers concise and focused
+${levelInst.English}${citationInstruction.English}${context ? `\n\n[Learning Material]\n${context}` : ''}`,
   };
 }
 
@@ -222,9 +276,10 @@ Format your response as:
  */
 export async function chat(message, context = '', conversationHistory = []) {
   const chatLang = getSetting(SETTINGS_KEYS.AI_CHAT_LANGUAGE, 'Korean');
+  const level = getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate');
   const myDictContext = await buildMyDictionaryContext(chatLang);
 
-  const systemPrompts = getSystemPrompts(context);
+  const systemPrompts = getSystemPrompts(context, level);
   const systemPrompt = (systemPrompts[chatLang] || systemPrompts.Korean) + myDictContext;
 
   const history = buildConversationHistory(conversationHistory);
@@ -264,9 +319,10 @@ export async function chat(message, context = '', conversationHistory = []) {
  */
 export async function chatStream(message, context = '', conversationHistory = [], onChunk) {
   const chatLang = getSetting(SETTINGS_KEYS.AI_CHAT_LANGUAGE, 'Korean');
+  const level = getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate');
   const myDictContext = await buildMyDictionaryContext(chatLang);
 
-  const systemPrompts = getSystemPrompts(context);
+  const systemPrompts = getSystemPrompts(context, level);
   const systemPrompt = (systemPrompts[chatLang] || systemPrompts.Korean) + myDictContext;
 
   const history = buildConversationHistory(conversationHistory);

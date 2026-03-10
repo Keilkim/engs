@@ -23,7 +23,13 @@ export default function WordQuickMenu({
   onClose,
   onSaved,
   onDeleted,
+  // YouTube-specific props (completely separate from Viewer's touch system)
+  sourceType,
+  segmentIndex,
+  wordIndex,
+  timestamp,
 }) {
+  const isYouTube = sourceType === 'youtube';
   const { ko } = useTranslation();
   const [dynamicPosition, setDynamicPosition] = useState(null);
   const [positionReady, setPositionReady] = useState(false);
@@ -31,7 +37,7 @@ export default function WordQuickMenu({
   const modalRef = useRef(null);
   const touchStartRef = useRef({ time: 0, x: 0, y: 0 });
 
-  const vocab = useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose });
+  const vocab = useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp });
   const grammar = useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, currentPage, onSaved, onClose });
 
   // Position update (wordBbox % → viewport coords)
@@ -193,7 +199,7 @@ export default function WordQuickMenu({
 
   return (
     <div ref={modalRef} className={`word-quick-menu${grammarClass}${existingClass} ${arrowClass}`} style={menuStyle}>
-      {isGrammarMode ? (
+      {isGrammarMode && !isYouTube ? (
         <GrammarModeContent
           grammarData={grammar.grammarData}
           checkedPatterns={grammar.checkedPatterns}

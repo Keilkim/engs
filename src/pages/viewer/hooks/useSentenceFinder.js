@@ -1,5 +1,62 @@
 import { useCallback } from 'react';
 
+function detectColumnBoundaries(ocrWords) {
+  if (!ocrWords || ocrWords.length < 2) return null;
+
+  const intervals = ocrWords.map(w => ({
+    left: w.bbox.x,
+    right: w.bbox.x + w.bbox.width,
+  }));
+  intervals.sort((a, b) => a.left - b.left);
+
+  const merged = [{ ...intervals[0] }];
+  for (let i = 1; i < intervals.length; i++) {
+    const last = merged[merged.length - 1];
+    if (intervals[i].left <= last.right + 0.5) {
+      last.right = Math.max(last.right, intervals[i].right);
+    } else {
+      merged.push({ ...intervals[i] });
+    }
+  }
+
+  if (merged.length <= 1) return null;
+
+  const gaps = [];
+  for (let i = 1; i < merged.length; i++) {
+    gaps.push({
+      left: merged[i - 1].right,
+      right: merged[i].left,
+      size: merged[i].left - merged[i - 1].right,
+    });
+  }
+
+  const wordWidths = ocrWords.map(w => w.bbox.width).sort((a, b) => a - b);
+  const medianWidth = wordWidths[Math.floor(wordWidths.length / 2)];
+  const gutters = gaps.filter(g => g.size >= medianWidth * 0.5);
+
+  return gutters.length > 0 ? gutters : null;
+}
+
+function getColumnBounds(targetWord, gutters) {
+  if (!gutters) return null;
+
+  const targetCenter = targetWord.bbox.x + targetWord.bbox.width / 2;
+  let colLeft = 0;
+  let colRight = 100;
+
+  for (const g of gutters) {
+    if (g.right <= targetCenter) {
+      colLeft = g.right;
+    }
+    if (g.left >= targetCenter) {
+      colRight = Math.min(colRight, g.left);
+      break;
+    }
+  }
+
+  return { left: colLeft, right: colRight };
+}
+
 /**
  * Hook for finding sentences from OCR words
  */
@@ -13,6 +70,10 @@ export function useSentenceFinder(ocrWords) {
     const targetX = targetWord.bbox.x;
     const targetRight = targetX + targetWord.bbox.width;
     const targetBottom = targetY + targetHeight;
+
+    // Detect column boundaries to prevent cross-column selection
+    const gutters = detectColumnBoundaries(ocrWords);
+    const columnBounds = getColumnBounds(targetWord, gutters);
 
     // Calculate min gaps in each direction
     let minLeftGap = Infinity;
@@ -66,6 +127,12 @@ export function useSentenceFinder(ocrWords) {
 
       for (const w of ocrWords) {
         if (blockWords.has(w)) continue;
+
+        // Skip words outside the detected column
+        if (columnBounds) {
+          const wCenterX = w.bbox.x + w.bbox.width / 2;
+          if (wCenterX < columnBounds.left || wCenterX > columnBounds.right) continue;
+        }
 
         const wRight = w.bbox.x + w.bbox.width;
         const wBottom = w.bbox.y + w.bbox.height;

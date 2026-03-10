@@ -3,8 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { deleteSource } from '../../services/source';
 import { deleteAnnotation } from '../../services/annotation';
 import WordQuickMenu from '../../components/modals/WordQuickMenu';
+import ChatPanel from '../../components/ChatPanel';
 import { TranslatableText } from '../../components/translatable';
 import { PenModeToggle, ColorPalette, usePenStrokes } from '../../components/pen-mode';
+import { useChat, useVoiceInput } from '../../hooks';
+import { extractOcrText } from '../../services/ai/chat';
 import { useSourceData, useOcrWords, useSentenceFinder, useMinimap, useAnnotationHelpers, useModalState, useVocabularyPanel, usePageNavigation, useDesktopGestures, useTouchStateMachine } from './hooks';
 import { ImageContentView, VocabPanel } from './components';
 import { getMobileSafeAreaBottom } from '../../utils/positioning';
@@ -19,6 +22,11 @@ export default function Viewer() {
     loadData, refreshAnnotations, getPages,
     setSource, setAnnotations,
   } = useSourceData(id);
+
+  // Chat integration
+  const sourceContext = source ? extractOcrText(source) : '';
+  const chatHook = useChat({ sourceId: id, sourceContext, topicTitle: source?.title || '' });
+  const voiceHook = useVoiceInput();
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -760,6 +768,8 @@ const zoomOrigin = { x: 0, y: 0 };
         highlightVocab={highlightVocab}
         scrollContainerRef={scrollContainerRef}
       />
+
+      <ChatPanel chat={chatHook} voice={voiceHook} sourceTitle={source?.title} />
 
 
       {/* Delete confirmation modal */}

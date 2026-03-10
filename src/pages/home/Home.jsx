@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSources, updateSource } from '../../services/source';
@@ -25,9 +25,6 @@ export default function Home() {
     return saved ? Math.min(6, Math.max(2, parseInt(saved, 10))) : 2;
   });
 
-  // 채팅 선택 모드
-  const [chatSelectMode, setChatSelectMode] = useState(false);
-  const [selectedSourceIds, setSelectedSourceIds] = useState([]);
 
   // 컬럼 수 변경 핸들러
   function handleColumnChange(delta) {
@@ -109,43 +106,6 @@ export default function Home() {
     loadData();
   }
 
-  // 채팅 버튼 클릭 핸들러
-  function handleChatClick() {
-    if (!chatSelectMode) {
-      // 선택 모드 시작
-      setChatSelectMode(true);
-      setSelectedSourceIds([]);
-    } else if (selectedSourceIds.length > 0) {
-      // 선택된 소스로 채팅 시작
-      const selectedSources = sources.filter(s => selectedSourceIds.includes(s.id));
-      const titles = selectedSources.map(s => s.title).join(', ');
-      navigate('/chat', {
-        state: {
-          sourceId: selectedSourceIds[0],
-          sourceTitle: titles,
-          topicRestricted: true,
-          selectedSourceIds,
-        },
-      });
-      setChatSelectMode(false);
-      setSelectedSourceIds([]);
-    }
-  }
-
-  // 채팅 선택 모드 취소
-  const handleCancelChatSelect = useCallback(() => {
-    setChatSelectMode(false);
-    setSelectedSourceIds([]);
-  }, []);
-
-  // 소스 선택 토글
-  const handleSourceSelect = useCallback((sourceId) => {
-    setSelectedSourceIds(prev =>
-      prev.includes(sourceId)
-        ? prev.filter(id => id !== sourceId)
-        : [...prev, sourceId]
-    );
-  }, []);
 
   return (
     <div className="home-screen">
@@ -160,21 +120,6 @@ export default function Home() {
               <circle cx="11" cy="11" r="8"/>
               <path d="m21 21-4.35-4.35"/>
             </svg>
-          </button>
-          {chatSelectMode && (
-            <button
-              className="mypage-button"
-              onClick={handleCancelChatSelect}
-            >
-              Cancel
-            </button>
-          )}
-          <button
-            className={`mypage-button ${chatSelectMode ? 'chat-active' : ''}`}
-            onClick={handleChatClick}
-            disabled={chatSelectMode && selectedSourceIds.length === 0}
-          >
-            Chat{chatSelectMode && selectedSourceIds.length > 0 ? ` (${selectedSourceIds.length})` : ''}
           </button>
           <button
             className="mypage-button"
@@ -258,9 +203,6 @@ export default function Home() {
             columnCount={columnCount}
             onSourceDeleted={loadData}
             onSourceUpdated={handleSourceUpdated}
-            selectMode={chatSelectMode}
-            selectedIds={selectedSourceIds}
-            onSelectToggle={handleSourceSelect}
           />
         </section>
       </main>

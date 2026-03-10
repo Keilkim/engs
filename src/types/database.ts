@@ -4,16 +4,43 @@ export interface Source {
   id: string;
   user_id: string;
   title: string;
-  type: 'image' | 'pdf' | 'url' | 'screenshot';
+  type: 'image' | 'pdf' | 'url' | 'screenshot' | 'youtube';
   file_path: string | null;
   screenshot: string | null;
   thumbnail: string | null;
   pages: string | null; // JSON string of page images
   ocr_data: OcrData | null;
   content: string | null; // HTML content for URL type
+  youtube_data: YouTubeData | null;
+  captions_data: CaptionsData | null;
+  source_language: string | null;
   pinned: boolean;
   created_at: string;
   last_accessed: string | null;
+}
+
+export interface YouTubeData {
+  video_id: string;
+  channel: string;
+  duration?: number;
+  has_captions: boolean;
+  caption_source: 'youtube' | 'whisper' | 'manual';
+  thumbnail_url: string;
+}
+
+export interface CaptionSegment {
+  id: number;
+  start: number;
+  end: number;
+  text: string;
+  words?: Array<{ word: string; start: number; end: number }>;
+  translation?: string;
+}
+
+export interface CaptionsData {
+  segments: CaptionSegment[];
+  language: string;
+  source: 'youtube' | 'whisper' | 'manual';
 }
 
 export interface Annotation {
@@ -79,10 +106,14 @@ export interface SelectionRect {
   lines?: BBox[];
   page?: number;
   // Pen stroke fields
-  type?: 'pen_stroke';
+  type?: 'pen_stroke' | 'youtube_word';
   points?: Array<{ x: number; y: number }>;
   color?: string;
   strokeWidth?: number;
+  // YouTube word fields
+  segmentIndex?: number;
+  wordIndex?: number;
+  timestamp?: number;
 }
 
 export interface VocabularyAnalysis {
