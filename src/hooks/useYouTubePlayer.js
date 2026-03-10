@@ -71,6 +71,18 @@ export function useYouTubePlayer() {
     }
   }, []);
 
+  const pauseVideo = useCallback(() => {
+    if (playerRef.current && playerRef.current.pauseVideo) {
+      playerRef.current.pauseVideo();
+    }
+  }, []);
+
+  const playVideo = useCallback(() => {
+    if (playerRef.current && playerRef.current.playVideo) {
+      playerRef.current.playVideo();
+    }
+  }, []);
+
   const setPlaybackRate = useCallback((rate) => {
     if (playerRef.current) {
       playerRef.current.setPlaybackRate(rate);
@@ -89,6 +101,8 @@ export function useYouTubePlayer() {
     onStateChange,
     onEnd,
     seekTo,
+    pauseVideo,
+    playVideo,
     setPlaybackRate,
   };
 }

@@ -73,9 +73,16 @@ export default function YouTubeViewer() {
     onStateChange,
     onEnd,
     seekTo,
+    pauseVideo,
+    playVideo,
     playbackRate,
     setPlaybackRate,
   } = useYouTubePlayer();
+
+  // Track if video was playing before pause (to resume on menu close)
+  const wasPlayingRef = useRef(false);
+  const [isGrammarMode, setIsGrammarMode] = useState(false);
+  const [selectedSentenceText, setSelectedSentenceText] = useState(null);
 
   useEffect(() => {
     async function loadSource() {
@@ -123,19 +130,24 @@ export default function YouTubeViewer() {
     });
   }, [annotations]);
 
-  // Caption word long press → show word menu
-  // This is completely separate from Viewer's coordinate-based touch system
-  const handleWordLongPress = useCallback((word, rect, segmentIndex, wordIdx, timestamp) => {
+  // Caption word long press → show word menu (grammar mode with sentence text)
+  const handleWordLongPress = useCallback((word, rect, segmentIndex, wordIdx, timestamp, sentenceText) => {
     if (!word) return;
     const existing = findExistingAnnotation(word);
 
-    setSelectedWord(word);
+    // Auto-pause video
+    wasPlayingRef.current = isPlaying;
+    pauseVideo();
+
+    setSelectedWord(sentenceText || word);
+    setIsGrammarMode(true);
+    setSelectedSentenceText(sentenceText);
     setWordPosition({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
     setSelectedSegmentIndex(segmentIndex);
     setSelectedWordIndex(wordIdx);
     setSelectedTimestamp(timestamp);
     setExistingAnnotationForWord(existing || null);
-  }, [findExistingAnnotation]);
+  }, [findExistingAnnotation, isPlaying, pauseVideo]);
 
   const closeWordModal = useCallback(() => {
     setSelectedWord(null);
@@ -144,7 +156,15 @@ export default function YouTubeViewer() {
     setSelectedWordIndex(null);
     setSelectedTimestamp(null);
     setExistingAnnotationForWord(null);
-  }, []);
+    setIsGrammarMode(false);
+    setSelectedSentenceText(null);
+
+    // Resume video if it was playing before
+    if (wasPlayingRef.current) {
+      playVideo();
+      wasPlayingRef.current = false;
+    }
+  }, [playVideo]);
 
   const handleWordSaved = useCallback((tempAnnotation) => {
     setAnnotations(prev => [...prev, tempAnnotation]);
@@ -179,6 +199,20 @@ export default function YouTubeViewer() {
     [segments]
   );
   const chatHook = useChat({ sourceId: id, sourceContext: captionContext, topicTitle: source?.title || '' });
+
+  // Auto-pause video when chat panel opens
+  const chatWasPlayingRef = useRef(false);
+  useEffect(() => {
+    if (chatHook.showPanel) {
+      chatWasPlayingRef.current = isPlaying;
+      pauseVideo();
+    } else {
+      if (chatWasPlayingRef.current) {
+        playVideo();
+        chatWasPlayingRef.current = false;
+      }
+    }
+  }, [chatHook.showPanel]);
 
   const opts = {
     height: '100%',
@@ -262,12 +296,12 @@ export default function YouTubeViewer() {
         </div>
       </div>
 
-      {/* WordQuickMenu - YouTube mode (no grammar, no wordBbox, uses position-based placement) */}
       <WordQuickMenu
         isOpen={!!selectedWord}
         position={wordPosition}
         placement="below"
         word={selectedWord}
+        isGrammarMode={isGrammarMode}
         sourceId={id}
         sourceType="youtube"
         segmentIndex={selectedSegmentIndex}

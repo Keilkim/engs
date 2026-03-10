@@ -89,7 +89,7 @@ export default function CaptionLine({
           touchStateRef.current.executed = true;
           const wIdx = touchStateRef.current.wordIndex;
           const timestamp = wordTimings[wIdx]?.start;
-          onWordLongPress?.(word, target.getBoundingClientRect(), index, wIdx, timestamp);
+          onWordLongPress?.(word, target.getBoundingClientRect(), index, wIdx, timestamp, segment.text);
         }
       }, LONG_PRESS_DURATION);
     }

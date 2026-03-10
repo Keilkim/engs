@@ -38,7 +38,7 @@ export default function WordQuickMenu({
   const touchStartRef = useRef({ time: 0, x: 0, y: 0 });
 
   const vocab = useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp });
-  const grammar = useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, currentPage, onSaved, onClose });
+  const grammar = useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp });
 
   // Position update (wordBbox % → viewport coords)
   const updatePosition = useCallback(() => {
@@ -199,7 +199,7 @@ export default function WordQuickMenu({
 
   return (
     <div ref={modalRef} className={`word-quick-menu${grammarClass}${existingClass} ${arrowClass}`} style={menuStyle}>
-      {isGrammarMode && !isYouTube ? (
+      {isGrammarMode ? (
         <GrammarModeContent
           grammarData={grammar.grammarData}
           checkedPatterns={grammar.checkedPatterns}

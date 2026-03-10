@@ -364,31 +364,39 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                 </div>
               )}
 
-              {/* Whisper transcribe button (when no captions found) */}
-              {captionStatus === 'not_found' && isWhisperAvailable() && (
-                <button
-                  type="button"
-                  className="submit-button"
-                  onClick={handleWhisperTranscribe}
-                  disabled={loading}
-                  style={{ marginBottom: '8px', background: '#7c3aed' }}
-                >
-                  {loading ? (loadingStatus || 'Transcribing...') : 'Whisper로 전사'}
-                </button>
-              )}
               {captionStatus === 'not_found' && !isWhisperAvailable() && (
                 <p className="file-hint" style={{ color: '#fb923c' }}>
                   캡션이 없습니다. Whisper 전사를 사용하려면 OPENAI_API_KEY를 서버 환경변수에 설정하세요.
                 </p>
               )}
 
-              <button
-                type="submit"
-                className="submit-button"
-                disabled={loading || !youtubePreview}
-              >
-                {loading ? (loadingStatus || 'Saving...') : 'Save'}
-              </button>
+              {captionStatus === 'loading' ? (
+                <button
+                  type="button"
+                  className="submit-button"
+                  disabled
+                >
+                  캡션 확인중...
+                </button>
+              ) : captionStatus === 'not_found' && isWhisperAvailable() ? (
+                <button
+                  type="button"
+                  className="submit-button"
+                  onClick={handleWhisperTranscribe}
+                  disabled={loading}
+                  style={{ background: '#7c3aed' }}
+                >
+                  {loading ? (loadingStatus || 'Transcribing...') : 'Whisper로 전사하기'}
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  className="submit-button"
+                  disabled={loading || !youtubePreview || captionStatus !== 'found'}
+                >
+                  {loading ? (loadingStatus || 'Saving...') : 'Save'}
+                </button>
+              )}
             </form>
           )}
         </div>
