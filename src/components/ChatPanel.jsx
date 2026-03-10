@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ChatLog from '../containers/chat-log/ChatLog';
-import { speakText, stopSpeaking } from '../utils/tts';
+import { speakText, stopSpeaking, preloadVoices } from '../utils/tts';
 import { getSetting, SETTINGS_KEYS, LEVEL_OPTIONS } from '../services/settings';
 import { useVoiceInput } from '../hooks';
 
@@ -32,16 +32,18 @@ export default function ChatPanel({ chat, sourceTitle }) {
   const conversationModeRef = useRef(false);
   const loadingRef = useRef(false);
   const speechRateRef = useRef(speechRate);
+  const stopListeningRef = useRef(null);
 
   // Keep refs in sync
   useEffect(() => { conversationModeRef.current = conversationMode; }, [conversationMode]);
   useEffect(() => { loadingRef.current = loading; }, [loading]);
   useEffect(() => { speechRateRef.current = speechRate; }, [speechRate]);
 
-  // Auto-send callback for voice input
+  // Auto-send callback for voice input - stop listening, force English
   const handleAutoSend = useCallback((text) => {
     if (text.trim() && !loadingRef.current) {
-      handleSend(text);
+      stopListeningRef.current?.();
+      handleSend(text, { languageOverride: 'English', conversationMode: true });
     }
   }, [handleSend]);
 
@@ -56,8 +58,16 @@ export default function ChatPanel({ chat, sourceTitle }) {
     clearTranscript,
   } = useVoiceInput({ onAutoSend: handleAutoSend });
 
+  // Keep stopListening ref in sync
+  useEffect(() => { stopListeningRef.current = stopListening; }, [stopListening]);
+
   const level = getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate');
   const levelLabel = LEVEL_OPTIONS.find(o => o.value === level)?.label || level;
+
+  // Preload TTS voices on mount
+  useEffect(() => {
+    preloadVoices();
+  }, []);
 
   // Auto-resume listening after TTS finishes in conversation mode
   const resumeListeningAfterTts = useCallback(() => {
@@ -99,7 +109,11 @@ export default function ChatPanel({ chat, sourceTitle }) {
       setSpeaking(false);
       setConversationMode(false);
     } else {
-      // Start conversation mode
+      // Start conversation mode - unlock audio with silent utterance (mobile Safari)
+      const unlock = new SpeechSynthesisUtterance('');
+      unlock.volume = 0;
+      window.speechSynthesis?.speak(unlock);
+      preloadVoices();
       setConversationMode(true);
       startListening();
     }

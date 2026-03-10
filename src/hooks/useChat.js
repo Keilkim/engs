@@ -35,7 +35,7 @@ export function useChat({ sourceId, sourceContext = '', topicTitle = '' }) {
     }
   }
 
-  const handleSend = useCallback(async (text) => {
+  const handleSend = useCallback(async (text, { languageOverride, conversationMode } = {}) => {
     if (!text.trim() || loading) return;
 
     const userMessage = {
@@ -70,7 +70,8 @@ export function useChat({ sourceId, sourceContext = '', topicTitle = '' }) {
         text.trim(),
         context,
         currentMessages,
-        (_chunk, full) => setStreamingText(full)
+        (_chunk, full) => setStreamingText(full),
+        { languageOverride, conversationMode }
       );
 
       setStreamingText('');
