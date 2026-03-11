@@ -149,10 +149,11 @@ export function useTouchStateMachine({
         state.timer = null;
       }
 
-      // 2손가락 pinch 종료
+      // 2손가락 pinch 종료 → 남은 손가락의 후속 이벤트 차단
       if (pinchStartRef.current || twoFingerPanRef.current) {
         pinchStartRef.current = null;
         twoFingerPanRef.current = null;
+        state.actionExecuted = true;
         return;
       }
 

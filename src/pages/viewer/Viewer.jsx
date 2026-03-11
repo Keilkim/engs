@@ -552,7 +552,7 @@ const zoomOrigin = { x: 0, y: 0 };
       if (!isMultiPage) return;
 
       // Block page nav when zoomed or within cooldown after pinch
-      if (zoomScale > 1 || Date.now() - lastPinchTime < 500) {
+      if (zoomScale > 1 || Date.now() - lastPinchTime < 300) {
         e.preventDefault();
         return;
       }
