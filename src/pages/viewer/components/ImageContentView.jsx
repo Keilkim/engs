@@ -337,16 +337,12 @@ export default function ImageContentView({
   if (hasPages) {
     return (
       <div className={`screenshot-viewer with-sidebar${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
-        {sidebarCollapsed && (
-          <button className="sidebar-toggle-btn collapsed" onClick={() => setSidebarCollapsed(false)}>
-            ▶
+        <div className="sidebar-wrapper">
+          <button className="sidebar-toggle-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
+            {sidebarCollapsed ? '▶' : '◀'}
           </button>
-        )}
-        <div className="page-sidebar">
-          <button className="sidebar-toggle-btn" onClick={() => setSidebarCollapsed(true)}>
-            ◀
-          </button>
-          <div className="page-sidebar-scroll">
+          <div className="page-sidebar">
+            <div className="page-sidebar-scroll">
             {pages.map((pageImg, index) => (
               <div
                 key={index}
@@ -357,6 +353,7 @@ export default function ImageContentView({
                 <span className="page-number">{index + 1}</span>
               </div>
             ))}
+            </div>
           </div>
         </div>
 
@@ -410,35 +407,32 @@ export default function ImageContentView({
   // URL screenshot (single long image) with minimap
   return (
     <div className={`screenshot-viewer with-minimap${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
-      {sidebarCollapsed && (
-        <button className="sidebar-toggle-btn collapsed" onClick={() => setSidebarCollapsed(false)}>
-          ▶
+      <div className="sidebar-wrapper">
+        <button className="sidebar-toggle-btn" onClick={(e) => { e.stopPropagation(); setSidebarCollapsed(!sidebarCollapsed); }}>
+          {sidebarCollapsed ? '▶' : '◀'}
         </button>
-      )}
-      <div
-        className="minimap-sidebar"
-        ref={minimapRef}
-        onMouseDown={handleMinimapMouseDown}
-        onMouseMove={handleMinimapMouseMove}
-        onMouseUp={handleMinimapMouseUp}
-        onMouseLeave={handleMinimapMouseUp}
-        onTouchStart={handleMinimapTouchStart}
-        onTouchMove={handleMinimapTouchMove}
-        onTouchEnd={handleMinimapTouchEnd}
-      >
-        <button className="sidebar-toggle-btn" onClick={(e) => { e.stopPropagation(); setSidebarCollapsed(true); }}>
-          ◀
-        </button>
-        <div className="minimap-content">
-          <div className="minimap-image-wrapper">
-            <img src={displayImage} alt="Minimap" className="minimap-image" draggable={false} />
-            <div
-              className="minimap-viewport"
-              style={{
-                top: `${viewportPosition.top}%`,
-                height: `${viewportPosition.height}%`,
-              }}
-            />
+        <div
+          className="minimap-sidebar"
+          ref={minimapRef}
+          onMouseDown={handleMinimapMouseDown}
+          onMouseMove={handleMinimapMouseMove}
+          onMouseUp={handleMinimapMouseUp}
+          onMouseLeave={handleMinimapMouseUp}
+          onTouchStart={handleMinimapTouchStart}
+          onTouchMove={handleMinimapTouchMove}
+          onTouchEnd={handleMinimapTouchEnd}
+        >
+          <div className="minimap-content">
+            <div className="minimap-image-wrapper">
+              <img src={displayImage} alt="Minimap" className="minimap-image" draggable={false} />
+              <div
+                className="minimap-viewport"
+                style={{
+                  top: `${viewportPosition.top}%`,
+                  height: `${viewportPosition.height}%`,
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>

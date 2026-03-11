@@ -35,23 +35,43 @@ export function useDesktopGestures({
   const mouseClickStart = useRef(null);
   const mouseTimer = useRef(null);
 
-  // Clamp pan offset to keep image within bounds
+  // Clamp pan offset so the zoomed image fills the visible viewport.
+  // Accounts for container being centered within screenshot-main.
   const clampPanOffset = useCallback((offsetX, offsetY, scale) => {
     if (scale <= 1) return { x: 0, y: 0 };
 
     const container = imageContainerRef.current;
     if (!container) return { x: offsetX, y: offsetY };
 
-    // Use offsetWidth/offsetHeight to get the original (untransformed) size
-    const containerWidth = container.offsetWidth;
-    const containerHeight = container.offsetHeight;
+    const w = container.offsetWidth;
+    const h = container.offsetHeight;
 
-    const maxPanX = (containerWidth * (scale - 1)) / 2;
-    const maxPanY = (containerHeight * (scale - 1)) / 2;
+    // Find the visible viewport (screenshot-main) and container's offset within it
+    const parent = container.closest('.screenshot-main');
+    if (!parent) {
+      // Fallback: simple clamp
+      return {
+        x: Math.max(w - w * scale, Math.min(0, offsetX)),
+        y: Math.max(h - h * scale, Math.min(0, offsetY)),
+      };
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    const offsetLeft = containerRect.left - parentRect.left - offsetX; // subtract current pan to get base offset
+    const offsetTop = containerRect.top - parentRect.top - offsetY;
+
+    // Image left edge in parent coords: offsetLeft + panX
+    // Image right edge: offsetLeft + panX + w * scale
+    // Constraints: left edge <= 0, right edge >= parentWidth
+    const maxX = -offsetLeft;
+    const minX = parentRect.width - offsetLeft - w * scale;
+    const maxY = -offsetTop;
+    const minY = parentRect.height - offsetTop - h * scale;
 
     return {
-      x: Math.max(-maxPanX, Math.min(maxPanX, offsetX)),
-      y: Math.max(-maxPanY, Math.min(maxPanY, offsetY)),
+      x: Math.max(minX, Math.min(maxX, offsetX)),
+      y: Math.max(minY, Math.min(maxY, offsetY)),
     };
   }, [imageContainerRef]);
 

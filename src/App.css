@@ -393,7 +393,7 @@
 /* Minimap Sidebar */
 .minimap-sidebar {
   width: 80px;
-  align-self: flex-start;
+  height: 100%;
   background-color: var(--color-base-sub);
   border-radius: var(--radius-md);
   border: 1px solid var(--color-accent);
@@ -401,7 +401,6 @@
   flex-shrink: 0;
   cursor: grab;
   user-select: none;
-  position: relative;
   z-index: 10;
   touch-action: none; /* Prevent page scroll when dragging minimap */
 }
@@ -492,7 +491,6 @@
   background-color: var(--color-base-sub);
   border-radius: var(--radius-md);
   border: 1px solid var(--color-accent);
-  position: relative;
   z-index: 10;
   overflow: hidden;
   flex-shrink: 0;
@@ -557,26 +555,38 @@
   border-radius: var(--radius-sm);
 }
 
-/* Sidebar toggle button */
+/* Sidebar wrapper - allows toggle button to overflow */
+.sidebar-wrapper {
+  position: sticky;
+  top: 0;
+  height: calc(100vh - 80px);
+  flex-shrink: 0;
+  overflow: visible;
+  z-index: 10;
+}
+
+/* Sidebar toggle button - protrudes from right edge center */
 .sidebar-toggle-btn {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-sm);
+  right: -28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 48px;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
   border: 1px solid var(--color-accent);
+  border-left: none;
   background-color: var(--color-base-sub);
   color: var(--color-text-sub);
-  font-size: 10px;
+  font-size: 11px;
   cursor: pointer;
-  z-index: 11;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  transition: all var(--transition-fast);
-  opacity: 0.6;
+  transition: opacity var(--transition-fast), background-color var(--transition-fast);
+  opacity: 0.5;
 }
 
 .sidebar-toggle-btn:hover {
@@ -584,20 +594,8 @@
   background-color: var(--color-accent);
 }
 
-.sidebar-toggle-btn.collapsed {
-  position: relative;
-  top: auto;
-  right: auto;
-  flex-shrink: 0;
-  width: 20px;
-  height: 40px;
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  align-self: center;
-  opacity: 0.5;
-}
-
-.sidebar-toggle-btn.collapsed:hover {
-  opacity: 1;
+.sidebar-toggle-btn:active {
+  transform: translateY(-50%) scale(0.9);
 }
 
 /* Sidebar collapse animation */
@@ -609,12 +607,28 @@
   padding: 0;
   overflow: hidden;
   opacity: 0;
-  transition: width 0.2s ease, opacity 0.15s ease;
 }
 
 .page-sidebar,
 .minimap-sidebar {
   transition: width 0.2s ease, opacity 0.15s ease;
+}
+
+/* When collapsed, adjust wrapper and toggle */
+.sidebar-wrapper {
+  transition: width 0.2s ease;
+}
+
+.sidebar-collapsed .sidebar-wrapper {
+  width: 0;
+}
+
+.sidebar-collapsed .sidebar-toggle-btn {
+  right: -28px;
+}
+
+.sidebar-collapsed {
+  gap: 0 !important;
 }
 
 /* Mobile Bottom Page Navigation - Hidden on desktop */
