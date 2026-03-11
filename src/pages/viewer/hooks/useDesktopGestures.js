@@ -70,8 +70,8 @@ export function useDesktopGestures({
     const minY = parentRect.height - offsetTop - h * scale;
 
     return {
-      x: Math.max(minX, Math.min(maxX, offsetX)),
-      y: Math.max(minY, Math.min(maxY, offsetY)),
+      x: minX > maxX ? 0 : Math.max(minX, Math.min(maxX, offsetX)),
+      y: minY > maxY ? 0 : Math.max(minY, Math.min(maxY, offsetY)),
     };
   }, [imageContainerRef]);
 

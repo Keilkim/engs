@@ -518,6 +518,35 @@ const zoomOrigin = { x: 0, y: 0 };
     };
   }, [currentPage, source, handlePrevPage, handleNextPage]);
 
+  // Ctrl+wheel (trackpad pinch) zoom for all view types
+  useEffect(() => {
+    const container = imageContainerRef.current;
+    if (!container) return;
+
+    const handlePinchZoom = (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+
+      const delta = -e.deltaY * 0.01;
+      const newScale = Math.min(6, Math.max(1, zoomScale * (1 + delta)));
+      if (newScale === zoomScale) return;
+
+      const rect = container.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      const imageX = (cx - panOffset.x) / zoomScale;
+      const imageY = (cy - panOffset.y) / zoomScale;
+      const newPanX = cx - imageX * newScale;
+      const newPanY = cy - imageY * newScale;
+
+      setZoomScale(newScale);
+      setPanOffset(clampPanOffset(newPanX, newPanY, newScale));
+    };
+
+    container.addEventListener('wheel', handlePinchZoom, { passive: false });
+    return () => container.removeEventListener('wheel', handlePinchZoom);
+  }, [zoomScale, panOffset, clampPanOffset, setZoomScale, setPanOffset]);
+
   // Scroll wheel page navigation (for PDF/image pages)
   useEffect(() => {
     const container = imageContainerRef.current;
@@ -527,6 +556,7 @@ const zoomOrigin = { x: 0, y: 0 };
     if (!pages || pages.length <= 1) return;
 
     const handleWheel = (e) => {
+      if (e.ctrlKey) return; // handled by pinch zoom above
       e.preventDefault();
 
       if (e.deltaY > 0) {
