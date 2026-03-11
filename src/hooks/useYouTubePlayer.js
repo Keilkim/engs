@@ -65,11 +65,17 @@ export function useYouTubePlayer() {
   }, []);
 
   const seekTo = useCallback((seconds, allowSeekAhead = true) => {
-    if (playerRef.current) {
+    if (!playerRef.current) return;
+    // UNSTARTED state: play briefly to load the stream, then seek and pause
+    if (playerState === PLAYER_STATES.UNSTARTED || playerState === PLAYER_STATES.CUED) {
+      playerRef.current.playVideo();
       playerRef.current.seekTo(seconds, allowSeekAhead);
-      setCurrentTime(seconds);
+      playerRef.current.pauseVideo();
+    } else {
+      playerRef.current.seekTo(seconds, allowSeekAhead);
     }
-  }, []);
+    setCurrentTime(seconds);
+  }, [playerState]);
 
   const pauseVideo = useCallback(() => {
     if (playerRef.current && playerRef.current.pauseVideo) {

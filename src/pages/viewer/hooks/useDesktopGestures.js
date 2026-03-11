@@ -42,12 +42,12 @@ export function useDesktopGestures({
     const container = imageContainerRef.current;
     if (!container) return { x: offsetX, y: offsetY };
 
-    const rect = container.getBoundingClientRect();
-    const scaledWidth = rect.width * scale;
-    const scaledHeight = rect.height * scale;
+    // Use offsetWidth/offsetHeight to get the original (untransformed) size
+    const containerWidth = container.offsetWidth;
+    const containerHeight = container.offsetHeight;
 
-    const maxPanX = (scaledWidth - rect.width) / 2;
-    const maxPanY = (scaledHeight - rect.height) / 2;
+    const maxPanX = (containerWidth * (scale - 1)) / 2;
+    const maxPanY = (containerHeight * (scale - 1)) / 2;
 
     return {
       x: Math.max(-maxPanX, Math.min(maxPanX, offsetX)),

@@ -134,7 +134,7 @@ export default function CaptionLine({
     }
 
     if (!moved && duration < LONG_PRESS_DURATION) {
-      // Short tap → seek + resume video
+      // Short tap → seek + resume if was playing
       if (wordIndex !== undefined && wordIndex >= 0 && wordTimings[wordIndex]) {
         onSeek?.(wordTimings[wordIndex].start);
       } else {
@@ -142,7 +142,7 @@ export default function CaptionLine({
       }
       onPressEndNoMenu?.();
     } else if (moved) {
-      // Drag cancelled, no menu opened → resume video
+      // Drag cancelled, no menu opened → resume if was playing
       onPressEndNoMenu?.();
     }
 

@@ -69,6 +69,9 @@ const zoomOrigin = { x: 0, y: 0 };
   const twoFingerPanRef = useRef(null); // { centerX, centerY, startPanX, startPanY }
   const singleFingerPanRef = useRef(null); // For single finger panning when zoomed
 
+  // Sidebar toggle state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   // Pen mode state
   const [penModeActive, setPenModeActive] = useState(false);
   const [penColor, setPenColor] = useState('#0A84FF');
@@ -722,6 +725,8 @@ const zoomOrigin = { x: 0, y: 0 };
           pages={pages}
           hasPages={hasPages}
           displayImage={getDisplayImage()}
+          sidebarCollapsed={sidebarCollapsed}
+          setSidebarCollapsed={setSidebarCollapsed}
         />
 
         {/* Memo markers displayed as floating indicators */}

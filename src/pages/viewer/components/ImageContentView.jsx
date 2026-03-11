@@ -251,6 +251,8 @@ export default function ImageContentView({
   handleMinimapTouchStart, handleMinimapTouchMove, handleMinimapTouchEnd,
   // Pages
   pages, hasPages, displayImage,
+  // Sidebar toggle
+  sidebarCollapsed, setSidebarCollapsed,
 }) {
   const svgProps = {
     annotations, currentPage, highlightedVocabId, activeModal, openModal,
@@ -334,8 +336,16 @@ export default function ImageContentView({
   // PDF/Image with multiple pages
   if (hasPages) {
     return (
-      <div className="screenshot-viewer with-sidebar">
+      <div className={`screenshot-viewer with-sidebar${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+        {sidebarCollapsed && (
+          <button className="sidebar-toggle-btn collapsed" onClick={() => setSidebarCollapsed(false)}>
+            ▶
+          </button>
+        )}
         <div className="page-sidebar">
+          <button className="sidebar-toggle-btn" onClick={() => setSidebarCollapsed(true)}>
+            ◀
+          </button>
           <div className="page-sidebar-scroll">
             {pages.map((pageImg, index) => (
               <div
@@ -399,7 +409,12 @@ export default function ImageContentView({
 
   // URL screenshot (single long image) with minimap
   return (
-    <div className="screenshot-viewer with-minimap">
+    <div className={`screenshot-viewer with-minimap${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+      {sidebarCollapsed && (
+        <button className="sidebar-toggle-btn collapsed" onClick={() => setSidebarCollapsed(false)}>
+          ▶
+        </button>
+      )}
       <div
         className="minimap-sidebar"
         ref={minimapRef}
@@ -411,6 +426,9 @@ export default function ImageContentView({
         onTouchMove={handleMinimapTouchMove}
         onTouchEnd={handleMinimapTouchEnd}
       >
+        <button className="sidebar-toggle-btn" onClick={(e) => { e.stopPropagation(); setSidebarCollapsed(true); }}>
+          ◀
+        </button>
         <div className="minimap-content">
           <div className="minimap-image-wrapper">
             <img src={displayImage} alt="Minimap" className="minimap-image" draggable={false} />
