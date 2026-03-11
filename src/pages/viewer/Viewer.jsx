@@ -518,56 +518,54 @@ const zoomOrigin = { x: 0, y: 0 };
     };
   }, [currentPage, source, handlePrevPage, handleNextPage]);
 
-  // Ctrl+wheel (trackpad pinch) zoom for all view types
-  useEffect(() => {
-    const container = imageContainerRef.current;
-    if (!container) return;
-
-    const handlePinchZoom = (e) => {
-      if (!e.ctrlKey) return;
-      e.preventDefault();
-
-      const delta = -e.deltaY * 0.01;
-      const newScale = Math.min(6, Math.max(1, zoomScale * (1 + delta)));
-      if (newScale === zoomScale) return;
-
-      const rect = container.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
-      const imageX = (cx - panOffset.x) / zoomScale;
-      const imageY = (cy - panOffset.y) / zoomScale;
-      const newPanX = cx - imageX * newScale;
-      const newPanY = cy - imageY * newScale;
-
-      setZoomScale(newScale);
-      setPanOffset(clampPanOffset(newPanX, newPanY, newScale));
-    };
-
-    container.addEventListener('wheel', handlePinchZoom, { passive: false });
-    return () => container.removeEventListener('wheel', handlePinchZoom);
-  }, [zoomScale, panOffset, clampPanOffset, setZoomScale, setPanOffset]);
-
-  // Scroll wheel page navigation (for PDF/image pages)
+  // Wheel handler: trackpad pinch zoom + page navigation (combined to prevent conflicts)
   useEffect(() => {
     const container = imageContainerRef.current;
     if (!container) return;
 
     const pages = getPages();
-    if (!pages || pages.length <= 1) return;
+    const isMultiPage = pages && pages.length > 1;
+    let lastPinchTime = 0;
 
     const handleWheel = (e) => {
-      if (e.ctrlKey) return; // handled by pinch zoom above
+      // Trackpad pinch (ctrlKey) → zoom
+      if (e.ctrlKey) {
+        e.preventDefault();
+        lastPinchTime = Date.now();
+
+        const delta = -e.deltaY * 0.01;
+        const newScale = Math.min(6, Math.max(1, zoomScale * (1 + delta)));
+        if (newScale === zoomScale) return;
+
+        const rect = container.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        const imageX = (cx - panOffset.x) / zoomScale;
+        const imageY = (cy - panOffset.y) / zoomScale;
+
+        setZoomScale(newScale);
+        setPanOffset(clampPanOffset(cx - imageX * newScale, cy - imageY * newScale, newScale));
+        return;
+      }
+
+      // Page navigation (multi-page only)
+      if (!isMultiPage) return;
+
+      // Block page nav when zoomed or within cooldown after pinch
+      if (zoomScale > 1 || Date.now() - lastPinchTime < 200) {
+        e.preventDefault();
+        return;
+      }
+
       e.preventDefault();
 
       if (e.deltaY > 0) {
-        // Scroll down - next page
         if (currentPage < pages.length - 1) {
           handleNextPage();
         } else {
           triggerShake();
         }
       } else if (e.deltaY < 0) {
-        // Scroll up - prev page
         if (currentPage > 0) {
           handlePrevPage();
         } else {
@@ -578,7 +576,7 @@ const zoomOrigin = { x: 0, y: 0 };
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [source, currentPage, handleNextPage, handlePrevPage, triggerShake]);
+  }, [source, currentPage, handleNextPage, handlePrevPage, triggerShake, zoomScale, panOffset, clampPanOffset, setZoomScale, setPanOffset]);
 
   // Reset zoom and pan when page changes
   useEffect(() => {
