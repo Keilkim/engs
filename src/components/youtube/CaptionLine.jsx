@@ -25,6 +25,7 @@ export default function CaptionLine({
 }) {
   const touchStateRef = useRef(null);
   const timerRef = useRef(null);
+  const lastTouchEndRef = useRef(0); // Prevent synthetic mouse events after touch
 
   // Use word timings from Whisper if available, otherwise estimate
   const wordTimings = useMemo(() => {
@@ -69,6 +70,9 @@ export default function CaptionLine({
   }, []);
 
   const handlePointerDown = useCallback((e) => {
+    // Ignore synthetic mouse events after touch
+    if (e.type === 'mousedown' && Date.now() - lastTouchEndRef.current < 500) return;
+
     const target = e.target;
     const word = target.dataset?.word;
     const wordIdx = target.dataset?.wordIndex;
@@ -120,6 +124,11 @@ export default function CaptionLine({
   }, [clearTimer]);
 
   const handlePointerUp = useCallback((e) => {
+    // Track touch end time to suppress synthetic mouse events
+    if (e.type === 'touchend') lastTouchEndRef.current = Date.now();
+    // Ignore synthetic mouse events after touch
+    if (e.type === 'mouseup' && Date.now() - lastTouchEndRef.current < 500) return;
+
     clearTimer();
     if (!touchStateRef.current) return;
 

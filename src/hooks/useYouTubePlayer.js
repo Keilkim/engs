@@ -20,6 +20,7 @@ export function useYouTubePlayer() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRateState] = useState(1.0);
+  const pendingSeekRef = useRef(null); // For seeking from UNSTARTED state
 
   useEffect(() => {
     return () => {
@@ -58,6 +59,13 @@ export function useYouTubePlayer() {
       const dur = event.target.getDuration();
       if (dur > 0 && dur !== duration) setDuration(dur);
     }
+    // Handle pending seek from UNSTARTED state: once player starts, seek and pause
+    if (pendingSeekRef.current !== null && (event.data === PLAYER_STATES.PLAYING || event.data === PLAYER_STATES.BUFFERING)) {
+      const seekTime = pendingSeekRef.current;
+      pendingSeekRef.current = null;
+      event.target.seekTo(seekTime, true);
+      event.target.pauseVideo();
+    }
   }, [duration]);
 
   const onEnd = useCallback(() => {
@@ -66,11 +74,10 @@ export function useYouTubePlayer() {
 
   const seekTo = useCallback((seconds, allowSeekAhead = true) => {
     if (!playerRef.current) return;
-    // UNSTARTED state: play briefly to load the stream, then seek and pause
     if (playerState === PLAYER_STATES.UNSTARTED || playerState === PLAYER_STATES.CUED) {
+      // UNSTARTED: start playback, then seek+pause via onStateChange callback
+      pendingSeekRef.current = seconds;
       playerRef.current.playVideo();
-      playerRef.current.seekTo(seconds, allowSeekAhead);
-      playerRef.current.pauseVideo();
     } else {
       playerRef.current.seekTo(seconds, allowSeekAhead);
     }
