@@ -130,10 +130,10 @@ export default function YouTubeViewer() {
     });
   }, [annotations]);
 
-  // Press start → pause video immediately
+  // Press start → pause video only if playing
   const handlePressStart = useCallback(() => {
     wasPlayingRef.current = isPlaying;
-    pauseVideo();
+    if (isPlaying) pauseVideo();
   }, [isPlaying, pauseVideo]);
 
   // Short tap or drag cancel (no menu opened) → resume video
