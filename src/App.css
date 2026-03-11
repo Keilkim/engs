@@ -217,12 +217,19 @@
   padding: 0 var(--spacing-md);
 }
 
-.source-type-badge {
+.viewer-open-original-btn {
   font-size: var(--font-xs);
   padding: var(--spacing-xs) var(--spacing-sm);
   background-color: var(--color-accent);
   color: var(--color-text-sub);
   border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: all var(--transition-fast);
+}
+
+.viewer-open-original-btn:hover {
+  background-color: var(--color-accent-hover, var(--color-accent));
+  color: var(--color-text);
 }
 
 .viewer-actions {
@@ -899,6 +906,33 @@
   right: var(--spacing-lg);
   z-index: 50;
   box-shadow: var(--shadow-lg);
+}
+
+/* Zoom Reset Button */
+.zoom-reset-btn {
+  position: fixed;
+  bottom: var(--spacing-lg);
+  right: var(--spacing-lg);
+  z-index: 50;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--color-accent);
+  background-color: var(--color-base-sub);
+  color: var(--color-text);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-reset-btn:hover {
+  background-color: var(--color-accent);
+  transform: scale(1.1);
 }
 
 /* Viewer Page Navigation */

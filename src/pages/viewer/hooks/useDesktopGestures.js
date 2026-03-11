@@ -58,8 +58,8 @@ export function useDesktopGestures({
 
     const containerRect = container.getBoundingClientRect();
     const parentRect = parent.getBoundingClientRect();
-    const offsetLeft = containerRect.left - parentRect.left - offsetX; // subtract current pan to get base offset
-    const offsetTop = containerRect.top - parentRect.top - offsetY;
+    const offsetLeft = containerRect.left - parentRect.left;
+    const offsetTop = containerRect.top - parentRect.top;
 
     // Image left edge in parent coords: offsetLeft + panX
     // Image right edge: offsetLeft + panX + w * scale

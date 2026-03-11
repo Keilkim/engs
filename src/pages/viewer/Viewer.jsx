@@ -669,10 +669,16 @@ const zoomOrigin = { x: 0, y: 0 };
         </button>
         <h1 className="viewer-title">{source.title}</h1>
         <div className="viewer-actions">
-          <span className="source-type-badge">
-            {source.type.toUpperCase()}
-            {hasPages && ` • ${pages.length}p`}
-          </span>
+          {source.file_path && (
+            <a
+              href={source.file_path}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="viewer-open-original-btn"
+            >
+              <TranslatableText textKey="viewer.openOriginal">Open Original</TranslatableText>
+            </a>
+          )}
           <button
             className="viewer-delete-btn"
             onClick={() => setShowDeleteConfirm(true)}
@@ -743,6 +749,15 @@ const zoomOrigin = { x: 0, y: 0 };
             </div>
           ))}
       </main>
+
+      {zoomScale > 1 && (
+        <button
+          className="zoom-reset-btn"
+          onClick={() => { setZoomScale(1); setPanOffset({ x: 0, y: 0 }); }}
+        >
+          1:1
+        </button>
+      )}
 
       {/* Pen Mode Toggle Button - temporarily hidden */}
       {/* <PenModeToggle

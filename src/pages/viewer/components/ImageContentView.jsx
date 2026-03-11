@@ -382,11 +382,6 @@ export default function ImageContentView({
           </div>
         </div>
 
-        {source.type === 'pdf' && (
-          <a href={source.file_path} target="_blank" rel="noopener noreferrer" className="open-original-btn floating">
-            <TranslatableText textKey="viewer.openPdf">Open PDF</TranslatableText>
-          </a>
-        )}
       </div>
     );
   }
@@ -445,9 +440,6 @@ export default function ImageContentView({
         </div>
       </div>
 
-      <a href={source.file_path} target="_blank" rel="noopener noreferrer" className="open-original-btn floating">
-        <TranslatableText textKey="viewer.openOriginal">Open Original</TranslatableText>
-      </a>
     </div>
   );
 }
