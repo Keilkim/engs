@@ -18,7 +18,7 @@ export default function Viewer() {
 
   // Source data (from custom hook)
   const {
-    source, annotations, vocabulary, loading, error,
+    source, annotations, vocabulary, sentencePatterns, loading, error,
     loadData, refreshAnnotations, getPages,
     setSource, setAnnotations,
   } = useSourceData(id);
@@ -96,7 +96,9 @@ const zoomOrigin = { x: 0, y: 0 };
     deletingVocab, setDeletingVocab,
     showVocabWord,
     highlightVocabularyWords,
-  } = useVocabularyPanel(openModal, vocabulary);
+    highlightAllContent,
+    patternDefs,
+  } = useVocabularyPanel(openModal, vocabulary, sentencePatterns);
 
   // OCR word data (from custom hook)
   const { ocrWords, findWordAtPoint } = useOcrWords(source, currentPage);
@@ -152,6 +154,32 @@ const zoomOrigin = { x: 0, y: 0 };
     }
   }
 
+  // Handle pattern highlight click - show saved pattern info
+  function handlePatternHighlightClick(e) {
+    const patternId = e.target.getAttribute('data-pattern-id');
+    const patternAnnotation = sentencePatterns.find(p => p.id === patternId);
+    if (!patternAnnotation) return;
+
+    try {
+      const json = JSON.parse(patternAnnotation.ai_analysis_json || '{}');
+      const markerRect = e.target.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const spaceBelow = viewportHeight - markerRect.bottom;
+      const placement = spaceBelow >= 200 ? 'below' : 'above';
+      const posY = placement === 'below' ? markerRect.bottom + 12 : markerRect.top - 12;
+
+      openModal('patternTooltip', {
+        pattern: json.pattern || patternAnnotation.selected_text,
+        explanation: json.explanation || '',
+        example: json.example || '',
+        position: { x: markerRect.left + markerRect.width / 2, y: posY },
+        placement,
+      });
+    } catch {
+      // ignore
+    }
+  }
+
   // Add click listeners to highlights after render
   useEffect(() => {
     if (contentRef.current) {
@@ -167,6 +195,12 @@ const zoomOrigin = { x: 0, y: 0 };
         mark.addEventListener('click', handleVocabHighlightClick);
       });
 
+      // Pattern highlights + superscript numbers
+      const patternHighlights = contentRef.current.querySelectorAll('mark.pattern-highlight, sup.pattern-sup');
+      patternHighlights.forEach((el) => {
+        el.addEventListener('click', handlePatternHighlightClick);
+      });
+
       return () => {
         highlights.forEach((mark) => {
           mark.removeEventListener('click', handleHighlightClick);
@@ -174,9 +208,12 @@ const zoomOrigin = { x: 0, y: 0 };
         vocabHighlights.forEach((mark) => {
           mark.removeEventListener('click', handleVocabHighlightClick);
         });
+        patternHighlights.forEach((el) => {
+          el.removeEventListener('click', handlePatternHighlightClick);
+        });
       };
     }
-  }, [source, annotations, vocabulary]);
+  }, [source, annotations, vocabulary, sentencePatterns]);
 
 
 
@@ -745,7 +782,7 @@ const zoomOrigin = { x: 0, y: 0 };
           isGrammarAnnotation={isGrammarAnnotation}
           getVocabularyAnnotations={getVocabularyAnnotations}
           getGrammarAnnotations={getGrammarAnnotations}
-          highlightVocabularyWords={highlightVocabularyWords}
+          highlightVocabularyWords={highlightAllContent}
           viewportPosition={viewportPosition}
           minimapRef={minimapRef}
           handleMinimapMouseDown={handleMinimapMouseDown}
@@ -875,6 +912,36 @@ const zoomOrigin = { x: 0, y: 0 };
             </div>
           </div>
         </div>
+      )}
+
+      {/* Pattern Tooltip */}
+      {activeModal.type === 'patternTooltip' && activeModal.data.pattern && (
+        <>
+          <div
+            className="word-quick-menu-backdrop"
+            onClick={closeModal}
+          />
+          <div
+            className="pattern-tooltip"
+            style={{
+              position: 'fixed',
+              left: activeModal.data.position.x,
+              top: activeModal.data.position.y,
+              transform: activeModal.data.placement === 'below'
+                ? 'translateX(-50%)'
+                : 'translate(-50%, -100%)',
+              zIndex: 1000,
+            }}
+          >
+            <div className="pattern-tooltip-header">{activeModal.data.pattern}</div>
+            {activeModal.data.explanation && (
+              <div className="pattern-tooltip-explanation">{activeModal.data.explanation}</div>
+            )}
+            {activeModal.data.example && (
+              <div className="pattern-tooltip-example">e.g. "{activeModal.data.example}"</div>
+            )}
+          </div>
+        </>
       )}
 
       {/* Word Quick Menu (tap/long-press) */}

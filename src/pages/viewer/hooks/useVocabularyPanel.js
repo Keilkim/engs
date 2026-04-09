@@ -1,12 +1,13 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { getMobileSafeAreaBottom } from '../../../utils/positioning';
+import { parsePatternDefs, highlightSentencePatterns } from '../../../utils/patternMatcher';
 
 /**
  * Hook for vocabulary panel UI state and interactions
  * Data (vocabulary list) is provided externally (from useSourceData or Viewer)
  * highlightedVocabId / highlightVocab are managed by useModalState
  */
-export function useVocabularyPanel(openModal, vocabulary) {
+export function useVocabularyPanel(openModal, vocabulary, sentencePatterns = []) {
   const [showVocabPanel, setShowVocabPanel] = useState(false);
   const [deletingVocab, setDeletingVocab] = useState(false);
 
@@ -64,6 +65,16 @@ export function useVocabularyPanel(openModal, vocabulary) {
     return result;
   }, [vocabulary]);
 
+  // Parse pattern defs (memoized)
+  const patternDefs = useMemo(() => parsePatternDefs(sentencePatterns), [sentencePatterns]);
+
+  // Combined highlighting: patterns first, then vocab words
+  const highlightAllContent = useCallback((htmlContent) => {
+    let result = highlightSentencePatterns(htmlContent, patternDefs);
+    result = highlightVocabularyWords(result);
+    return result;
+  }, [patternDefs, highlightVocabularyWords]);
+
   return {
     showVocabPanel,
     setShowVocabPanel,
@@ -71,5 +82,7 @@ export function useVocabularyPanel(openModal, vocabulary) {
     setDeletingVocab,
     showVocabWord,
     highlightVocabularyWords,
+    highlightAllContent,
+    patternDefs,
   };
 }

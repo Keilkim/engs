@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { getSource } from '../../../services/source';
-import { getAnnotations, getVocabulary } from '../../../services/annotation';
+import { getAnnotations, getVocabulary, getSentencePatterns } from '../../../services/annotation';
 import { safeJsonParse } from '../../../utils/errors';
 
 /**
@@ -10,6 +10,7 @@ export function useSourceData(sourceId) {
   const [source, setSource] = useState(null);
   const [annotations, setAnnotations] = useState([]);
   const [vocabulary, setVocabulary] = useState([]);
+  const [sentencePatterns, setSentencePatterns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -21,15 +22,17 @@ export function useSourceData(sourceId) {
     }
 
     try {
-      const [sourceData, annotationsData, vocabData] = await Promise.all([
+      const [sourceData, annotationsData, vocabData, patternsData] = await Promise.all([
         getSource(sourceId),
         getAnnotations(sourceId),
         getVocabulary(),
+        getSentencePatterns(),
       ]);
       setSource(sourceData);
       setAnnotations(annotationsData || []);
       setVocabulary(vocabData || []);
-      return { source: sourceData, annotations: annotationsData, vocabulary: vocabData };
+      setSentencePatterns(patternsData || []);
+      return { source: sourceData, annotations: annotationsData, vocabulary: vocabData, sentencePatterns: patternsData };
     } catch (err) {
       setError('Unable to load source');
       console.error('[useSourceData] loadData error:', err);
@@ -42,12 +45,14 @@ export function useSourceData(sourceId) {
   // Refresh annotations only (without resetting page position)
   const refreshAnnotations = useCallback(async () => {
     try {
-      const [annotationsData, vocabData] = await Promise.all([
+      const [annotationsData, vocabData, patternsData] = await Promise.all([
         getAnnotations(sourceId),
         getVocabulary(),
+        getSentencePatterns(),
       ]);
       setAnnotations(annotationsData || []);
       setVocabulary(vocabData || []);
+      setSentencePatterns(patternsData || []);
     } catch (err) {
       console.error('Failed to refresh annotations:', err);
     }
@@ -65,6 +70,7 @@ export function useSourceData(sourceId) {
     source,
     annotations,
     vocabulary,
+    sentencePatterns,
     loading,
     error,
     loadData,
