@@ -135,8 +135,85 @@ export async function extractWordBagFromImages(images) {
   return wordSet;
 }
 
+const MAX_SLICE_HEIGHT = 4000;
+const SLICE_OVERLAP = 100;
+
+/**
+ * Crop a horizontal strip from an image element and return as base64
+ */
+function cropImageSlice(img, offsetY, sliceHeight, imageWidth) {
+  const canvas = document.createElement('canvas');
+  canvas.width = imageWidth;
+  canvas.height = sliceHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, offsetY, imageWidth, sliceHeight, 0, 0, imageWidth, sliceHeight);
+  return canvas.toDataURL('image/png');
+}
+
+/**
+ * Extract words from a single Tesseract recognize result
+ */
+function extractWordsFromResult(data) {
+  const words = [];
+
+  if (data.blocks) {
+    const blocksArray = Array.isArray(data.blocks) ? data.blocks : [data.blocks];
+    for (const block of blocksArray) {
+      if (!block) continue;
+
+      if (block.words && Array.isArray(block.words)) {
+        for (const word of block.words) {
+          if (word.text && word.bbox) {
+            words.push({ text: word.text.trim(), confidence: word.confidence || 90, bbox: word.bbox });
+          }
+        }
+      }
+
+      for (const para of (block.paragraphs || [])) {
+        for (const line of (para.lines || [])) {
+          for (const word of (line.words || [])) {
+            if (word.text && word.bbox) {
+              words.push({ text: word.text.trim(), confidence: word.confidence || 90, bbox: word.bbox });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (words.length === 0 && data.words && Array.isArray(data.words)) {
+    for (const word of data.words) {
+      if (word.text && word.bbox) {
+        words.push({ text: word.text.trim(), confidence: word.confidence || 90, bbox: word.bbox });
+      }
+    }
+  }
+
+  return words;
+}
+
+/**
+ * Remove duplicate words from overlap regions
+ */
+function deduplicateWords(words) {
+  const result = [];
+  for (const word of words) {
+    const isDuplicate = result.some(
+      (existing) =>
+        existing.text === word.text &&
+        Math.abs(existing.bbox.y0 - word.bbox.y0) < 20 &&
+        Math.abs(existing.bbox.x0 - word.bbox.x0) < 20
+    );
+    if (!isDuplicate) {
+      result.push(word);
+    }
+  }
+  return result;
+}
+
 /**
  * Extract text with word-level bounding boxes (Tesseract.js v7)
+ * Automatically splits large images into strips to avoid WASM memory limits
  */
 export async function extractTextWithWordPositions(base64Image) {
   try {
@@ -152,69 +229,52 @@ export async function extractTextWithWordPositions(base64Image) {
     const tess = await loadTesseract();
     const worker = await tess.createWorker('eng', 1);
 
-    const result = await worker.recognize(base64Image, {}, {
-      text: true,
-      blocks: true,
-    });
+    let allWords = [];
+    let fullText = '';
 
-    console.log('[OCR-Extract] result.data keys:', Object.keys(result.data || {}));
-    console.log('[OCR-Extract] text length:', result.data.text?.length);
+    if (imageHeight > MAX_SLICE_HEIGHT) {
+      // Split tall image into horizontal strips
+      const sliceCount = Math.ceil(imageHeight / (MAX_SLICE_HEIGHT - SLICE_OVERLAP));
+      console.log(`[OCR-Extract] Image too tall, splitting into ${sliceCount} slices`);
 
-    const data = result.data;
-    const allWords = [];
+      for (let offsetY = 0; offsetY < imageHeight; offsetY += MAX_SLICE_HEIGHT - SLICE_OVERLAP) {
+        const sliceHeight = Math.min(MAX_SLICE_HEIGHT, imageHeight - offsetY);
+        const sliceIndex = Math.floor(offsetY / (MAX_SLICE_HEIGHT - SLICE_OVERLAP));
+        console.log(`[OCR-Extract] Processing slice ${sliceIndex + 1}/${sliceCount} (y:${offsetY}, h:${sliceHeight})`);
 
-    if (data.blocks) {
-      console.log('[OCR-Extract] blocks type:', typeof data.blocks);
-      console.log('[OCR-Extract] blocks is array:', Array.isArray(data.blocks));
+        const sliceBase64 = cropImageSlice(img, offsetY, sliceHeight, imageWidth);
+        const result = await worker.recognize(sliceBase64, {}, { text: true, blocks: true });
 
-      if (typeof data.blocks === 'object' && !Array.isArray(data.blocks)) {
-        console.log('[OCR-Extract] blocks keys:', Object.keys(data.blocks));
-        console.log('[OCR-Extract] blocks sample:', JSON.stringify(data.blocks).substring(0, 500));
+        const sliceWords = extractWordsFromResult(result.data);
+        // Offset word y coordinates back to original image space
+        for (const word of sliceWords) {
+          word.bbox = {
+            x0: word.bbox.x0,
+            y0: word.bbox.y0 + offsetY,
+            x1: word.bbox.x1,
+            y1: word.bbox.y1 + offsetY,
+          };
+          allWords.push(word);
+        }
+        fullText += (result.data.text || '') + '\n';
+        console.log(`[OCR-Extract] Slice ${sliceIndex + 1}: ${sliceWords.length} words`);
       }
 
-      const blocksArray = Array.isArray(data.blocks) ? data.blocks : [data.blocks];
-      for (const block of blocksArray) {
-        if (!block) continue;
-
-        if (block.words && Array.isArray(block.words)) {
-          for (const word of block.words) {
-            if (word.text && word.bbox) {
-              allWords.push({ text: word.text.trim(), confidence: word.confidence || 90, bbox: word.bbox });
-            }
-          }
-        }
-
-        for (const para of (block.paragraphs || [])) {
-          for (const line of (para.lines || [])) {
-            for (const word of (line.words || [])) {
-              if (word.text && word.bbox) {
-                allWords.push({ text: word.text.trim(), confidence: word.confidence || 90, bbox: word.bbox });
-              }
-            }
-          }
-        }
-      }
-      console.log('[OCR-Extract] Extracted from blocks:', allWords.length, 'words');
-    }
-
-    if (allWords.length === 0 && data.words && Array.isArray(data.words)) {
-      console.log('[OCR-Extract] Trying data.words:', data.words.length);
-      for (const word of data.words) {
-        if (word.text && word.bbox) {
-          allWords.push({ text: word.text.trim(), confidence: word.confidence || 90, bbox: word.bbox });
-        }
-      }
+      allWords = deduplicateWords(allWords);
+      console.log(`[OCR-Extract] After dedup: ${allWords.length} words`);
+    } else {
+      // Normal path for images within size limits
+      const result = await worker.recognize(base64Image, {}, { text: true, blocks: true });
+      allWords = extractWordsFromResult(result.data);
+      fullText = result.data.text || '';
     }
 
     await worker.terminate();
 
     if (allWords.length === 0) {
       console.log('[OCR-Extract] NO WORDS FOUND!');
-      console.log('[OCR-Extract] data.blocks:', data.blocks);
-      console.log('[OCR-Extract] data.words:', data.words);
-
       return {
-        text: data.text || '',
+        text: fullText.trim(),
         words: [],
         imageSize: { width: imageWidth, height: imageHeight },
       };
@@ -238,7 +298,7 @@ export async function extractTextWithWordPositions(base64Image) {
     })));
 
     return {
-      text: data.text,
+      text: fullText.trim(),
       words: wordPositions,
       imageSize: { width: imageWidth, height: imageHeight },
     };
