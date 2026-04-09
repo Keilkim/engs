@@ -2,20 +2,28 @@ import { useState, useEffect } from 'react';
 import {
   getVocabularyWithSource,
   getGrammarPatterns,
+  getSentencePatterns,
   deleteAnnotation,
   addManualVocabulary,
+  createSentencePattern,
 } from '../services/annotation';
 
 export default function MyDictionary({ onSelectForChat }) {
-  const [tab, setTab] = useState('words'); // 'words' | 'grammar'
+  const [tab, setTab] = useState('words'); // 'words' | 'grammar' | 'patterns'
   const [vocabulary, setVocabulary] = useState([]);
   const [grammarPatterns, setGrammarPatterns] = useState([]);
+  const [sentencePatterns, setSentencePatterns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [newWord, setNewWord] = useState('');
   const [newDefinition, setNewDefinition] = useState('');
   const [adding, setAdding] = useState(false);
+  // Pattern add modal state
+  const [showPatternModal, setShowPatternModal] = useState(false);
+  const [newPattern, setNewPattern] = useState('');
+  const [newPatternExplanation, setNewPatternExplanation] = useState('');
+  const [newPatternExample, setNewPatternExample] = useState('');
 
   useEffect(() => {
     loadData();
@@ -24,12 +32,14 @@ export default function MyDictionary({ onSelectForChat }) {
   async function loadData() {
     setLoading(true);
     try {
-      const [vocabData, grammarData] = await Promise.all([
+      const [vocabData, grammarData, patternData] = await Promise.all([
         getVocabularyWithSource(),
         getGrammarPatterns(),
+        getSentencePatterns(),
       ]);
       setVocabulary(vocabData);
       setGrammarPatterns(grammarData);
+      setSentencePatterns(patternData);
     } catch {
       // ignore
     } finally {
@@ -55,6 +65,7 @@ export default function MyDictionary({ onSelectForChat }) {
       await deleteAnnotation(id);
       setVocabulary(prev => prev.filter(v => v.id !== id));
       setGrammarPatterns(prev => prev.filter(g => g.id !== id));
+      setSentencePatterns(prev => prev.filter(p => p.id !== id));
       setSelectedIds(prev => {
         const newSet = new Set(prev);
         newSet.delete(id);
@@ -78,6 +89,44 @@ export default function MyDictionary({ onSelectForChat }) {
       // ignore
     } finally {
       setAdding(false);
+    }
+  }
+
+  async function handleAddPattern() {
+    if (!newPattern.trim() || adding) return;
+    setAdding(true);
+    try {
+      // Split pattern by "..." to get parts (e.g., "not only...but also" → ["not only", "but also"])
+      const parts = newPattern.split('...').map(p => p.trim()).filter(Boolean);
+      await createSentencePattern(
+        newPattern.trim(),
+        parts.length > 0 ? parts : [newPattern.trim()],
+        newPatternExplanation.trim(),
+        newPatternExample.trim(),
+      );
+      setShowPatternModal(false);
+      setNewPattern('');
+      setNewPatternExplanation('');
+      setNewPatternExample('');
+      await loadData();
+    } catch {
+      // ignore
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  function getPatternInfo(item) {
+    try {
+      const json = JSON.parse(item.ai_analysis_json || '{}');
+      return {
+        pattern: json.pattern || item.selected_text || '',
+        parts: json.parts || [],
+        explanation: json.explanation || '',
+        example: json.example || '',
+      };
+    } catch {
+      return { pattern: '', parts: [], explanation: '', example: '' };
     }
   }
 
@@ -122,7 +171,7 @@ export default function MyDictionary({ onSelectForChat }) {
     }
   }
 
-  const currentItems = tab === 'words' ? vocabulary : grammarPatterns;
+  const currentItems = tab === 'words' ? vocabulary : tab === 'grammar' ? grammarPatterns : sentencePatterns;
 
   return (
     <div className="my-dictionary">
@@ -140,11 +189,25 @@ export default function MyDictionary({ onSelectForChat }) {
           >
             Grammar ({grammarPatterns.length})
           </button>
+          <button
+            className={`tab-btn ${tab === 'patterns' ? 'active' : ''}`}
+            onClick={() => { setTab('patterns'); setSelectedIds(new Set()); }}
+          >
+            Patterns ({sentencePatterns.length})
+          </button>
         </div>
         {tab === 'words' && (
           <button
             className="add-word-btn"
             onClick={() => setShowAddModal(true)}
+          >
+            + Add
+          </button>
+        )}
+        {tab === 'patterns' && (
+          <button
+            className="add-word-btn"
+            onClick={() => setShowPatternModal(true)}
           >
             + Add
           </button>
@@ -158,7 +221,9 @@ export default function MyDictionary({ onSelectForChat }) {
           <div className="dictionary-empty">
             {tab === 'words'
               ? 'No saved words yet'
-              : 'No saved grammar patterns yet'}
+              : tab === 'grammar'
+              ? 'No saved grammar patterns yet'
+              : 'No saved sentence patterns yet'}
           </div>
         ) : (
           currentItems.map(item => (
@@ -180,7 +245,7 @@ export default function MyDictionary({ onSelectForChat }) {
                     <div className="item-word">{item.selected_text}</div>
                     <div className="item-definition">{getDefinition(item)}</div>
                   </>
-                ) : (
+                ) : tab === 'grammar' ? (
                   <>
                     <div className="item-sentence">"{getGrammarInfo(item).originalText}"</div>
                     <div className="item-patterns">
@@ -194,6 +259,14 @@ export default function MyDictionary({ onSelectForChat }) {
                         </span>
                       ))}
                     </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="item-word">{getPatternInfo(item).pattern}</div>
+                    <div className="item-definition">{getPatternInfo(item).explanation}</div>
+                    {getPatternInfo(item).example && (
+                      <div className="item-example">e.g. "{getPatternInfo(item).example}"</div>
+                    )}
                   </>
                 )}
                 <div className="item-meta">
@@ -247,6 +320,40 @@ export default function MyDictionary({ onSelectForChat }) {
               <button
                 onClick={handleAddWord}
                 disabled={!newWord.trim() || adding}
+              >
+                {adding ? '...' : 'Add'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPatternModal && (
+        <div className="add-word-modal-overlay" onClick={() => setShowPatternModal(false)}>
+          <div className="add-word-modal" onClick={e => e.stopPropagation()}>
+            <h3>Add Pattern</h3>
+            <input
+              type="text"
+              placeholder="Pattern (e.g. not only...but also)"
+              value={newPattern}
+              onChange={e => setNewPattern(e.target.value)}
+              autoFocus
+            />
+            <textarea
+              placeholder="Explanation"
+              value={newPatternExplanation}
+              onChange={e => setNewPatternExplanation(e.target.value)}
+            />
+            <textarea
+              placeholder="Example sentence (optional)"
+              value={newPatternExample}
+              onChange={e => setNewPatternExample(e.target.value)}
+            />
+            <div className="modal-buttons">
+              <button onClick={() => setShowPatternModal(false)}>Cancel</button>
+              <button
+                onClick={handleAddPattern}
+                disabled={!newPattern.trim() || adding}
               >
                 {adding ? '...' : 'Add'}
               </button>

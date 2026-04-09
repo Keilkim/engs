@@ -32,9 +32,27 @@ export default function Flashcard({ item, showAnswer, onReveal }) {
             <TranslatableText textKey="flashcard.answer">Answer</TranslatableText>
           </div>
           <div className="card-content">
-            {analysisData ? (
+            {analysisData?.isVocabulary ? (
               <div className="analysis-content">
-                <pre>{analysisData.content}</pre>
+                <p className="answer-word">{analysisData.word}</p>
+                {analysisData.phonetic && (
+                  <p className="answer-phonetic">{analysisData.phonetic}</p>
+                )}
+                <p className="answer-definition">{analysisData.definition}</p>
+              </div>
+            ) : analysisData?.type === 'grammar' ? (
+              <div className="analysis-content">
+                <p className="answer-translation">{analysisData.translation}</p>
+                {analysisData.patterns?.length > 0 && (
+                  <div className="answer-patterns">
+                    {analysisData.patterns.map((p, i) => (
+                      <div key={i} className="pattern-item">
+                        <span className="pattern-words">{p.words?.join(', ')}</span>
+                        <span className="pattern-explanation">{p.explanation}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="no-analysis">

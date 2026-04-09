@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { createSentencePattern } from '../../services/annotation';
+
 export default function GrammarModeContent({
   grammarData, checkedPatterns, loading, error,
   existingAnnotation,
@@ -5,6 +8,22 @@ export default function GrammarModeContent({
   onTogglePattern,
   ko,
 }) {
+  const [savedPatternIds, setSavedPatternIds] = useState(new Set());
+
+  async function handleSaveAsPattern(pattern, index) {
+    if (savedPatternIds.has(index)) return;
+    const parts = pattern.words || [];
+    const patternText = parts.join('...');
+    const explanation = pattern.explanation || '';
+    const example = grammarData.originalText || '';
+    try {
+      await createSentencePattern(patternText, parts, explanation, example);
+      setSavedPatternIds(prev => new Set([...prev, index]));
+    } catch (err) {
+      console.error('Failed to save pattern:', err);
+    }
+  }
+
   if (existingAnnotation && grammarData) {
     return (
       <>
@@ -15,6 +34,14 @@ export default function GrammarModeContent({
                 <span className="pattern-words">{pattern.words?.join(' ')}</span>
                 <span className="pattern-explanation">{pattern.explanation}</span>
               </div>
+              <button
+                className={`save-pattern-btn${savedPatternIds.has(i) ? ' saved' : ''}`}
+                onClick={() => handleSaveAsPattern(pattern, i)}
+                disabled={savedPatternIds.has(i)}
+                title="Save as sentence pattern"
+              >
+                {savedPatternIds.has(i) ? '✓' : '+P'}
+              </button>
             </div>
           ))}
         </div>
@@ -41,17 +68,27 @@ export default function GrammarModeContent({
         {hasPatterns ? (
           <div className="grammar-patterns">
             {grammarData.patterns.map((pattern, i) => (
-              <label key={i} className="pattern-checkbox">
-                <input
-                  type="checkbox"
-                  checked={checkedPatterns.includes(i)}
-                  onChange={() => onTogglePattern(i)}
-                />
-                <div className="pattern-content">
-                  <span className="pattern-words">{pattern.words?.join(' ')}</span>
-                  <span className="pattern-explanation">{pattern.explanation}</span>
-                </div>
-              </label>
+              <div key={i} className="pattern-checkbox-row">
+                <label className="pattern-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={checkedPatterns.includes(i)}
+                    onChange={() => onTogglePattern(i)}
+                  />
+                  <div className="pattern-content">
+                    <span className="pattern-words">{pattern.words?.join(' ')}</span>
+                    <span className="pattern-explanation">{pattern.explanation}</span>
+                  </div>
+                </label>
+                <button
+                  className={`save-pattern-btn${savedPatternIds.has(i) ? ' saved' : ''}`}
+                  onClick={() => handleSaveAsPattern(pattern, i)}
+                  disabled={savedPatternIds.has(i)}
+                  title="Save as sentence pattern"
+                >
+                  {savedPatternIds.has(i) ? '✓' : '+P'}
+                </button>
+              </div>
             ))}
           </div>
         ) : (

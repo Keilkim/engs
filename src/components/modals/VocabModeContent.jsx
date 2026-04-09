@@ -1,7 +1,7 @@
 import { cleanDisplayText } from '../../utils/textUtils';
 
 export default function VocabModeContent({
-  word, definition, loading, error, speaking,
+  word, definition, phonetic, loading, error, speaking,
   existingAnnotation,
   onSave, onDelete, onClose,
   onSpeak, onStopSpeaking,
@@ -20,6 +20,9 @@ export default function VocabModeContent({
             {speaking ? '■' : '🔊'}
           </button>
         </div>
+        {phonetic && (
+          <div className="word-phonetic">{phonetic}</div>
+        )}
         <div className="word-definition">
           {definition || 'No definition'}
         </div>

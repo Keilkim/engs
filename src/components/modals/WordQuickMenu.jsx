@@ -196,6 +196,7 @@ export default function WordQuickMenu({
         <VocabModeContent
           word={word}
           definition={vocab.definition}
+          phonetic={vocab.phonetic}
           loading={vocab.loading}
           error={vocab.error}
           speaking={vocab.speaking}

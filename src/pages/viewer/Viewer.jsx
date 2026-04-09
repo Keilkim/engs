@@ -147,10 +147,8 @@ const zoomOrigin = { x: 0, y: 0 };
     const vocabItem = vocabulary.find(v => v.id === vocabId);
 
     if (vocabItem) {
-      const definition = vocabItem.ai_analysis_json
-        ? JSON.parse(vocabItem.ai_analysis_json).definition || ''
-        : '';
-      showVocabWord(vocabItem.selected_text, definition);
+      const markerRect = e.target.getBoundingClientRect();
+      showVocabWord(vocabItem.selected_text, '', markerRect, vocabItem);
     }
   }
 

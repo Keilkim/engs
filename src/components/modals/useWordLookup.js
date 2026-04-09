@@ -9,12 +9,14 @@ import { createAnnotation } from '../../services/annotation';
 export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp }) {
   const isYouTube = sourceType === 'youtube';
   const [definition, setDefinition] = useState('');
+  const [phonetic, setPhonetic] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [speaking, setSpeaking] = useState(false);
 
   const reset = useCallback(() => {
     setDefinition('');
+    setPhonetic('');
     setLoading(false);
     setError('');
     setSpeaking(false);
@@ -22,6 +24,7 @@ export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, 
 
   const loadExisting = useCallback((data) => {
     setDefinition(data.definition || '');
+    setPhonetic(data.phonetic || '');
   }, []);
 
   async function handleLookup() {
@@ -91,7 +94,7 @@ export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, 
   }
 
   return {
-    definition, loading, error, speaking,
+    definition, phonetic, loading, error, speaking,
     reset, loadExisting, handleLookup, handleSave,
     speak, stopSpeaking,
   };

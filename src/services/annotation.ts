@@ -190,6 +190,64 @@ export async function addManualVocabulary(word: string, definition: string) {
   return createVocabularyItem(word, definition, null);
 }
 
+// Sentence pattern functions
+
+export async function getSentencePatterns(): Promise<Annotation[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('annotations')
+    .select('*')
+    .eq('user_id', user!.id)
+    .eq('type', 'highlight')
+    .is('source_id', null)
+    .not('ai_analysis_json', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) throw error;
+
+  return (data || []).filter(item => {
+    const json = safeJsonParse(item.ai_analysis_json, {});
+    return json.type === 'sentence_pattern';
+  }) as Annotation[];
+}
+
+export async function createSentencePattern(
+  pattern: string,
+  parts: string[],
+  explanation: string,
+  example: string,
+): Promise<Annotation> {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('annotations')
+    .insert({
+      user_id: user!.id,
+      source_id: null,
+      type: 'highlight',
+      selected_text: pattern,
+      selection_rect: null,
+      ai_analysis_json: JSON.stringify({
+        type: 'sentence_pattern',
+        pattern,
+        parts,
+        explanation,
+        example,
+      }),
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Annotation;
+}
+
+export async function deleteSentencePattern(id: string): Promise<void> {
+  return deleteAnnotation(id);
+}
+
 // Pen stroke types
 
 interface PenStrokeData {
