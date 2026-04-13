@@ -307,7 +307,7 @@ export default function YouTubeViewer() {
           </div>
         </div>
 
-        <div className="captions-container" style={{ height: `${100 - playerHeight}%` }}>
+        <div className="captions-container">
           <CaptionDisplay
             segments={segments}
             currentTime={currentTime}
