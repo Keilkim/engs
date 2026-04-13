@@ -74,9 +74,9 @@ export function useYouTubePlayer() {
   const seekTo = useCallback((seconds, allowSeekAhead = true) => {
     if (!playerRef.current) return;
     if (playerState === PLAYER_STATES.UNSTARTED || playerState === PLAYER_STATES.CUED) {
-      // UNSTARTED: start playback, then seek+pause via onStateChange callback
+      // UNSTARTED: don't force playback — remember the target and let the
+      // onStateChange handler seek once the user presses play.
       pendingSeekRef.current = seconds;
-      playerRef.current.playVideo();
     } else {
       playerRef.current.seekTo(seconds, allowSeekAhead);
     }
