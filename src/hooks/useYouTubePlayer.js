@@ -59,12 +59,11 @@ export function useYouTubePlayer() {
       const dur = event.target.getDuration();
       if (dur > 0 && dur !== duration) setDuration(dur);
     }
-    // Handle pending seek from UNSTARTED state: once player starts, seek and pause
+    // Handle pending seek from UNSTARTED state: once player starts, seek (keep playing)
     if (pendingSeekRef.current !== null && (event.data === PLAYER_STATES.PLAYING || event.data === PLAYER_STATES.BUFFERING)) {
       const seekTime = pendingSeekRef.current;
       pendingSeekRef.current = null;
       event.target.seekTo(seekTime, true);
-      event.target.pauseVideo();
     }
   }, [duration]);
 
