@@ -7,7 +7,7 @@ import useYouTubePlayer, { PLAYBACK_SPEEDS } from '../../hooks/useYouTubePlayer'
 import useCaptionSync from '../../hooks/useCaptionSync';
 import { formatTime } from '../../services/ai/youtube';
 import { useChat } from '../../hooks';
-import { getSetting, SETTINGS_KEYS } from '../../services/settings';
+import { getSetting, setSetting, SETTINGS_KEYS } from '../../services/settings';
 import { LANG_CODES } from '../../services/ai';
 import CaptionDisplay from '../../components/youtube/CaptionDisplay';
 import WordQuickMenu from '../../components/modals/WordQuickMenu';
