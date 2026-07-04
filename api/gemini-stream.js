@@ -17,7 +17,8 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Google API key not configured' });
   }
 
-  const model = 'gemini-2.0-flash';
+  // Override in Vercel env (GEMINI_MODEL) without a code change if needed.
+  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${GOOGLE_API_KEY}`;
 
   try {
