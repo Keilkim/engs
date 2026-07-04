@@ -783,7 +783,7 @@
 /* Image selection overlay (while dragging) */
 .image-selection-overlay {
   position: absolute;
-  background-color: rgba(10, 132, 255, 0.3);
+  background-color: color-mix(in srgb, var(--color-highlight) 30%, transparent);
   border: 2px solid var(--color-highlight);
   pointer-events: none;
   z-index: 10;
