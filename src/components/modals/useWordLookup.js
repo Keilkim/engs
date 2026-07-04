@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { speakText, stopSpeaking as stopTTS } from '../../utils/tts';
 import { lookupWord } from '../../services/ai';
 import { createAnnotation } from '../../services/annotation';
@@ -25,7 +25,12 @@ export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, 
   const [error, setError] = useState('');
   const [speaking, setSpeaking] = useState(false);
 
+  // In-flight lookup token: a stale lookup that resolves after the menu was
+  // closed/re-opened must not overwrite the current word's definition.
+  const lookupSeqRef = useRef(0);
+
   const reset = useCallback(() => {
+    lookupSeqRef.current += 1; // invalidate any in-flight lookup
     setDefinition('');
     setPhonetic('');
     setLoading(false);
@@ -41,10 +46,14 @@ export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, 
 
   async function handleLookup() {
     if (!word) return;
+    const seq = ++lookupSeqRef.current; // supersedes any earlier in-flight lookup
+    setDefinition(''); // clear stale so nothing old flashes while loading
+    setPhonetic('');
     setLoading(true);
     setError('');
     try {
       const result = await lookupWord(word);
+      if (seq !== lookupSeqRef.current) return; // superseded (closed/re-opened) → discard
       // Only ever store the string definition; surface lookup errors instead of
       // persisting garbage.
       if (result?.error) {
@@ -56,11 +65,12 @@ export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, 
       setDefinition(toDefinitionString(result?.definition));
       setPhonetic(typeof result?.phonetic === 'string' ? result.phonetic : '');
     } catch (err) {
+      if (seq !== lookupSeqRef.current) return; // discard a stale failure too
       logError('useWordLookup.lookup', err);
       setError('lookupFailed');
       setDefinition('');
     } finally {
-      setLoading(false);
+      if (seq === lookupSeqRef.current) setLoading(false);
     }
   }
 
