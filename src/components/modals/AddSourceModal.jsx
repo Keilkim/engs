@@ -5,8 +5,27 @@ import { generateImageThumbnail, generateThumbnailFromPage, ocrAllPages } from '
 import { parseYouTubeUrl, getYouTubeMetadata, fetchYouTubeCaptions, transcribeYouTubeWithWhisper, calculateWhisperCost, isWhisperAvailable } from '../../services/ai/youtube';
 import { TranslatableText } from '../translatable';
 
+// 준비 단계 상태 문자열 → 한국어 라벨 + 진행률(% — "x/y"가 있으면 계산).
+function formatStep(status) {
+  if (!status) return { label: '처리 중...', percent: null };
+  const frac = status.match(/(\d+)\s*\/\s*(\d+)/);
+  const percent = frac ? Math.min(100, Math.round((Number(frac[1]) / Number(frac[2])) * 100)) : null;
+  const s = status.toLowerCase();
+  let label = status;
+  if (s.startsWith('converting page')) label = `PDF 페이지 변환 중${frac ? ` (${frac[1]}/${frac[2]})` : ''}`;
+  else if (s.startsWith('ocr')) label = `글자 인식 중${frac ? ` (${frac[1]}/${frac[2]})` : ''}`;
+  else if (s.includes('uploading')) label = '파일 업로드 중...';
+  else if (s.includes('generating preview')) label = '미리보기 생성 중...';
+  else if (s.includes('generating thumbnail')) label = '썸네일 생성 중...';
+  else if (s.includes('capturing')) label = '웹페이지 캡처 중...';
+  else if (s.includes('saving youtube')) label = '유튜브 저장 중...';
+  else if (s.includes('saving')) label = '저장 중...';
+  else if (s.includes('transcrib')) label = '음성 인식 중...';
+  return { label, percent };
+}
+
 export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
-  const [activeTab, setActiveTab] = useState('file');
+  const [activeTab, setActiveTab] = useState('file'); // 'file' | 'link'
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,16 +33,20 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
   const [error, setError] = useState('');
   const fileInputRef = useRef(null);
 
-  // YouTube state
-  const [youtubeUrl, setYoutubeUrl] = useState('');
+  // Link state (a single link input; YouTube is auto-detected from the URL)
   const [youtubePreview, setYoutubePreview] = useState(null); // { videoId, title, author, thumbnail }
   const [youtubeCaptions, setYoutubeCaptions] = useState(null);
   const [captionStatus, setCaptionStatus] = useState(''); // '' | 'loading' | 'found' | 'not_found'
   const [warning, setWarning] = useState('');
   const [titleTouched, setTitleTouched] = useState(false); // user typed the title manually
-  const youtubeSeqRef = useRef(0); // guards against out-of-order YouTube URL responses
+  const linkSeqRef = useRef(0); // guards against out-of-order link responses
 
   if (!isOpen) return null;
+
+  // The single source of truth for "is this link a YouTube video?" — used to
+  // route both the live preview and the submit action, so a YouTube link can
+  // never be saved as a web screenshot (and vice-versa).
+  const isYoutube = !!parseYouTubeUrl(url);
 
   async function handleFileUpload(e) {
     const input = e.target;
@@ -94,18 +117,79 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
     }
   }
 
-  async function handleScreenshotSubmit(e) {
-    e.preventDefault();
+  // Single link input: detect YouTube vs. web page. YouTube links load a
+  // preview + captions; plain web links go straight to the screenshot path.
+  async function handleLinkChange(inputUrl) {
+    const seq = ++linkSeqRef.current;
 
-    if (!url.trim()) {
-      setError('Please enter a URL');
-      return;
+    setUrl(inputUrl);
+    setError('');
+    setYoutubePreview(null);
+    setYoutubeCaptions(null);
+    setCaptionStatus('');
+    // Clear any previously auto-filled title so a new URL doesn't keep the old title.
+    if (!titleTouched) setTitle('');
+
+    const parsed = parseYouTubeUrl(inputUrl);
+    if (!parsed) return; // plain web URL → nothing to preload; handled on capture
+
+    try {
+      setCaptionStatus('loading');
+      const metadata = await getYouTubeMetadata(parsed.video_id);
+      if (seq !== linkSeqRef.current) return; // a newer URL was entered; ignore stale response
+      setYoutubePreview({
+        videoId: parsed.video_id,
+        title: metadata.title,
+        author: metadata.author,
+        thumbnail: metadata.thumbnail_url_hq,
+      });
+      if (!titleTouched) setTitle(metadata.title);
+
+      const captions = await fetchYouTubeCaptions(parsed.video_id);
+      if (seq !== linkSeqRef.current) return; // stale response, discard
+      if (captions && captions.segments.length > 0) {
+        setYoutubeCaptions(captions);
+        setCaptionStatus('found');
+      } else {
+        setCaptionStatus('not_found');
+      }
+    } catch {
+      if (seq !== linkSeqRef.current) return;
+      setCaptionStatus('not_found');
     }
+  }
 
+  async function saveYoutube() {
     setLoading(true);
     setError('');
     setWarning('');
+    try {
+      setLoadingStatus('Saving YouTube source...');
+      await createYouTubeSource({
+        title: title || youtubePreview.title,
+        youtubeData: {
+          video_id: youtubePreview.videoId,
+          channel: youtubePreview.author,
+          has_captions: !!youtubeCaptions,
+          caption_source: youtubeCaptions?.source || 'manual',
+          thumbnail_url: youtubePreview.thumbnail,
+        },
+        captionsData: youtubeCaptions,
+      });
+      onSuccess();
+      handleClose();
+    } catch {
+      setError('Failed to save YouTube source');
+    } finally {
+      setLoading(false);
+      setLoadingStatus('');
+    }
+  }
 
+  async function captureWeb() {
+    setLoading(true);
+    setError('');
+    setWarning('');
     try {
       setLoadingStatus('Capturing screenshot...');
       const result = await captureWebpageScreenshot(url);
@@ -125,7 +209,6 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
         screenshot: thumbnail,
         ocr_data: ocrData,
       });
-
       onSuccess();
       handleClose();
     } catch (err) {
@@ -136,81 +219,21 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
     }
   }
 
-  // YouTube URL input handler - auto-detect and load metadata
-  async function handleYoutubeUrlChange(inputUrl) {
-    // Bump the sequence token: only the latest input's async responses are applied.
-    const seq = ++youtubeSeqRef.current;
-
-    setYoutubeUrl(inputUrl);
-    setError('');
-    setYoutubePreview(null);
-    setYoutubeCaptions(null);
-    setCaptionStatus('');
-    // Clear any previously auto-filled title so a new URL doesn't keep the old video's title.
-    if (!titleTouched) setTitle('');
-
-    const parsed = parseYouTubeUrl(inputUrl);
-    if (!parsed) return;
-
-    try {
-      setCaptionStatus('loading');
-      const metadata = await getYouTubeMetadata(parsed.video_id);
-      if (seq !== youtubeSeqRef.current) return; // a newer URL was entered; ignore stale response
-      setYoutubePreview({
-        videoId: parsed.video_id,
-        title: metadata.title,
-        author: metadata.author,
-        thumbnail: metadata.thumbnail_url_hq,
-      });
-      if (!titleTouched) setTitle(metadata.title);
-
-      // Auto-fetch captions
-      const captions = await fetchYouTubeCaptions(parsed.video_id);
-      if (seq !== youtubeSeqRef.current) return; // stale response, discard
-      if (captions && captions.segments.length > 0) {
-        setYoutubeCaptions(captions);
-        setCaptionStatus('found');
-      } else {
-        setCaptionStatus('not_found');
-      }
-    } catch {
-      if (seq !== youtubeSeqRef.current) return;
-      setCaptionStatus('not_found');
-    }
-  }
-
-  async function handleYoutubeSubmit(e) {
+  // Routes by URL type so YouTube ≠ screenshot can never be mixed up.
+  async function handleLinkSubmit(e) {
     e.preventDefault();
-    if (!youtubePreview) {
-      setError('Please enter a valid YouTube URL');
+    if (!url.trim()) {
+      setError('링크를 입력해 주세요');
       return;
     }
-
-    setLoading(true);
-    setError('');
-    setWarning('');
-
-    try {
-      setLoadingStatus('Saving YouTube source...');
-      await createYouTubeSource({
-        title: title || youtubePreview.title,
-        youtubeData: {
-          video_id: youtubePreview.videoId,
-          channel: youtubePreview.author,
-          has_captions: !!youtubeCaptions,
-          caption_source: youtubeCaptions?.source || 'manual',
-          thumbnail_url: youtubePreview.thumbnail,
-        },
-        captionsData: youtubeCaptions,
-      });
-
-      onSuccess();
-      handleClose();
-    } catch {
-      setError('Failed to save YouTube source');
-    } finally {
-      setLoading(false);
-      setLoadingStatus('');
+    if (isYoutube) {
+      if (!youtubePreview) {
+        setError('유튜브 정보를 불러오는 중이거나 유효하지 않은 링크예요. 잠시 후 다시 시도해 주세요.');
+        return;
+      }
+      await saveYoutube();
+    } else {
+      await captureWeb();
     }
   }
 
@@ -245,7 +268,10 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
       }
     } catch (err) {
       const msg = (err?.message || '').toLowerCase();
-      if (msg.includes('extract') || msg.includes('audio') || msg.includes('추출')) {
+      if (msg.includes('413') || msg.includes('content size') || msg.includes('maximum') || msg.includes('too large')) {
+        // 추출은 됐지만 오디오가 25MB(≈128kbps 26분)를 넘어 Whisper가 거부한 경우
+        setError('영상이 너무 길어요 — 음성 파일이 25MB 한도를 넘었어요. 약 25분 이내의 짧은 영상을 쓰거나, 자막이 있는 영상을 이용해 주세요.');
+      } else if (msg.includes('extract') || msg.includes('audio') || msg.includes('추출')) {
         // 외부 오디오 추출 서버가 유튜브 음성을 못 가져오는 경우
         // (대개 유튜브 제한 또는 추출 서버(yt-dlp 등) 문제 — 앱이 아닌 서버 이슈)
         setError('이 영상의 음성을 가져오지 못했어요. 유튜브 제한이거나 오디오 추출 서버 문제일 수 있어요. 자막이 있는 다른 영상을 이용하거나 잠시 후 다시 시도해 주세요.');
@@ -260,7 +286,6 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
 
   function handleClose() {
     setUrl('');
-    setYoutubeUrl('');
     setTitle('');
     setError('');
     setWarning('');
@@ -302,16 +327,10 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
             <TranslatableText textKey="addSource.uploadFile">Upload File</TranslatableText>
           </button>
           <button
-            className={`tab ${activeTab === 'screenshot' ? 'active' : ''}`}
-            onClick={() => setActiveTab('screenshot')}
+            className={`tab ${activeTab === 'link' ? 'active' : ''}`}
+            onClick={() => setActiveTab('link')}
           >
-            Web URL
-          </button>
-          <button
-            className={`tab ${activeTab === 'youtube' ? 'active' : ''}`}
-            onClick={() => setActiveTab('youtube')}
-          >
-            YouTube
+            링크 (YouTube / 웹)
           </button>
         </div>
 
@@ -321,6 +340,24 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
         )}
 
         <div className="modal-body">
+          {loading && (() => {
+            const { label, percent } = formatStep(loadingStatus);
+            return (
+              <div className="prepare-progress">
+                <div className="prepare-progress-bar">
+                  <div
+                    className={`prepare-progress-fill${percent == null ? ' indeterminate' : ''}`}
+                    style={percent != null ? { width: `${percent}%` } : undefined}
+                  />
+                </div>
+                <div className="prepare-progress-label">
+                  <span>{label}</span>
+                  {percent != null && <span>{percent}%</span>}
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="input-group">
             <label htmlFor="title">
               <TranslatableText textKey="addSource.titleOptional">Title (optional)</TranslatableText>
@@ -356,48 +393,31 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
             </div>
           )}
 
-          {activeTab === 'screenshot' && (
-            <form onSubmit={handleScreenshotSubmit}>
+          {activeTab === 'link' && (
+            <form onSubmit={handleLinkSubmit}>
               <div className="input-group">
-                <label htmlFor="screenshot-url">URL</label>
+                <label htmlFor="link-url">링크</label>
                 <input
-                  id="screenshot-url"
+                  id="link-url"
                   type="url"
                   value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://..."
+                  onChange={(e) => handleLinkChange(e.target.value)}
+                  placeholder="YouTube 또는 웹페이지 주소 붙여넣기"
                   required
                 />
               </div>
-              <p className="file-hint">
-                <TranslatableText textKey="addSource.screenshotHint">Captures main content as image (excludes header/footer)</TranslatableText>
+
+              {/* 링크 종류 자동 안내 */}
+              <p className="file-hint" style={{ color: isYoutube ? '#4ade80' : 'var(--text-secondary, #888)' }}>
+                {url.trim()
+                  ? (isYoutube
+                    ? '유튜브 영상으로 인식했어요 — 자막과 함께 저장돼요.'
+                    : '웹페이지로 인식했어요 — 본문을 이미지로 캡처해 저장돼요.')
+                  : '유튜브 영상이면 자막 학습, 웹페이지면 화면 캡처로 저장돼요.'}
               </p>
-              <button
-                type="submit"
-                className="submit-button"
-                disabled={loading}
-              >
-                {loading ? (loadingStatus || 'Capturing...') : <TranslatableText textKey="addSource.capture">Capture</TranslatableText>}
-              </button>
-            </form>
-          )}
 
-          {activeTab === 'youtube' && (
-            <form onSubmit={handleYoutubeSubmit}>
-              <div className="input-group">
-                <label htmlFor="youtube-url">YouTube URL</label>
-                <input
-                  id="youtube-url"
-                  type="url"
-                  value={youtubeUrl}
-                  onChange={(e) => handleYoutubeUrlChange(e.target.value)}
-                  placeholder="https://youtube.com/watch?v=..."
-                  required
-                />
-              </div>
-
-              {/* Preview */}
-              {youtubePreview && (
+              {/* YouTube 링크: 미리보기 + 자막 상태 */}
+              {isYoutube && youtubePreview && (
                 <div className="youtube-preview" style={{ display: 'flex', gap: '12px', margin: '12px 0', padding: '12px', background: 'var(--bg-tertiary, #2a2a2a)', borderRadius: '8px' }}>
                   <img
                     src={youtubePreview.thumbnail}
@@ -421,43 +441,48 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                 </div>
               )}
 
-              {captionStatus === 'not_found' && (
-                <p className="file-hint" style={{ color: '#fb923c' }}>
+              {isYoutube && captionStatus === 'not_found' && (
+                <p className="file-hint" style={{ color: '#fb923c', margin: '4px 0 16px', lineHeight: 1.5 }}>
                   이 영상에는 사용할 수 있는 자막이 없어요. 음성 인식으로 자막을 만들거나, 자막 없이 먼저 저장할 수 있어요.
                 </p>
               )}
 
-              {captionStatus === 'loading' ? (
-                <button
-                  type="button"
-                  className="submit-button"
-                  disabled
-                >
-                  캡션 확인중...
-                </button>
-              ) : (
-                <>
-                  {captionStatus === 'not_found' && isWhisperAvailable() && (
+              {/* 액션 버튼 */}
+              {isYoutube ? (
+                captionStatus === 'loading' ? (
+                  <button type="button" className="submit-button" disabled>캡션 확인중...</button>
+                ) : (
+                  <>
+                    {captionStatus === 'not_found' && isWhisperAvailable() && (
+                      <button
+                        type="button"
+                        className="submit-button"
+                        onClick={handleWhisperTranscribe}
+                        disabled={loading}
+                        style={{ background: '#7c3aed', marginBottom: '8px' }}
+                      >
+                        {loading ? (loadingStatus || 'Transcribing...') : '음성 인식으로 자막 만들기 (Whisper)'}
+                      </button>
+                    )}
                     <button
-                      type="button"
+                      type="submit"
                       className="submit-button"
-                      onClick={handleWhisperTranscribe}
-                      disabled={loading}
-                      style={{ background: '#7c3aed', marginBottom: '8px' }}
+                      disabled={loading || !youtubePreview}
                     >
-                      {loading ? (loadingStatus || 'Transcribing...') : '음성 인식으로 자막 만들기 (Whisper)'}
+                      {loading
+                        ? (loadingStatus || 'Saving...')
+                        : (captionStatus === 'not_found' ? '자막 없이 저장' : 'Save')}
                     </button>
-                  )}
-                  <button
-                    type="submit"
-                    className="submit-button"
-                    disabled={loading || !youtubePreview}
-                  >
-                    {loading
-                      ? (loadingStatus || 'Saving...')
-                      : (captionStatus === 'not_found' ? '자막 없이 저장' : 'Save')}
-                  </button>
-                </>
+                  </>
+                )
+              ) : (
+                <button
+                  type="submit"
+                  className="submit-button"
+                  disabled={loading || !url.trim()}
+                >
+                  {loading ? (loadingStatus || 'Capturing...') : <TranslatableText textKey="addSource.capture">Capture</TranslatableText>}
+                </button>
               )}
             </form>
           )}
