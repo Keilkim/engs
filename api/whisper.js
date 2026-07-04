@@ -32,14 +32,21 @@ export default async function handler(req, res) {
   const RAILWAY = process.env.RAILWAY_AUDIO_URL || 'https://youtube-audio-server-production-711c.up.railway.app';
 
   try {
-    const duration = Number(durationSec) || (await getDuration(videoId).catch(() => 0));
+    // Duration source, most reliable first: caller → Railway (yt-dlp, works even
+    // on bot-gated videos where InnerTube returns nothing) → InnerTube.
+    const duration = Number(durationSec)
+      || (await getRailwayDuration(RAILWAY, videoId).catch(() => 0))
+      || (await getDuration(videoId).catch(() => 0));
 
     let segments;
-    if (!duration || duration <= CHUNK_SEC + OVERLAP_SEC) {
-      // Short enough for a single pass.
-      const buf = await extractSection(RAILWAY, videoId, null, null);
+    if (duration <= CHUNK_SEC + OVERLAP_SEC) {
+      // Single pass — but ALWAYS via a [0, dur] section, never a whole-stream
+      // download: the direct audio stream 403s / exceeds --max-filesize on many
+      // videos, while the sectioned (ffmpeg range) path works reliably.
+      const dur = duration > 0 ? duration + 2 : 5400; // unknown → cover up to ~90min
+      const buf = await extractSection(RAILWAY, videoId, 0, dur);
       const data = await transcribe(buf, language, OPENAI_API_KEY);
-      segments = buildSegments(data, 0, 0);
+      segments = buildSegments(data, 0, 0, Infinity);
     } else {
       // Split into overlapping chunks, transcribe in parallel, then stitch.
       const n = Math.ceil(duration / CHUNK_SEC);
@@ -139,6 +146,19 @@ function buildSegments(data, offset, dropBefore, dropAfter = Infinity) {
     out.push({ start: gStart, end: seg.end + offset, text: (seg.text || '').trim(), words: segWords });
   }
   return out;
+}
+
+// Video length via the Railway server (yt-dlp knows the duration even when
+// InnerTube is bot-gated). Cheap: no download.
+async function getRailwayDuration(railway, videoId) {
+  const r = await fetch(`${railway}/api/info`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ videoId }),
+  });
+  if (!r.ok) return 0;
+  const d = await r.json();
+  return Number(d.duration) || 0;
 }
 
 // Video length via the InnerTube ANDROID_VR client (same bypass used for captions).

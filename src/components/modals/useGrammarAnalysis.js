@@ -3,6 +3,29 @@ import { analyzeGrammarPatterns } from '../../services/ai';
 import { createAnnotation } from '../../services/annotation';
 import { logError } from '../../utils/errors';
 
+// Keep only spans that literally occur in the sentence, canonicalized to the
+// sentence's real casing so the flashcard front can bold an exact, verbatim
+// substring. Drops anything the model hallucinated or normalized away.
+function validateSpans(spans, sentence) {
+  if (!sentence) return [];
+  const low = sentence.toLowerCase();
+  const seen = new Set();
+  const out = [];
+  for (const s of Array.isArray(spans) ? spans : []) {
+    if (typeof s !== 'string') continue;
+    const t = s.trim();
+    if (!t) continue;
+    const idx = low.indexOf(t.toLowerCase());
+    if (idx === -1) continue; // not actually in the sentence → drop
+    const surface = sentence.slice(idx, idx + t.length); // preserve original casing
+    const key = surface.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(surface);
+  }
+  return out;
+}
+
 // Build line groups from sentenceWords for selection_rect storage
 function buildLineGroups(sentenceWords) {
   if (!sentenceWords || sentenceWords.length === 0) return [];
@@ -124,7 +147,10 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
     setLoading(true);
 
     try {
-      const selectedPatterns = checkedPatterns.map(i => grammarData.patterns[i]);
+      const selectedPatterns = checkedPatterns
+        .map(i => grammarData.patterns[i])
+        .filter(Boolean)
+        .map(p => ({ ...p, spans: validateSpans(p?.spans, grammarData.originalText) }));
 
       let selectionRect;
       if (isYouTube) {

@@ -28,4 +28,16 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // Vercel serverless functions run on Node, not the browser (process, Buffer, etc.).
+    files: ['api/**/*.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+    rules: {
+      // Some api files explicitly `import process/Buffer` while others use the global;
+      // don't flag either style now that node globals are supplied.
+      'no-redeclare': ['error', { builtinGlobals: false }],
+    },
+  },
 ])

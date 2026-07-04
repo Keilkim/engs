@@ -10,7 +10,11 @@
     "items": { "en": "items", "ko": "개" },
     "shelfTitle": { "en": "Next to Decode", "ko": "다음에 풀어볼 영상" },
     "shelfRefresh": { "en": "Refresh", "ko": "새로 보기" },
-    "shelfDismiss": { "en": "Skip this video", "ko": "이 영상 건너뛰기" }
+    "shelfDismiss": { "en": "Skip this video", "ko": "이 영상 건너뛰기" },
+    "discoverTitle": { "en": "For You", "ko": "관심사 발견" },
+    "discoverBadgeYoutube": { "en": "Video", "ko": "영상" },
+    "discoverBadgePdf": { "en": "PDF", "ko": "PDF" },
+    "discoverBadgeArticle": { "en": "Article", "ko": "아티클" }
   },
   "reviewCard": {
     "title": { "en": "Today's Review", "ko": "오늘의 복습" },
@@ -221,7 +225,7 @@
     "grammarFailed": { "en": "Grammar analysis failed", "ko": "문법 분석 실패" },
     "analyzing": { "en": "Analyzing...", "ko": "분석 중..." },
     "noPatterns": { "en": "No expressions found", "ko": "분석된 표현이 없습니다" },
-    "translationOnly": { "en": "Translation ready. No extra expressions to highlight — you can still save it as a card.", "ko": "번역이 준비됐어요. 따로 강조할 표현은 없지만 카드로 저장할 수 있어요." },
+    "translationOnly": { "en": "Translation ready. No expressions to highlight — you can still save it as a note (it won't become a review card).", "ko": "번역이 준비됐어요. 강조할 표현이 없어 복습 카드는 안 되지만 노트로 저장할 수 있어요." },
     "aiUnavailable": { "en": "Couldn't reach the AI analysis (showing translation only). Tap retry, or check the Gemini API key / quota.", "ko": "AI 문법 분석에 연결하지 못했어요 (번역만 표시). 다시 시도하거나 Gemini API 키/사용량을 확인해 주세요." },
     "retry": { "en": "Retry", "ko": "다시 시도" },
     "analysisFailed": { "en": "Analysis failed", "ko": "분석 실패" },

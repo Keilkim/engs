@@ -14,16 +14,20 @@ async function loadPdfjs() {
   return pdfjsLib;
 }
 
-// Convert all PDF pages to high-quality images
+// Convert PDF pages to high-quality images.
+// `maxPages` caps how many pages are rendered (discovery ingests only an OVERVIEW —
+// 1–3 pages — so inline `pages` stays small and interest-matching needs only the top).
+// Omitted → render every page (unchanged behavior for manual file uploads).
 export async function convertPdfToImages(
   file: File,
-  onProgress?: (status: string) => void
+  onProgress?: (status: string) => void,
+  maxPages?: number
 ): Promise<string[]> {
   const pdfjs = await loadPdfjs();
 
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-  const numPages = pdf.numPages;
+  const numPages = maxPages ? Math.min(pdf.numPages, maxPages) : pdf.numPages;
   const pages: string[] = [];
 
   try {

@@ -16,29 +16,61 @@ function renderSentenceWithHighlight(sentence, word) {
   );
 }
 
-// 문법 카드 앞면: 문장에서 '패턴 표현'만 볼드, 나머지는 라이트.
-// 플레이스홀더(A/B/C, ~, ..., V/Ving/Ved)는 제외하고 실제 표현 조각만 강조.
+// 문법 카드 앞면: 저장 시 캡처한 '실제 문장 속 표현(spans)'만 볼드, 나머지는 라이트.
+// spans는 원문에서 글자 그대로 복사·검증된 것이라 활용/대소문자 그대로 정확히 매칭된다.
 function renderSentenceWithPatterns(sentence, patterns) {
-  const fragments = [];
+  if (!sentence) return sentence;
+
+  const spans = [];
   for (const p of patterns || []) {
-    for (const w of p?.words || []) {
-      if (typeof w !== 'string') continue;
-      w.split(/\b[A-C]\b|~|\.{2,}|\bV(?:ing|ed)?\b/g).forEach((frag) => {
-        const f = frag.trim().replace(/^[^\p{L}]+|[^\p{L}]+$/gu, '');
-        if (f.length >= 2) fragments.push(f);
-      });
+    for (const s of p?.spans || []) {
+      if (typeof s === 'string' && s.trim()) spans.push(s.trim());
     }
   }
-  if (fragments.length === 0) return sentence;
-  fragments.sort((a, b) => b.length - a.length);
-  const escaped = fragments.map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const re = new RegExp(`(${escaped.join('|')})`, 'gi');
-  const lowSet = new Set(fragments.map((f) => f.toLowerCase()));
-  return sentence.split(re).map((part, i) =>
-    part && lowSet.has(part.toLowerCase())
-      ? <strong key={i} className="pattern-hl">{part}</strong>
-      : <span key={i}>{part}</span>
-  );
+  if (spans.length === 0) return sentence; // 구 카드/타깃 없음 → 문장 원문 그대로
+
+  // 각 span의 모든 출현 위치를 범위로 수집 (대소문자 무시).
+  // 단어 경계 가드: span의 끝이 글자/숫자면 그 바깥도 글자/숫자인 경우 스킵 →
+  // "not"이 "nothing" 안에서 볼드되는 등 단어 내부 오매칭을 막는다.
+  const isWordChar = (ch) => !!ch && /[\p{L}\p{N}_]/u.test(ch);
+  const low = sentence.toLowerCase();
+  const ranges = [];
+  for (const s of spans) {
+    const needle = s.toLowerCase();
+    const guardHead = isWordChar(s[0]);
+    const guardTail = isWordChar(s[s.length - 1]);
+    let from = 0;
+    for (;;) {
+      const idx = low.indexOf(needle, from);
+      if (idx === -1) break;
+      const end = idx + needle.length;
+      const okHead = !guardHead || !isWordChar(sentence[idx - 1]);
+      const okTail = !guardTail || !isWordChar(sentence[end]);
+      if (okHead && okTail) ranges.push([idx, end]);
+      from = end;
+    }
+  }
+  if (ranges.length === 0) return sentence;
+
+  // 겹치거나 맞닿은 범위 병합 → <strong> 중첩/이중 래핑 방지
+  ranges.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const merged = [];
+  for (const [s, e] of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && s <= last[1]) last[1] = Math.max(last[1], e);
+    else merged.push([s, e]);
+  }
+
+  // 원문에서 슬라이스해 대소문자 유지, 일반/볼드 노드 번갈아 출력
+  const out = [];
+  let cursor = 0;
+  merged.forEach(([s, e], i) => {
+    if (s > cursor) out.push(<span key={`t${i}`}>{sentence.slice(cursor, s)}</span>);
+    out.push(<strong key={`b${i}`} className="pattern-hl">{sentence.slice(s, e)}</strong>);
+    cursor = e;
+  });
+  if (cursor < sentence.length) out.push(<span key="tail">{sentence.slice(cursor)}</span>);
+  return out;
 }
 
 export default function Flashcard({ item, showAnswer, exiting, onReveal }) {

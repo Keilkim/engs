@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSources, updateSource } from '../../services/source';
@@ -9,6 +9,8 @@ import AddSourceModal from '../../components/modals/AddSourceModal';
 import { TranslatableText } from '../../components/translatable';
 import useDecodeShelf from '../../hooks/useDecodeShelf';
 import { shelfRelativeTime } from '../../services/shelf';
+import useDiscoveryShelf from '../../hooks/useDiscoveryShelf';
+import DiscoverShelf from '../../components/discover/DiscoverShelf';
 
 export default function Home() {
   const { user } = useAuth();
@@ -20,8 +22,13 @@ export default function Home() {
   const [showAddModal, setShowAddModal] = useState(false);
   // 추천 줄에서 카드를 누르면 이 URL로 추가 모달을 프리필한다(동의 흐름 보존).
   const [addInitialUrl, setAddInitialUrl] = useState(null);
+  const [addInitialKind, setAddInitialKind] = useState(null); // 'youtube' | 'pdf' | 'web'
+  const [addInitialTitle, setAddInitialTitle] = useState(null);
   const [addFromShelf, setAddFromShelf] = useState(false);
   const shelf = useDecodeShelf();
+  const discover = useDiscoveryShelf();
+  // 발견 카드로 추가를 시작하면 그 후보 id를 기억했다가, 저장 성공 시 선호도(+)를 학습.
+  const pendingDiscoverIdRef = useRef(null);
 
   // 검색 및 필터 상태
   const [searchQuery, setSearchQuery] = useState('');
@@ -101,9 +108,22 @@ export default function Home() {
     }
   }
 
-  // 추천 카드 탭 → 기존 추가 모달을 해당 영상 URL로 프리필해 연다.
+  // 해독 선반(유튜브) 카드 탭 → 기존 추가 모달을 해당 영상 URL로 프리필해 연다.
   function openShelfCard(item) {
+    pendingDiscoverIdRef.current = null;
     setAddInitialUrl(`https://www.youtube.com/watch?v=${item.videoId}`);
+    setAddInitialKind('youtube');
+    setAddInitialTitle(null);
+    setAddFromShelf(true);
+    setShowAddModal(true);
+  }
+
+  // 발견 피드 카드 탭 → 타입(youtube/pdf/web)에 맞게 모달 프리필. 자동 추가는 절대 없음.
+  function openDiscoverCard(item) {
+    pendingDiscoverIdRef.current = item.id;
+    setAddInitialUrl(item.url);
+    setAddInitialKind(item.kind);
+    setAddInitialTitle(item.title || null);
     setAddFromShelf(true);
     setShowAddModal(true);
   }
@@ -111,7 +131,10 @@ export default function Home() {
   function closeAddModal() {
     setShowAddModal(false);
     setAddInitialUrl(null);
+    setAddInitialKind(null);
+    setAddInitialTitle(null);
     setAddFromShelf(false);
+    pendingDiscoverIdRef.current = null;
   }
 
   useEffect(() => {
@@ -149,6 +172,11 @@ export default function Home() {
   }
 
   function handleAddSuccess() {
+    // 발견 피드에서 시작한 추가면 그 후보에 긍정 선호도를 학습하고 카드를 뺀다.
+    if (pendingDiscoverIdRef.current) {
+      discover.choose(pendingDiscoverIdRef.current);
+      pendingDiscoverIdRef.current = null;
+    }
     loadData();
   }
 
@@ -274,6 +302,16 @@ export default function Home() {
           </section>
         )}
 
+        {/* 관심사 발견 피드 — 유튜브/PDF/웹 타입별 한 장씩. 보여줄 게 없으면 섹션 자체가 사라진다. */}
+        {!loading && statusFilter === 'all' && !searchQuery.trim() && discover.items.length > 0 && (
+          <DiscoverShelf
+            items={discover.items}
+            onOpen={openDiscoverCard}
+            onDismiss={discover.dismiss}
+            onRefresh={discover.refresh}
+          />
+        )}
+
         <section className="source-section">
           {/* 필터 탭 */}
           <div className="filter-tabs">
@@ -340,6 +378,8 @@ export default function Home() {
         onClose={closeAddModal}
         onSuccess={handleAddSuccess}
         initialUrl={addInitialUrl}
+        initialKind={addInitialKind}
+        initialTitle={addInitialTitle}
         fromShelf={addFromShelf}
       />
     </div>

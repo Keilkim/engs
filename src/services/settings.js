@@ -11,6 +11,7 @@ export const SETTINGS_KEYS = {
   TRANSLATION_LANGUAGE: 'translation_language',
   ENGLISH_LEVEL: 'english_level',
   SHELF_INCLUDE_SHORTS: 'shelf_include_shorts', // 'true' | 'false' — show Shorts in the Home shelf
+  DISCOVER_ENABLED: 'discover_enabled', // 'true' | 'false' — show the interest-discovery feed
   CAPTION_SHOW_TRANSLATION: 'caption_show_translation', // 'true' | 'false' — show inline translation under YouTube script lines
 };
 
@@ -20,6 +21,7 @@ export const DEFAULTS = {
   [SETTINGS_KEYS.TRANSLATION_LANGUAGE]: 'Korean',
   [SETTINGS_KEYS.ENGLISH_LEVEL]: 'intermediate',
   [SETTINGS_KEYS.SHELF_INCLUDE_SHORTS]: 'false',
+  [SETTINGS_KEYS.DISCOVER_ENABLED]: 'true',
   [SETTINGS_KEYS.CAPTION_SHOW_TRANSLATION]: 'false',
 };
 
@@ -169,6 +171,52 @@ export async function resetVocabulary() {
       .in('id', chunk);
 
     if (vocabError) throw vocabError;
+  }
+
+  return true;
+}
+
+// Reset grammar cards only (highlight type with ai_analysis_json.type === 'grammar')
+export async function resetGrammar() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('User not authenticated');
+
+  // Get all highlight annotations first
+  const { data: allHighlights, error: fetchError } = await supabase
+    .from('annotations')
+    .select('id, ai_analysis_json')
+    .eq('user_id', user.id)
+    .eq('type', 'highlight');
+
+  if (fetchError) throw fetchError;
+
+  // Filter grammar items by ai_analysis_json.type
+  const grammarIds = (allHighlights || [])
+    .filter(item => {
+      const json = safeJsonParse(item.ai_analysis_json, {});
+      return json.type === 'grammar';
+    })
+    .map(item => item.id);
+
+  // Delete in chunks so the PostgREST query string stays within URL length limits.
+  for (let i = 0; i < grammarIds.length; i += DELETE_CHUNK_SIZE) {
+    const chunk = grammarIds.slice(i, i + DELETE_CHUNK_SIZE);
+
+    // Delete related review items first
+    const { error: reviewError } = await supabase
+      .from('review_items')
+      .delete()
+      .in('annotation_id', chunk);
+
+    if (reviewError) throw reviewError;
+
+    // Delete grammar annotations
+    const { error: grammarError } = await supabase
+      .from('annotations')
+      .delete()
+      .in('id', chunk);
+
+    if (grammarError) throw grammarError;
   }
 
   return true;

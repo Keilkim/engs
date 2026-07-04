@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { Source, SourceListItem, OcrData, YouTubeData, CaptionsData } from '../types';
+import { candidateId } from '../lib/discover-core/rank';
 
 const STORAGE_BUCKET = 'sources';
 
@@ -50,6 +51,30 @@ export async function getSources(): Promise<SourceListItem[]> {
   return data as SourceListItem[];
 }
 
+// Build the set of discovery candidate-ids the user ALREADY has in their library,
+// so the discovery shelf never recommends something already saved. Keys match the
+// discover-core candidateId() format: yt:<video_id>, web:<hash>, pdf:<hash>.
+export async function getSavedExternalKeys(): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('sources')
+    .select('type, file_path, youtube_data');
+  if (error) throw error;
+
+  const keys = new Set<string>();
+  for (const row of (data || []) as Array<{ type: string; file_path: string | null; youtube_data: YouTubeData | null }>) {
+    if (row.type === 'youtube') {
+      const vid = row.youtube_data?.video_id;
+      if (vid) keys.add(candidateId({ kind: 'youtube', videoId: vid }));
+      continue;
+    }
+    const fp = row.file_path;
+    if (!fp || !/^https?:\/\//i.test(fp)) continue; // only external URLs can collide with candidates
+    if (row.type === 'pdf') keys.add(candidateId({ kind: 'pdf', url: fp }));
+    else keys.add(candidateId({ kind: 'web', url: fp })); // url / screenshot
+  }
+  return keys;
+}
+
 export async function getSource(id: string): Promise<Source> {
   const { data, error } = await supabase
     .from('sources')
@@ -97,6 +122,9 @@ interface CreateSourceInput {
   pages?: string | null;
   ocr_data?: OcrData | null;
   content?: string | null;
+  // When added from the discovery shelf, mark provenance so we can later measure
+  // (privately, via DB) whether discovery actually feeds the decode loop.
+  to_read?: boolean;
 }
 
 export async function createSource(source: CreateSourceInput): Promise<Source> {
