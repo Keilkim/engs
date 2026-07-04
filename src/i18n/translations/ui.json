@@ -83,7 +83,9 @@
     "returnHome": { "en": "Return Home", "ko": "홈으로 돌아가기" },
     "reviewCenter": { "en": "Review Center", "ko": "복습 센터" },
     "from": { "en": "From", "ko": "출처" },
-    "viewContext": { "en": "View original context", "ko": "원문 문맥 보기" }
+    "viewContext": { "en": "View original context", "ko": "원문 문맥 보기" },
+    "tapIfUnsure": { "en": "Don't know it? Tap the card to see the answer.", "ko": "모르면 카드를 탭해 정답을 확인하세요" },
+    "next": { "en": "Next", "ko": "다음" }
   },
   "chat": {
     "aiChat": { "en": "AI Chat", "ko": "AI 대화" },
