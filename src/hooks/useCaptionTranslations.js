@@ -5,6 +5,13 @@ import { logError } from '../utils/errors';
 // Keep concurrent calls to the unofficial Google Translate endpoint low: it is
 // shared with word-lookup, and bursting it risks a temporary IP block.
 const CONCURRENCY = 4;
+// A line that keeps failing is re-queued this many times before we give up
+// (a later re-scroll can still start it over).
+const MAX_ATTEMPTS = 3;
+const RETRY_BASE_MS = 600;
+// A stalled fetch would otherwise hold its concurrency slot forever; abort it
+// so the slot is released and the line can be retried.
+const TRANSLATE_TIMEOUT_MS = 8000;
 
 /**
  * Lazily translate YouTube caption segments on demand (visibility/playback
@@ -27,18 +34,26 @@ const CONCURRENCY = 4;
 export default function useCaptionTranslations({ segments, enabled, targetLang }) {
   const [translations, setTranslations] = useState({});
 
-  const cacheRef = useRef(new Map());      // text -> translated (dedupes repeats)
-  const requestedRef = useRef(new Set());  // segment indices already queued/done
-  const queueRef = useRef([]);             // pending segment indices
+  const cacheRef = useRef(new Map());       // text -> translated (dedupes repeats)
+  const inFlightRef = useRef(new Map());    // text -> in-flight promise (dedupes concurrent identical lines)
+  const requestedRef = useRef(new Set());   // segment indices queued/running/done
+  const attemptsRef = useRef(new Map());    // index -> failed attempts so far
+  const queueRef = useRef([]);              // pending segment indices
   const runningRef = useRef(0);
-  // Latest `pump`, so the async `.finally` can re-pump without pump referencing
+  const controllersRef = useRef(new Set()); // in-flight AbortControllers (for unmount)
+  // Latest `pump`, so async callbacks can re-pump without pump referencing
   // itself (forbidden by the lint rules and prone to capturing a stale closure).
   const pumpRef = useRef(null);
-  // Guards against writing state after unmount (e.g. navigating away mid-fetch).
+  // Guards against writing state / retrying after unmount.
   const aliveRef = useRef(true);
   useEffect(() => {
     aliveRef.current = true;
-    return () => { aliveRef.current = false; };
+    const controllers = controllersRef.current;
+    return () => {
+      aliveRef.current = false;
+      controllers.forEach((c) => c.abort());
+      controllers.clear();
+    };
   }, []);
 
   const pump = useCallback(() => {
@@ -57,15 +72,47 @@ export default function useCaptionTranslations({ segments, enabled, targetLang }
       }
 
       runningRef.current += 1;
-      googleTranslate(text, targetLang)
+
+      // Share one network call across identical lines requested close together,
+      // and time out a stalled request so its slot is always released.
+      let shared = inFlightRef.current.get(text);
+      if (!shared) {
+        const controller = new AbortController();
+        controllersRef.current.add(controller);
+        const timer = setTimeout(() => controller.abort(), TRANSLATE_TIMEOUT_MS);
+        shared = googleTranslate(text, targetLang, { signal: controller.signal })
+          .finally(() => {
+            clearTimeout(timer);
+            controllersRef.current.delete(controller);
+            inFlightRef.current.delete(text);
+          });
+        inFlightRef.current.set(text, shared);
+      }
+
+      shared
         .then(translated => {
           cacheRef.current.set(text, translated);
+          attemptsRef.current.delete(index);
           if (aliveRef.current) setTranslations(prev => ({ ...prev, [index]: translated }));
         })
         .catch(err => {
           logError('useCaptionTranslations', err);
-          // Let this line be retried later (e.g. on re-scroll into view).
-          requestedRef.current.delete(index);
+          // Bounded retry: nothing re-requests a line that stays on screen, so
+          // re-queue it ourselves after a short backoff instead of leaving it
+          // permanently blank on a transient failure.
+          const attempts = (attemptsRef.current.get(index) || 0) + 1;
+          if (aliveRef.current && attempts < MAX_ATTEMPTS) {
+            attemptsRef.current.set(index, attempts);
+            setTimeout(() => {
+              if (!aliveRef.current) return;
+              queueRef.current.push(index);
+              pumpRef.current?.();
+            }, RETRY_BASE_MS * attempts);
+          } else {
+            // Give up for now; a later genuine re-request (re-scroll) starts over.
+            attemptsRef.current.delete(index);
+            requestedRef.current.delete(index);
+          }
         })
         .finally(() => {
           runningRef.current -= 1;
@@ -81,7 +128,22 @@ export default function useCaptionTranslations({ segments, enabled, targetLang }
 
   const requestTranslation = useCallback((index, priority = false) => {
     if (!enabled || index == null || index < 0) return;
-    if (requestedRef.current.has(index)) return;
+
+    if (requestedRef.current.has(index)) {
+      // Already known. If this is a priority (active-line) request and the line
+      // is still waiting in the queue, jump it to the front so the line being
+      // read is translated before earlier already-scrolled-past lines.
+      if (priority) {
+        const qi = queueRef.current.indexOf(index);
+        if (qi > 0) {
+          queueRef.current.splice(qi, 1);
+          queueRef.current.unshift(index);
+          pump();
+        }
+      }
+      return;
+    }
+
     requestedRef.current.add(index);
     if (priority) queueRef.current.unshift(index);
     else queueRef.current.push(index);
