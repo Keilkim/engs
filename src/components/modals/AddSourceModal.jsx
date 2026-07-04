@@ -155,7 +155,10 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
         videoId: parsed.video_id,
         title: metadata.title,
         author: metadata.author,
+        authorUrl: metadata.author_url,
         thumbnail: metadata.thumbnail_url_hq,
+        channelId: null, // filled from the captions/InnerTube response below
+        duration: 0,
       });
       if (!titleTouched) setTitle(metadata.title);
 
@@ -163,6 +166,11 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
         const captions = await fetchYouTubeCaptions(parsed.video_id);
         if (seq !== linkSeqRef.current) return; // stale response, discard
         setVideoDuration(captions.durationSec || 0);
+        // Capture channelId + duration whether or not captions exist, so the shelf
+        // never has to re-resolve this video and Whisper can quote an exact cost.
+        setYoutubePreview((prev) =>
+          prev ? { ...prev, channelId: captions.channelId || null, duration: captions.durationSec || 0 } : prev
+        );
         if (captions.segments.length > 0) {
           setYoutubeCaptions(captions);
           setCaptionStatus('found');
@@ -193,6 +201,9 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
         youtubeData: {
           video_id: youtubePreview.videoId,
           channel: youtubePreview.author,
+          channel_id: youtubePreview.channelId || undefined,
+          author_url: youtubePreview.authorUrl || undefined,
+          duration: youtubePreview.duration || undefined,
           has_captions: !!youtubeCaptions,
           caption_source: youtubeCaptions?.source || 'manual',
           thumbnail_url: youtubePreview.thumbnail,
@@ -265,10 +276,14 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
     if (!youtubePreview) return;
 
     // Cost/time confirmation before kicking off a paid, potentially long transcription.
-    const perMinute = calculateWhisperCost(60); // { usd, krw } per minute of audio
+    // Quote the actual total when the duration is known (captured at preview), else per-minute.
+    const cost = videoDuration > 0 ? calculateWhisperCost(videoDuration) : calculateWhisperCost(60);
+    const costLine = videoDuration > 0
+      ? `비용: 이 영상(약 ${Math.round(videoDuration / 60)}분) 약 $${cost.usd.toFixed(2)} (약 ${cost.krw.toLocaleString()}원)\n`
+      : `비용: 영상 1분당 약 $${cost.usd.toFixed(3)} (약 ${cost.krw}원)\n`;
     const confirmed = window.confirm(
       '음성 인식(Whisper)은 서버에서 유료 API를 사용합니다.\n\n' +
-      `비용: 영상 1분당 약 $${perMinute.usd.toFixed(3)} (약 ${perMinute.krw}원)\n` +
+      costLine +
       '소요 시간: 영상 길이에 따라 수 분이 걸릴 수 있어요.\n\n계속하시겠어요?'
     );
     if (!confirmed) return;
