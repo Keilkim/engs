@@ -1,5 +1,6 @@
 import { TranslatableText } from '../../components/translatable';
 import { safeJsonParse } from '../../utils/errors';
+import FitBox from './FitBox';
 
 // 원문 문장에서 대상 단어를 강조해 렌더링 (없으면 문장 그대로)
 function renderSentenceWithHighlight(sentence, word) {
@@ -66,21 +67,23 @@ export default function Flashcard({ item, showAnswer, exiting, onReveal }) {
             <TranslatableText textKey="flashcard.tapToReveal">Tap to reveal answer</TranslatableText>
           </div>
           <div className="card-content">
-            {isGrammar ? (
-              // 문법 문장: 패턴만 볼드, 나머지는 라이트
-              <p className="question-text question-grammar">
-                {renderSentenceWithPatterns(selectedText, analysisData.patterns)}
-              </p>
-            ) : (
-              <>
-                <p className="question-text">{selectedText}</p>
-                {sentence && sentence !== selectedText && (
-                  <p className="question-sentence-context">
-                    {renderSentenceWithHighlight(sentence, selectedText)}
-                  </p>
-                )}
-              </>
-            )}
+            <FitBox>
+              {isGrammar ? (
+                // 문법 문장: 패턴만 볼드, 나머지는 라이트
+                <p className="question-text question-grammar">
+                  {renderSentenceWithPatterns(selectedText, analysisData.patterns)}
+                </p>
+              ) : (
+                <>
+                  <p className="question-text">{selectedText}</p>
+                  {sentence && sentence !== selectedText && (
+                    <p className="question-sentence-context">
+                      {renderSentenceWithHighlight(sentence, selectedText)}
+                    </p>
+                  )}
+                </>
+              )}
+            </FitBox>
           </div>
         </div>
 
@@ -89,36 +92,38 @@ export default function Flashcard({ item, showAnswer, exiting, onReveal }) {
             <TranslatableText textKey="flashcard.answer">Answer</TranslatableText>
           </div>
           <div className="card-content">
-            {analysisData?.isVocabulary ? (
-              <div className="analysis-content">
-                <p className="answer-word">{analysisData.word}</p>
-                {analysisData.phonetic && (
-                  <p className="answer-phonetic">{analysisData.phonetic}</p>
-                )}
-                <p className="answer-definition">{analysisData.definition}</p>
-              </div>
-            ) : analysisData?.type === 'grammar' ? (
-              <div className="analysis-content">
-                <p className="answer-translation">{analysisData.translation}</p>
-                {analysisData.patterns?.length > 0 && (
-                  <div className="answer-patterns">
-                    {analysisData.patterns.map((p, i) => (
-                      <div key={i} className="pattern-item">
-                        <span className="pattern-words">{p.words?.join(', ')}</span>
-                        <span className="pattern-explanation">{p.explanation}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="no-analysis">
-                <p className="answer-text">{selectedText}</p>
-                {annotation?.memo_content && (
-                  <p className="memo-text">{annotation.memo_content}</p>
-                )}
-              </div>
-            )}
+            <FitBox>
+              {analysisData?.isVocabulary ? (
+                <div className="analysis-content">
+                  <p className="answer-word">{analysisData.word}</p>
+                  {analysisData.phonetic && (
+                    <p className="answer-phonetic">{analysisData.phonetic}</p>
+                  )}
+                  <p className="answer-definition">{analysisData.definition}</p>
+                </div>
+              ) : analysisData?.type === 'grammar' ? (
+                <div className="analysis-content">
+                  <p className="answer-translation">{analysisData.translation}</p>
+                  {analysisData.patterns?.length > 0 && (
+                    <div className="answer-patterns">
+                      {analysisData.patterns.map((p, i) => (
+                        <div key={i} className="pattern-item">
+                          <span className="pattern-words">{p.words?.join(', ')}</span>
+                          <span className="pattern-explanation">{p.explanation}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="no-analysis">
+                  <p className="answer-text">{selectedText}</p>
+                  {annotation?.memo_content && (
+                    <p className="memo-text">{annotation.memo_content}</p>
+                  )}
+                </div>
+              )}
+            </FitBox>
           </div>
         </div>
       </div>
