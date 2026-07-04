@@ -221,9 +221,13 @@ interface CreateYouTubeSourceInput {
   title: string;
   youtubeData: YouTubeData;
   captionsData: CaptionsData | null;
+  // When the add originated from the Home "next to decode" shelf, mark the source
+  // so we can later tell (privately, via DB) whether the shelf actually feeds the
+  // decode loop — the real success metric, not clicks.
+  toRead?: boolean;
 }
 
-export async function createYouTubeSource({ title, youtubeData, captionsData }: CreateYouTubeSourceInput): Promise<Source> {
+export async function createYouTubeSource({ title, youtubeData, captionsData, toRead = false }: CreateYouTubeSourceInput): Promise<Source> {
   const userId = await requireUserId();
 
   console.log('[DB] Creating YouTube source:', {
@@ -241,6 +245,7 @@ export async function createYouTubeSource({ title, youtubeData, captionsData }: 
       youtube_data: youtubeData,
       captions_data: captionsData,
       source_language: 'en',
+      to_read: toRead,
       user_id: userId,
     })
     .select()
@@ -253,6 +258,38 @@ export async function createYouTubeSource({ title, youtubeData, captionsData }: 
 
   console.log('[DB] YouTube source created:', data.id);
   return data as Source;
+}
+
+export interface YouTubeSourceMeta {
+  id: number;
+  youtube_data: YouTubeData | null;
+  pinned: boolean;
+}
+
+// Light query for the Home shelf: the main getSources() list deliberately omits
+// youtube_data, but the shelf needs each source's channel + video_id + pin state.
+export async function getYouTubeSourceMeta(): Promise<YouTubeSourceMeta[]> {
+  const { data, error } = await supabase
+    .from('sources')
+    .select('id, youtube_data, pinned')
+    .eq('type', 'youtube');
+
+  if (error) throw error;
+  return (data || []) as YouTubeSourceMeta[];
+}
+
+// Merge a resolved channel_id (and duration) into a source's youtube_data WITHOUT
+// clobbering the rest of the JSONB object — spread the existing object, never
+// replace it blind. Best-effort backfill so the shelf stops re-resolving this video.
+export async function backfillYoutubeChannelId(
+  id: number,
+  currentYoutubeData: YouTubeData | null,
+  channelId: string,
+  duration?: number | null
+): Promise<void> {
+  const merged = { ...(currentYoutubeData || {}), channel_id: channelId } as YouTubeData;
+  if (duration && !merged.duration) merged.duration = duration;
+  await updateSource(String(id), { youtube_data: merged });
 }
 
 function blobToBase64(blob: Blob): Promise<string> {

@@ -7,7 +7,10 @@
   "home": {
     "myLibrary": { "en": "My Library", "ko": "내 서재" },
     "learningSources": { "en": "Learning Sources", "ko": "학습 소스" },
-    "items": { "en": "items", "ko": "개" }
+    "items": { "en": "items", "ko": "개" },
+    "shelfTitle": { "en": "Next to Decode", "ko": "다음에 풀어볼 영상" },
+    "shelfRefresh": { "en": "Refresh", "ko": "새로 보기" },
+    "shelfDismiss": { "en": "Skip this video", "ko": "이 영상 건너뛰기" }
   },
   "reviewCard": {
     "title": { "en": "Today's Review", "ko": "오늘의 복습" },

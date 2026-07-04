@@ -7,6 +7,8 @@ import SourceGrid from '../../containers/source-grid/SourceGrid';
 import ReviewCard from '../../components/cards/ReviewCard';
 import AddSourceModal from '../../components/modals/AddSourceModal';
 import { TranslatableText } from '../../components/translatable';
+import useDecodeShelf from '../../hooks/useDecodeShelf';
+import { shelfRelativeTime } from '../../services/shelf';
 
 export default function Home() {
   const { user } = useAuth();
@@ -16,6 +18,10 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  // 추천 줄에서 카드를 누르면 이 URL로 추가 모달을 프리필한다(동의 흐름 보존).
+  const [addInitialUrl, setAddInitialUrl] = useState(null);
+  const [addFromShelf, setAddFromShelf] = useState(false);
+  const shelf = useDecodeShelf();
 
   // 검색 및 필터 상태
   const [searchQuery, setSearchQuery] = useState('');
@@ -93,6 +99,19 @@ export default function Home() {
     } else {
       navigate(`/viewer/${source.id}`);
     }
+  }
+
+  // 추천 카드 탭 → 기존 추가 모달을 해당 영상 URL로 프리필해 연다.
+  function openShelfCard(item) {
+    setAddInitialUrl(`https://www.youtube.com/watch?v=${item.videoId}`);
+    setAddFromShelf(true);
+    setShowAddModal(true);
+  }
+
+  function closeAddModal() {
+    setShowAddModal(false);
+    setAddInitialUrl(null);
+    setAddFromShelf(false);
   }
 
   useEffect(() => {
@@ -212,6 +231,49 @@ export default function Home() {
           </section>
         )}
 
+        {/* 다음 해독거리 추천 줄 — 이미 추가한 유튜브 채널의 새 업로드. 보여줄 게
+            없으면 섹션 자체가 사라진다(빈 상태 문구도, 추가 유도도 없음). */}
+        {!loading && statusFilter === 'all' && !searchQuery.trim() && shelf.items.length > 0 && (
+          <section className="shelf-section">
+            <div className="section-header">
+              <h2><TranslatableText textKey="home.shelfTitle">Next to Decode</TranslatableText></h2>
+              <button className="shelf-refresh" onClick={shelf.refresh}>
+                <TranslatableText textKey="home.shelfRefresh">Refresh</TranslatableText>
+              </button>
+            </div>
+            <div className="shelf-row">
+              {shelf.items.map((item) => (
+                <div
+                  key={item.videoId}
+                  className="shelf-card"
+                  onClick={() => openShelfCard(item)}
+                >
+                  <div className="shelf-thumb">
+                    <img
+                      src={item.thumbnail}
+                      alt=""
+                      loading="lazy"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                    <button
+                      className="shelf-dismiss"
+                      aria-label="Skip this video"
+                      onClick={(e) => { e.stopPropagation(); shelf.dismiss(item.videoId); }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="shelf-title">{item.title}</div>
+                  <div className="shelf-meta">
+                    {item.channelName}
+                    {item.published ? ` · ${shelfRelativeTime(item.published)}` : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="source-section">
           {/* 필터 탭 */}
           <div className="filter-tabs">
@@ -275,8 +337,10 @@ export default function Home() {
 
       <AddSourceModal
         isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
+        onClose={closeAddModal}
         onSuccess={handleAddSuccess}
+        initialUrl={addInitialUrl}
+        fromShelf={addFromShelf}
       />
     </div>
   );

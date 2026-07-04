@@ -10,6 +10,7 @@ export const SETTINGS_KEYS = {
   AI_CHAT_LANGUAGE: 'ai_chat_language',
   TRANSLATION_LANGUAGE: 'translation_language',
   ENGLISH_LEVEL: 'english_level',
+  SHELF_INCLUDE_SHORTS: 'shelf_include_shorts', // 'true' | 'false' — show Shorts in the Home shelf
 };
 
 // Default values
@@ -17,6 +18,7 @@ export const DEFAULTS = {
   [SETTINGS_KEYS.AI_CHAT_LANGUAGE]: 'Korean',
   [SETTINGS_KEYS.TRANSLATION_LANGUAGE]: 'Korean',
   [SETTINGS_KEYS.ENGLISH_LEVEL]: 'intermediate',
+  [SETTINGS_KEYS.SHELF_INCLUDE_SHORTS]: 'false',
 };
 
 // Language options
