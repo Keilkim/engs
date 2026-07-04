@@ -76,7 +76,7 @@ function buildLineGroups(sentenceWords) {
 /**
  * Hook for grammar pattern analysis, selection, and save logic
  */
-export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp }) {
+export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp, sceneStart, sceneEnd }) {
   const isYouTube = sourceType === 'youtube';
   const [grammarData, setGrammarData] = useState(null);
   const [checkedPatterns, setCheckedPatterns] = useState([]);
@@ -156,9 +156,11 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
       if (isYouTube) {
         selectionRect = JSON.stringify({
           type: 'youtube_grammar',
-          segmentIndex,
+          segmentIndex, // STORED-segment index (translated from the display row)
           wordIndex,
           timestamp,
+          ...(typeof sceneStart === 'number' ? { sceneStart } : {}),
+          ...(typeof sceneEnd === 'number' ? { sceneEnd } : {}),
         });
       } else {
         const lineGroups = buildLineGroups(sentenceWords);

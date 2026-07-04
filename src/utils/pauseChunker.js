@@ -28,6 +28,7 @@ export const DEFAULT_CHUNK_PARAMS = {
 };
 
 const TIE_EPS = 0.02; // s — gaps within this are considered equal for tie-breaking
+const DUR_EPS = 1e-6; // s — tolerance so float noise doesn't trip exact min/max comparisons
 
 const normalizeToken = (s) => (s || '').toLowerCase().replace(/[^a-z0-9']/g, '');
 
@@ -64,10 +65,10 @@ const rangeDur = (r, words) => words[r[1]].end - words[r[0]].start;
 const rangeLen = (r) => r[1] - r[0] + 1;
 
 function isSmall(r, words, p) {
-  return rangeDur(r, words) < p.minChunk.sec || rangeLen(r) < p.minChunk.words;
+  return rangeDur(r, words) < p.minChunk.sec - DUR_EPS || rangeLen(r) < p.minChunk.words;
 }
 function isBig(r, words, p) {
-  return rangeDur(r, words) > p.maxChunk.sec || rangeLen(r) > p.maxChunk.words;
+  return rangeDur(r, words) > p.maxChunk.sec + DUR_EPS || rangeLen(r) > p.maxChunk.words;
 }
 
 // Merge chunks that are too small into a neighbour across the SMALLER original

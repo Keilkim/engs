@@ -224,8 +224,14 @@ export default function Review() {
   const sceneRect = safeJsonParse(annotation?.selection_rect, null);
   const youtubeData = annotation?.source?.type === 'youtube' ? annotation.source.youtube_data : null;
   const sceneVideoId = youtubeData?.video_id;
-  const sceneStart = sceneRect?.type === 'youtube_word' && typeof sceneRect.timestamp === 'number'
-    ? sceneRect.timestamp
+  // Prefer the authoritative scene bounds saved with the annotation (pause-chunk
+  // era); fall back to the word timestamp for legacy cards. Scene playback stays
+  // gated to youtube_word cards, exactly as before.
+  const isYoutubeWord = sceneRect?.type === 'youtube_word';
+  const sceneStart = isYoutubeWord
+    ? (typeof sceneRect.sceneStart === 'number'
+        ? sceneRect.sceneStart
+        : (typeof sceneRect.timestamp === 'number' ? sceneRect.timestamp : null))
     : null;
   const canPlayScene = Boolean(sceneVideoId) && sceneStart != null;
 
@@ -264,6 +270,8 @@ export default function Review() {
             sourceId={annotation.source.id}
             segmentIndex={sceneRect.segmentIndex}
             fallbackStart={sceneStart}
+            sceneStart={sceneRect.sceneStart}
+            sceneEnd={sceneRect.sceneEnd}
           />
         )}
 

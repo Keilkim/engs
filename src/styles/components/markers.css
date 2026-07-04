@@ -157,10 +157,11 @@
   }
 }
 
-/* Grammar marker - dotted underline (thick + opaque so it's clearly visible) */
+/* Grammar marker - dotted underline (kept thin so it reads as an underline,
+   not a heavy bar; non-scaling-stroke keeps it crisp at any zoom). */
 .grammar-underline {
   stroke: rgba(59, 130, 246, 0.95);
-  stroke-width: 2.5px;
+  stroke-width: 1.5px;
   stroke-dasharray: 3 2;
   stroke-linecap: round;
   fill: none;

@@ -2,20 +2,33 @@ import { useState, useEffect } from 'react';
 import { getSourceCaptions } from '../services/source';
 
 /**
- * Resolve the precise sentence window [start, end] for a word that was saved from
- * a YouTube source. We only store the word's start `timestamp` on the annotation,
- * so to play the *sentence* (a real "scene", not a clipped word) we look up the
- * containing segment in the source's captions.
+ * Resolve the precise scene window [start, end] for a word saved from a YouTube
+ * source.
  *
- * Until (or unless) that lookup resolves, it falls back to the stored word
- * timestamp with no end, so playback still works — it just won't auto-stop at the
- * sentence boundary.
+ * Preferred path: annotations saved after the pause-chunk feature landed persist
+ * authoritative `sceneStart`/`sceneEnd` (the exact bounds of the row the user
+ * studied). When present we use them directly — no captions fetch, and no risk of
+ * a stale/derived index resolving to the wrong stored segment.
+ *
+ * Legacy path (older annotations, no scene bounds): look up the containing STORED
+ * segment by `segmentIndex` to recover the sentence end. The stored `segments`
+ * array is never mutated by the upgrade flow, so these indices stay valid forever.
+ *
+ * Either way, until a value resolves it falls back to `fallbackStart` (the word
+ * timestamp) with no end, so playback still works — it just won't auto-stop.
  */
-export default function useSceneBounds({ sourceId, segmentIndex, fallbackStart }) {
-  // Captions-derived bounds; null until resolved (or if it can't resolve).
-  const [resolved, setResolved] = useState(null);
+export default function useSceneBounds({ sourceId, segmentIndex, fallbackStart, sceneStart, sceneEnd }) {
+  const hasExplicitBounds = typeof sceneStart === 'number';
+
+  // Seed with explicit bounds when available so there is no fetch and no flash.
+  const [resolved, setResolved] = useState(
+    hasExplicitBounds
+      ? { start: sceneStart, end: typeof sceneEnd === 'number' ? sceneEnd : null }
+      : null
+  );
 
   useEffect(() => {
+    if (hasExplicitBounds) return; // authoritative bounds — skip the captions fetch
     if (sourceId == null || segmentIndex == null) return;
 
     let cancelled = false;
@@ -36,7 +49,7 @@ export default function useSceneBounds({ sourceId, segmentIndex, fallbackStart }
     })();
 
     return () => { cancelled = true; };
-  }, [sourceId, segmentIndex]);
+  }, [sourceId, segmentIndex, hasExplicitBounds]);
 
   return resolved ?? { start: fallbackStart, end: null };
 }

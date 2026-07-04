@@ -18,9 +18,9 @@ const FALLBACK_WINDOW = 7;
  * don't trigger the card's tap-to-reveal. The iframe is mounted lazily on first
  * tap so flipping past cards you don't listen to costs nothing.
  */
-export default function ScenePlayer({ videoId, sourceId, segmentIndex, fallbackStart, onInteract }) {
+export default function ScenePlayer({ videoId, sourceId, segmentIndex, fallbackStart, sceneStart, sceneEnd, onInteract }) {
   const [mounted, setMounted] = useState(false);
-  const { start, end } = useSceneBounds({ sourceId, segmentIndex, fallbackStart });
+  const { start, end } = useSceneBounds({ sourceId, segmentIndex, fallbackStart, sceneStart, sceneEnd });
 
   const {
     currentTime,

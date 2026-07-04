@@ -414,14 +414,31 @@
 .answer-patterns {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--spacing-sm);
   width: 100%;
 }
 
-.pattern-item {
+/* On the flashcard back the pattern items inherit the review quick-menu's
+   left-aligned, absolute-bullet layout. Re-scope them here so each bullet item
+   is a centered block (bullet inline before the words). Scoped under
+   .answer-patterns so the review menu list is unaffected. */
+.answer-patterns .pattern-item {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  text-align: center;
   gap: 2px;
+  padding: 0;
+  position: static;
+}
+
+.answer-patterns .pattern-item::before {
+  content: none;
+}
+
+.answer-patterns .pattern-words::before {
+  content: '• ';
 }
 
 /* 정답 패턴(예: "set up ~ off")만 볼드로 강조 */

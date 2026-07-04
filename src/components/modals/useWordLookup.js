@@ -14,7 +14,7 @@ function toDefinitionString(value) {
 /**
  * Hook for vocabulary word lookup, TTS, and save logic
  */
-export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp, sentence }) {
+export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp, sceneStart, sceneEnd, sentence }) {
   const isYouTube = sourceType === 'youtube';
   const isChat = sourceType === 'chat';
   // Whether this word can be persisted at all (needs a location or a chat/YT context).
@@ -110,7 +110,16 @@ export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, 
       }
 
       const selectionRect = isYouTube
-        ? JSON.stringify({ type: 'youtube_word', segmentIndex, wordIndex, timestamp })
+        ? JSON.stringify({
+            type: 'youtube_word',
+            segmentIndex, // STORED-segment index (translated from the display row)
+            wordIndex,
+            timestamp,
+            // Authoritative scene bounds captured from the tapped row (a pause
+            // chunk is a better scene than a cue). Scene playback prefers these.
+            ...(typeof sceneStart === 'number' ? { sceneStart } : {}),
+            ...(typeof sceneEnd === 'number' ? { sceneEnd } : {}),
+          })
         : isChat
         ? JSON.stringify({ type: 'chat_word' })
         : JSON.stringify({ bounds: wordBbox, page: currentPage });

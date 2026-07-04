@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { calculateModalPosition, getArrowClass, getMobileSafeAreaBottom } from '../../utils/positioning';
+import { cleanDisplayText } from '../../utils/textUtils';
 import { useTranslation } from '../../i18n';
 import { useWordLookup } from './useWordLookup';
 import { useGrammarAnalysis } from './useGrammarAnalysis';
@@ -28,11 +29,22 @@ export default function WordQuickMenu({
   segmentIndex,
   wordIndex,
   timestamp,
+  // Authoritative scene bounds of the tapped row (pause chunk or cue).
+  sceneStart,
+  sceneEnd,
   // Optional source sentence for context/recall (omitted when unavailable)
   sentence,
 }) {
   const isYouTube = sourceType === 'youtube';
   const { ko } = useTranslation();
+
+  // Vocabulary tokens arrive straight from OCR / caption text and often carry
+  // surrounding punctuation ("time:", "hello,"). Normalize ONCE here so the word
+  // we look up, save (selected_text), display, and speak are all identical —
+  // previously only the display was cleaned, so punctuation leaked into the DB
+  // and the definition query. Grammar mode operates on a whole sentence, so it
+  // is left untouched.
+  const vocabWord = isGrammarMode ? word : cleanDisplayText(word);
 
   // Context sentence for the saved card: prefer an explicit `sentence`, else
   // reconstruct one from the tapped line's words (Viewer passes sentenceWords).
@@ -89,8 +101,8 @@ export default function WordQuickMenu({
     };
   }, [isOpen]);
 
-  const vocab = useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp, sentence: contextSentence });
-  const grammar = useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp });
+  const vocab = useWordLookup({ word: vocabWord, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp, sceneStart, sceneEnd, sentence: contextSentence });
+  const grammar = useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp, sceneStart, sceneEnd });
 
   // Position update (wordBbox % → viewport coords)
   const updatePosition = useCallback(() => {
@@ -242,7 +254,7 @@ export default function WordQuickMenu({
         />
       ) : (
         <VocabModeContent
-          word={word}
+          word={vocabWord}
           definition={vocab.definition}
           phonetic={vocab.phonetic}
           loading={vocab.loading}
