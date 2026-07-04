@@ -268,7 +268,8 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
       const result = await transcribeYouTubeWithWhisper(
         youtubePreview.videoId,
         'en',
-        setLoadingStatus
+        setLoadingStatus,
+        videoDuration
       );
 
       if (result && result.segments.length > 0) {
@@ -478,12 +479,12 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                       </button>
                     )}
                     {(captionStatus === 'not_found' || captionStatus === 'error') && isWhisperAvailable() && (
-                      videoDuration > 25 * 60 ? (
-                        <p className="file-hint" style={{ color: '#fb923c', margin: '4px 0 12px', lineHeight: 1.5 }}>
-                          이 영상은 약 {Math.round(videoDuration / 60)}분이라 음성 인식(약 25분 한도)이 어려워요.
-                          25분 이내의 짧은 영상을 이용해 주세요.
-                        </p>
-                      ) : (
+                      <>
+                        {videoDuration > 25 * 60 && (
+                          <p className="file-hint" style={{ color: 'var(--text-secondary, #888)', margin: '4px 0 8px', lineHeight: 1.5 }}>
+                            긴 영상({Math.round(videoDuration / 60)}분)은 여러 조각으로 나눠 전사돼요 — 시간이 좀 걸릴 수 있어요.
+                          </p>
+                        )}
                         <button
                           type="button"
                           className="submit-button"
@@ -493,7 +494,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                         >
                           {loading ? (loadingStatus || 'Transcribing...') : '음성 인식으로 자막 만들기 (Whisper)'}
                         </button>
-                      )
+                      </>
                     )}
                     <button
                       type="submit"
