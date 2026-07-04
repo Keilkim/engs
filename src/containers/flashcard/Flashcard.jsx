@@ -40,12 +40,11 @@ export default function Flashcard({ item, showAnswer, onReveal }) {
             <TranslatableText textKey="flashcard.tapToReveal">Tap to reveal answer</TranslatableText>
           </div>
           <div className="card-content">
-            {sentence ? (
-              <p className="question-sentence">
+            <p className="question-text">{selectedText}</p>
+            {sentence && sentence !== selectedText && (
+              <p className="question-sentence-context">
                 {renderSentenceWithHighlight(sentence, selectedText)}
               </p>
-            ) : (
-              <p className="question-text">{selectedText}</p>
             )}
           </div>
         </div>
@@ -85,9 +84,6 @@ export default function Flashcard({ item, showAnswer, onReveal }) {
                 )}
               </div>
             )}
-          </div>
-          <div className="source-info">
-            {annotation?.source?.title || 'Source'}
           </div>
         </div>
       </div>

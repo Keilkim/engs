@@ -20,6 +20,19 @@
   justify-content: center;
 }
 
+/* 출처: 카드 밖(카드 위)에 작게 표시 */
+.review-source-label {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 0 var(--spacing-sm) 0;
+  font-size: var(--font-xs);
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.55));
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .flashcard-container {
   width: 100%;
   max-width: 400px;

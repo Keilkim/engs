@@ -84,8 +84,10 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
       });
       setCheckedPatterns(result.patterns?.map((_, i) => i) || []);
     } catch {
+      // Leave grammarData null so the UI shows a real "분석 실패" state
+      // (a genuinely empty-but-successful analysis still returns normally).
       setError('grammarFailed');
-      setGrammarData({ originalText: word, translation: '', patterns: [] });
+      setGrammarData(null);
     } finally {
       setLoading(false);
     }
@@ -100,7 +102,10 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
   }
 
   async function handleSave() {
-    if (!grammarData || checkedPatterns.length === 0 || loading) return;
+    // Allow saving when there is at least a translation, even with no patterns
+    // (a sentence + its translation is still a useful review card).
+    if (!grammarData || loading) return;
+    if (checkedPatterns.length === 0 && !grammarData.translation) return;
     setLoading(true);
 
     try {

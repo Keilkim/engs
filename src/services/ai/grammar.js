@@ -201,44 +201,33 @@ export async function analyzeGrammarPatterns(text) {
     advanced: 'Target C1-C2 level. Extract advanced, sophisticated expressions including nuanced idioms, literary collocations, and complex patterns.',
   }[level] || '';
 
-  const prompt = `Extract useful English expressions/idioms from this sentence for Korean learners.
+  const prompt = `You are an English tutor making a study card for a Korean learner. Analyze this sentence.
 
 Sentence: "${text}"
 
 LEVEL: ${levelInstruction}
 
+Produce two things:
+1. "translation": a natural Korean translation of the WHOLE sentence.
+2. "patterns": the most useful things to learn from this sentence. This includes BOTH:
+   - Expressions worth memorizing: idioms, phrasal verbs, collocations (use A, B, C for variable parts).
+   - Notable grammar structures: relative clauses, participial phrases, conditionals, passive voice, key verb tenses/modals, comparatives, "to-infinitive"/gerund usage, etc.
+   For each, put a short form in "words" and a concise Korean explanation.
+
 RULES:
-1. Extract ONLY expressions worth memorizing (idioms, phrasal verbs, collocations, useful patterns)
-2. Use A, B, C as placeholders for variable parts
-3. Return simple format for flashcard-style learning
-4. Skip basic grammar - focus on expressions/phrases that native speakers actually use
-5. If no useful expressions, return {"patterns": []}
-6. Match the difficulty of extracted expressions to the learner's level described above
+- ALWAYS fill "translation".
+- Give 1-4 patterns, prioritizing what a learner at the level above would find genuinely useful or tricky.
+- For a grammar structure, "words" can hold the pattern form (e.g. ["who + 동사"], ["as long as"], ["have been Ving"], ["not A but B"]).
+- Only return an empty "patterns" list if the text is NOT a real sentence (e.g. a lone interjection). A normal sentence must yield at least one pattern.
 
-Return JSON:
+Return ONLY valid JSON, no markdown:
 {
+  "translation": "문장 전체의 자연스러운 한국어 번역",
   "patterns": [
-    { "words": ["regardless of A"], "explanation": "A에 상관없이" },
-    { "words": ["be likely to V"], "explanation": "V할 것 같다" }
+    { "words": ["regardless of A"], "explanation": "A에 상관없이 (전치사구)" },
+    { "words": ["who + 동사"], "explanation": "관계대명사 who: 앞의 사람 명사를 꾸며주는 절을 이끔" }
   ]
-}
-
-GOOD examples:
-- regardless of A → A에 상관없이
-- be likely to V → V할 것 같다
-- end up Ving → 결국 V하게 되다
-- be supposed to V → V하기로 되어있다
-- not A but B → A가 아니라 B
-- as long as → ~하는 한
-- in terms of A → A의 관점에서
-- at the expense of A → A를 희생하여
-
-BAD (don't include):
-- Descriptive grammar like "분사구문", "가정법", "관계대명사"
-- Simple verb tenses
-- Basic prepositions
-
-Return ONLY valid JSON, no markdown.`;
+}`;
 
   const data = await fetchGemini({
     contents: [{

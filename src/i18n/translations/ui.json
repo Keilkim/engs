@@ -79,6 +79,7 @@
     "dontKnow": { "en": "Don't know", "ko": "몰라요" },
     "returnHome": { "en": "Return Home", "ko": "홈으로 돌아가기" },
     "reviewCenter": { "en": "Review Center", "ko": "복습 센터" },
+    "from": { "en": "From", "ko": "출처" },
     "viewContext": { "en": "View original context", "ko": "원문 문맥 보기" }
   },
   "chat": {
@@ -215,6 +216,7 @@
     "grammarFailed": { "en": "Grammar analysis failed", "ko": "문법 분석 실패" },
     "analyzing": { "en": "Analyzing...", "ko": "분석 중..." },
     "noPatterns": { "en": "No expressions found", "ko": "분석된 표현이 없습니다" },
+    "translationOnly": { "en": "Translation ready. No extra expressions to highlight — you can still save it as a card.", "ko": "번역이 준비됐어요. 따로 강조할 표현은 없지만 카드로 저장할 수 있어요." },
     "analysisFailed": { "en": "Analysis failed", "ko": "분석 실패" },
     "lookingUp": { "en": "Looking up...", "ko": "조회 중..." }
   },

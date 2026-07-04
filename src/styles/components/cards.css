@@ -300,6 +300,20 @@
   margin: 0;
 }
 
+/* 앞면: 단어 아래에 원문 문장을 작게 표시(해당 단어만 볼드) */
+.question-sentence-context {
+  margin: var(--spacing-md) 0 0 0;
+  font-size: var(--font-sm);
+  line-height: var(--line-height-relaxed);
+  color: rgba(255, 255, 255, 0.7);
+  max-width: 90%;
+}
+
+.question-sentence-context .highlight-word {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
 .answer-text {
   font-size: var(--font-lg);
   color: var(--color-text);

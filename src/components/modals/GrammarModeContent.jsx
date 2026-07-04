@@ -27,6 +27,9 @@ export default function GrammarModeContent({
   if (existingAnnotation && grammarData) {
     return (
       <>
+        {grammarData.translation && (
+          <p className="grammar-translation">{grammarData.translation}</p>
+        )}
         <div className="grammar-patterns">
           {grammarData.patterns?.map((pattern, i) => (
             <div key={i} className="pattern-item">
@@ -65,6 +68,9 @@ export default function GrammarModeContent({
     const hasPatterns = grammarData.patterns?.length > 0;
     return (
       <>
+        {grammarData.translation && (
+          <p className="grammar-translation">{grammarData.translation}</p>
+        )}
         {hasPatterns ? (
           <div className="grammar-patterns">
             {grammarData.patterns.map((pattern, i) => (
@@ -92,13 +98,15 @@ export default function GrammarModeContent({
             ))}
           </div>
         ) : (
-          <div className="empty-state">{ko('wordMenu.noPatterns')}</div>
+          <div className="empty-state">
+            {grammarData.translation ? ko('wordMenu.translationOnly') : ko('wordMenu.noPatterns')}
+          </div>
         )}
         <div className="word-menu-actions">
           <button
             className="save-btn"
             onClick={onSave}
-            disabled={!hasPatterns || checkedPatterns.length === 0}
+            disabled={loading || (hasPatterns ? checkedPatterns.length === 0 : !grammarData.translation)}
           >
             Save
           </button>
