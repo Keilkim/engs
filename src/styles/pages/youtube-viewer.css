@@ -325,6 +325,47 @@
   to { transform: rotate(360deg); }
 }
 
+/* Transparent shield over the iframe during virtual-slow, so tapping the embed's
+   native controls can't auto-unmute the (engine-driven, muted) video. */
+.virtual-slow-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: transparent;
+}
+
+/* Speed button while the virtual-slow engine is loading its first audio window. */
+.speed-button.loading {
+  position: relative;
+  opacity: 0.85;
+  animation: wub-spin-pulse 1s ease-in-out infinite;
+}
+
+@keyframes wub-spin-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 0.5; }
+}
+
+/* Caption row-mode toggle (호흡 단위 ↔ 원본 자막) — sits next to layout-toggle. */
+.row-mode-toggle {
+  flex-shrink: 0;
+  min-width: 40px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color, #444);
+  background: var(--bg-tertiary, #2a2a2a);
+  color: var(--text-secondary, #888);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.row-mode-toggle.active {
+  background: var(--accent-color, #007AFF);
+  border-color: var(--accent-color, #007AFF);
+  color: #fff;
+}
+
 /* Captions Container */
 .captions-container {
   flex: 1;
