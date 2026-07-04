@@ -86,11 +86,13 @@ export async function fetchYouTubeCaptions(videoId, lang = 'en') {
   }
 
   const data = await res.json();
-  if (!data.segments || data.segments.length === 0) return null; // genuinely no captions
+  // Always return an object (segments may be []) so the caller can read the
+  // video duration even when there are no captions.
   return {
-    segments: data.segments,
+    segments: data.segments || [],
     language: data.language || lang,
     source: data.source || 'youtube',
+    durationSec: data.durationSec || 0,
   };
 }
 

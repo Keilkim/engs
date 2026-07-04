@@ -20,15 +20,18 @@ export default async function handler(req, res) {
   if (!videoId) return res.status(400).json({ error: 'videoId is required' });
 
   try {
-    const tracks = await getCaptionTracks(videoId);
+    const player = await getPlayer(videoId);
+    const tracks = player?.captions?.playerCaptionsTracklistRenderer?.captionTracks || null;
+    const durationSec = Number(player?.videoDetails?.lengthSeconds) || 0;
+
     if (!tracks || tracks.length === 0) {
       // Genuinely no caption tracks for this video.
-      return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false });
+      return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false, durationSec });
     }
 
     const track = pickTrack(tracks, lang);
     if (!track?.baseUrl) {
-      return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false });
+      return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false, durationSec });
     }
 
     // Force json3 (strip any format the track URL already carries).
@@ -38,15 +41,15 @@ export default async function handler(req, res) {
 
     const body = await r.text();
     const parsed = parseCaption(body, track.languageCode || lang);
-    if (!parsed) return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false });
-    return res.status(200).json({ ...parsed, hasCaptions: true });
+    if (!parsed) return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false, durationSec });
+    return res.status(200).json({ ...parsed, hasCaptions: true, durationSec });
   } catch (err) {
     // Network/parse failure — NOT a confirmed absence of captions.
     return res.status(502).json({ error: err.message || 'Caption fetch failed' });
   }
 }
 
-async function getCaptionTracks(videoId) {
+async function getPlayer(videoId) {
   const r = await fetch('https://youtubei.googleapis.com/youtubei/v1/player', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'User-Agent': VR_UA },
@@ -66,8 +69,7 @@ async function getCaptionTracks(videoId) {
     }),
   });
   if (!r.ok) throw new Error(`InnerTube player request failed (${r.status})`);
-  const data = await r.json();
-  return data?.captions?.playerCaptionsTracklistRenderer?.captionTracks || null;
+  return r.json();
 }
 
 // Prefer a human (non-ASR) track in the requested language, then any variant,

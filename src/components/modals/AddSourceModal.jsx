@@ -36,7 +36,8 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
   // Link state (a single link input; YouTube is auto-detected from the URL)
   const [youtubePreview, setYoutubePreview] = useState(null); // { videoId, title, author, thumbnail }
   const [youtubeCaptions, setYoutubeCaptions] = useState(null);
-  const [captionStatus, setCaptionStatus] = useState(''); // '' | 'loading' | 'found' | 'not_found'
+  const [captionStatus, setCaptionStatus] = useState(''); // '' | 'loading' | 'found' | 'not_found' | 'error'
+  const [videoDuration, setVideoDuration] = useState(0); // seconds (for Whisper length guard)
   const [warning, setWarning] = useState('');
   const [titleTouched, setTitleTouched] = useState(false); // user typed the title manually
   const linkSeqRef = useRef(0); // guards against out-of-order link responses
@@ -127,6 +128,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
     setYoutubePreview(null);
     setYoutubeCaptions(null);
     setCaptionStatus('');
+    setVideoDuration(0);
     // Clear any previously auto-filled title so a new URL doesn't keep the old title.
     if (!titleTouched) setTitle('');
 
@@ -148,7 +150,8 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
       try {
         const captions = await fetchYouTubeCaptions(parsed.video_id);
         if (seq !== linkSeqRef.current) return; // stale response, discard
-        if (captions && captions.segments.length > 0) {
+        setVideoDuration(captions.durationSec || 0);
+        if (captions.segments.length > 0) {
           setYoutubeCaptions(captions);
           setCaptionStatus('found');
         } else {
@@ -301,6 +304,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
     setYoutubePreview(null);
     setYoutubeCaptions(null);
     setCaptionStatus('');
+    setVideoDuration(0);
     setActiveTab('file');
     onClose();
   }
@@ -474,15 +478,22 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                       </button>
                     )}
                     {(captionStatus === 'not_found' || captionStatus === 'error') && isWhisperAvailable() && (
-                      <button
-                        type="button"
-                        className="submit-button"
-                        onClick={handleWhisperTranscribe}
-                        disabled={loading}
-                        style={{ background: '#7c3aed', marginBottom: '8px' }}
-                      >
-                        {loading ? (loadingStatus || 'Transcribing...') : '음성 인식으로 자막 만들기 (Whisper)'}
-                      </button>
+                      videoDuration > 25 * 60 ? (
+                        <p className="file-hint" style={{ color: '#fb923c', margin: '4px 0 12px', lineHeight: 1.5 }}>
+                          이 영상은 약 {Math.round(videoDuration / 60)}분이라 음성 인식(약 25분 한도)이 어려워요.
+                          25분 이내의 짧은 영상을 이용해 주세요.
+                        </p>
+                      ) : (
+                        <button
+                          type="button"
+                          className="submit-button"
+                          onClick={handleWhisperTranscribe}
+                          disabled={loading}
+                          style={{ background: '#7c3aed', marginBottom: '8px' }}
+                        >
+                          {loading ? (loadingStatus || 'Transcribing...') : '음성 인식으로 자막 만들기 (Whisper)'}
+                        </button>
+                      )
                     )}
                     <button
                       type="submit"
