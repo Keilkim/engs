@@ -1,10 +1,13 @@
 // Vercel Serverless Function - YouTube caption fetcher (server-side).
-// Runs server-to-server so it doesn't need the (now mostly-dead) public CORS
-// proxies the browser had to use. Returns parsed caption segments.
+//
+// Uses the InnerTube "ANDROID_VR" player client — the same trick yt-dlp relies
+// on to bypass YouTube's datacenter-IP / PO-token gating. This works from a
+// server without CORS proxies (now dead) or a scraped watch page (which YouTube
+// serves without caption data to blocked IPs).
 
-const UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-  '(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+const VR_UA =
+  'com.google.android.apps.youtube.vr.oculus/1.60.19 ' +
+  '(Linux; U; Android 12L; en_US; Quest 3 Build/SQ3A.220605.009.A1) gzip';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,81 +20,58 @@ export default async function handler(req, res) {
   if (!videoId) return res.status(400).json({ error: 'videoId is required' });
 
   try {
-    // 1) Get the caption track list from the watch page.
-    const wp = await tracksFromWatchPage(videoId);
-    const tracks = wp.tracks;
+    const tracks = await getCaptionTracks(videoId);
     if (!tracks || tracks.length === 0) {
-      // Genuinely no captions, OR YouTube served this datacenter IP a page
-      // without them. _debug tells which (removed once confirmed).
-      return res.status(200).json({
-        segments: [],
-        source: 'youtube',
-        hasCaptions: false,
-        _debug: { watchOk: wp.ok, status: wp.status, htmlLen: wp.htmlLen, hasCaptionSubstr: wp.hasCaptionSubstr, parsed: wp.parsedCount },
-      });
+      // Genuinely no caption tracks for this video.
+      return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false });
     }
 
-    // 2) Pick the best track and fetch its content (json3 preferred, else xml).
     const track = pickTrack(tracks, lang);
     if (!track?.baseUrl) {
       return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false });
     }
-    const baseUrl = decodeUrl(track.baseUrl);
-    const urls = [baseUrl.includes('fmt=') ? baseUrl : `${baseUrl}&fmt=json3`, baseUrl];
 
-    for (const url of urls) {
-      const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': `${lang},en;q=0.8` } });
-      if (!r.ok) continue;
-      const body = await r.text();
-      const parsed = parseCaption(body, track.languageCode || lang);
-      if (parsed) return res.status(200).json({ ...parsed, hasCaptions: true });
-    }
+    // Force json3 (strip any format the track URL already carries).
+    const jsonUrl = track.baseUrl.replace(/&fmt=[^&]*/g, '') + '&fmt=json3';
+    const r = await fetch(jsonUrl, { headers: { 'User-Agent': VR_UA } });
+    if (!r.ok) return res.status(502).json({ error: `Caption content fetch failed (${r.status})` });
 
-    return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false });
+    const body = await r.text();
+    const parsed = parseCaption(body, track.languageCode || lang);
+    if (!parsed) return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false });
+    return res.status(200).json({ ...parsed, hasCaptions: true });
   } catch (err) {
     // Network/parse failure — NOT a confirmed absence of captions.
     return res.status(502).json({ error: err.message || 'Caption fetch failed' });
   }
 }
 
-async function tracksFromWatchPage(videoId) {
-  const r = await fetch(`https://www.youtube.com/watch?v=${videoId}&hl=en&bpctr=9999999999&has_verified=1`, {
-    headers: {
-      'User-Agent': UA,
-      'Accept-Language': 'en-US,en;q=0.9',
-      // Bypass the EU consent interstitial that hides the player data.
-      Cookie: 'CONSENT=YES+1; SOCS=CAI',
-    },
+async function getCaptionTracks(videoId) {
+  const r = await fetch('https://youtubei.googleapis.com/youtubei/v1/player', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'User-Agent': VR_UA },
+    body: JSON.stringify({
+      videoId,
+      context: {
+        client: {
+          clientName: 'ANDROID_VR',
+          clientVersion: '1.60.19',
+          deviceMake: 'Oculus',
+          deviceModel: 'Quest 3',
+          androidSdkVersion: 32,
+          hl: 'en',
+          gl: 'US',
+        },
+      },
+    }),
   });
-  const out = { ok: r.ok, status: r.status, htmlLen: 0, hasCaptionSubstr: false, parsedCount: 0, tracks: null };
-  if (!r.ok) return out;
-
-  const html = await r.text();
-  out.htmlLen = html.length;
-  const key = '"captionTracks":';
-  const i = html.indexOf(key);
-  out.hasCaptionSubstr = i !== -1;
-  if (i === -1) return out;
-
-  // Bracket-match the array so a caption name's nested `runs:[...]` can't
-  // truncate it (which a non-greedy regex would).
-  const start = html.indexOf('[', i);
-  if (start === -1) return out;
-  let depth = 0, end = -1;
-  for (let k = start; k < html.length; k++) {
-    const c = html[k];
-    if (c === '[') depth++;
-    else if (c === ']') { depth--; if (depth === 0) { end = k; break; } }
-  }
-  if (end === -1) return out;
-  try {
-    const arr = JSON.parse(html.slice(start, end + 1).replace(/\\u0026/g, '&'));
-    out.parsedCount = arr.length;
-    out.tracks = arr;
-  } catch { /* leave tracks null */ }
-  return out;
+  if (!r.ok) throw new Error(`InnerTube player request failed (${r.status})`);
+  const data = await r.json();
+  return data?.captions?.playerCaptionsTracklistRenderer?.captionTracks || null;
 }
 
+// Prefer a human (non-ASR) track in the requested language, then any variant,
+// then any track at all.
 function pickTrack(tracks, lang) {
   return (
     tracks.find((t) => t.languageCode === lang && t.kind !== 'asr') ||
@@ -102,17 +82,13 @@ function pickTrack(tracks, lang) {
   );
 }
 
-function decodeUrl(url) {
-  return url.replace(/\\u0026/g, '&').replace(/&amp;/g, '&').replace(/\\\//g, '/');
-}
-
 function parseCaption(text, lang) {
   const t = (text || '').trim();
   if (!t) return null;
   if (t.startsWith('{')) {
     try { return parseJson3(JSON.parse(t), lang); } catch { return null; }
   }
-  if (t.startsWith('<')) return parseXml(t, lang);
+  if (t.startsWith('<')) return parseSrv3Xml(t, lang);
   return null;
 }
 
@@ -121,7 +97,7 @@ function parseJson3(data, lang) {
   const segments = [];
   for (const ev of data.events) {
     if (!ev.segs || ev.tStartMs === undefined) continue;
-    const text = ev.segs.map((s) => s.utf8).join('').trim();
+    const text = ev.segs.map((s) => s.utf8 || '').join('').replace(/\s+/g, ' ').trim();
     if (!text) continue;
     segments.push({
       id: segments.length,
@@ -134,16 +110,17 @@ function parseJson3(data, lang) {
   return { segments, language: lang, source: 'youtube' };
 }
 
-function parseXml(xml, lang) {
+// srv3 XML fallback: <p t="ms" d="ms"> ... (<s>word</s>) ... </p>
+function parseSrv3Xml(xml, lang) {
   const segments = [];
-  const re = /<text start="([\d.]+)"(?:\s+dur="([\d.]+)")?[^>]*>([\s\S]*?)<\/text>/g;
+  const re = /<p t="(\d+)"(?:\s+d="(\d+)")?[^>]*>([\s\S]*?)<\/p>/g;
   let m;
   while ((m = re.exec(xml)) !== null) {
-    const start = parseFloat(m[1]);
-    const dur = m[2] ? parseFloat(m[2]) : 3;
-    const text = decodeEntities(m[3]).replace(/\s+/g, ' ').trim();
+    const startMs = parseInt(m[1], 10);
+    const durMs = m[2] ? parseInt(m[2], 10) : 3000;
+    const text = decodeEntities(m[3].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
     if (!text) continue;
-    segments.push({ id: segments.length, start, end: start + dur, text });
+    segments.push({ id: segments.length, start: startMs / 1000, end: (startMs + durMs) / 1000, text });
   }
   if (segments.length === 0) return null;
   return { segments, language: lang, source: 'youtube' };
