@@ -1,21 +1,21 @@
-import { useRef, useState, useLayoutEffect, useCallback } from 'react';
+import { useRef, useLayoutEffect, useCallback } from 'react';
 
 /**
- * Sizes its content to fill the available box without ever scrolling: the whole
- * block is uniformly scaled with transform:scale so text stays proportional.
- * Content that's too big shrinks; content with room to spare grows (up to max),
- * so a short grammar answer isn't left tiny in a big card. Always centered.
+ * Sizes its content to fill the card without scrolling. The content spans the
+ * full width (no wasted side space); the font size is scaled by a `--fit`
+ * multiplier found via binary search — the largest value at which the content
+ * still fits both axes. So a sparse card gets big text and a dense one gets
+ * small text, and either way the width is used.
  *
- * The content is inline-block/max-width:100% so its measured width is its real
- * used width (never wider than the box). Scaling by min(bw/cw, bh/ch) therefore
- * keeps it inside the box on BOTH axes — no overflow, no scrollbar. Measurement
- * uses layout size (scrollWidth/Height), which the transform doesn't change, so
- * re-measures are idempotent (no ResizeObserver feedback loop).
+ * `--fit` is written straight to the DOM (no React state) so there's no
+ * setState-in-effect and no extra render. Only the box is observed for resize
+ * (viewport/rotation); the font change never feeds back because the content
+ * isn't observed. Content changes arrive via remount (the flashcard is keyed
+ * per card). A fonts.ready re-fit covers late web-font loads.
  */
-export default function FitBox({ children, min = 0.4, max = 1.6, className = '' }) {
+export default function FitBox({ children, min = 0.6, max = 3, className = '' }) {
   const boxRef = useRef(null);
   const contentRef = useRef(null);
-  const [scale, setScale] = useState(1);
 
   const measure = useCallback(() => {
     const box = boxRef.current;
@@ -23,33 +23,47 @@ export default function FitBox({ children, min = 0.4, max = 1.6, className = '' 
     if (!box || !content) return;
     const bw = box.clientWidth;
     const bh = box.clientHeight;
-    const cw = content.scrollWidth;
-    const ch = content.scrollHeight;
-    if (!bw || !bh || !cw || !ch) return;
-    // 비율 유지: 폭/높이 중 더 빡빡한 쪽에 맞춤. 남으면 확대, 넘치면 축소.
-    const next = Math.min(bw / cw, bh / ch);
-    setScale(Math.max(min, Math.min(max, next)));
+    if (!bw || !bh) return;
+
+    // Reading scrollWidth/Height after setting --fit forces a synchronous
+    // reflow, so each probe reflects that font scale.
+    const fits = (s) => {
+      content.style.setProperty('--fit', String(s));
+      return content.scrollWidth <= bw + 0.5 && content.scrollHeight <= bh + 0.5;
+    };
+
+    let best;
+    if (fits(max)) {
+      best = max; // sparse content: use the biggest allowed
+    } else if (!fits(min)) {
+      best = min; // even smallest overflows: clamp (overflow stays hidden)
+    } else {
+      let lo = min;
+      let hi = max;
+      best = min;
+      for (let i = 0; i < 12; i++) {
+        const mid = (lo + hi) / 2;
+        if (fits(mid)) { best = mid; lo = mid; }
+        else hi = mid;
+      }
+    }
+    content.style.setProperty('--fit', String(best));
   }, [min, max]);
 
   useLayoutEffect(() => {
     measure();
-    // 박스 크기 변화(뷰포트/회전) + 내용 리플로우(폰트 늦은 로드 등)에 재측정.
-    // transform은 레이아웃 크기를 안 바꾸므로 RO가 스케일로 인해 재발화하지 않음.
     const ro = new ResizeObserver(measure);
     if (boxRef.current) ro.observe(boxRef.current);
-    if (contentRef.current) ro.observe(contentRef.current);
-    return () => ro.disconnect();
+    let cancelled = false;
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(() => { if (!cancelled) measure(); });
+    }
+    return () => { cancelled = true; ro.disconnect(); };
   }, [measure]);
 
   return (
     <div ref={boxRef} className={`fit-box ${className}`}>
-      <div
-        ref={contentRef}
-        className="fit-content"
-        style={{ transform: `scale(${scale})` }}
-      >
-        {children}
-      </div>
+      <div ref={contentRef} className="fit-content">{children}</div>
     </div>
   );
 }

@@ -107,7 +107,7 @@
 }
 
 .btn-dont-know:hover {
-  background-color: #FF6961;
+  background-color: color-mix(in srgb, var(--color-error) 82%, white);
 }
 
 .btn-know {
@@ -116,7 +116,7 @@
 }
 
 .btn-know:hover {
-  background-color: #34D860;
+  background-color: color-mix(in srgb, var(--color-success) 85%, white);
 }
 
 .review-progress {
@@ -287,7 +287,7 @@
 }
 
 .eval-button.incorrect:hover {
-  background-color: #FF6961;
+  background-color: color-mix(in srgb, var(--color-error) 82%, white);
 }
 
 .eval-button.correct {
@@ -296,7 +296,7 @@
 }
 
 .eval-button.correct:hover {
-  background-color: #34D860;
+  background-color: color-mix(in srgb, var(--color-success) 85%, white);
 }
 
 /* 앞면 액션: '알아요'(정답, 답 안 봄). 카드 탭은 '몰라요'(=답 공개)로 예약 */
@@ -337,24 +337,6 @@
 
 .eval-button.next:hover {
   border-color: var(--color-accent-light);
-}
-
-/* 자동넘김 카운트다운: 남은 시간을 줄어드는 막대로 시각화. 장면 재생 시 사라짐 */
-.auto-advance-bar {
-  height: 3px;
-  width: 100%;
-  margin-bottom: var(--spacing-sm);
-  border-radius: 999px;
-  background-color: var(--color-accent, rgba(255, 255, 255, 0.4));
-  transform-origin: left center;
-  animation-name: auto-advance-shrink;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
-}
-
-@keyframes auto-advance-shrink {
-  from { transform: scaleX(1); }
-  to { transform: scaleX(0); }
 }
 
 /*
@@ -404,7 +386,7 @@
 .scene-player-video {
   width: 100%;
   aspect-ratio: 16 / 9;
-  background-color: #000;
+  background-color: var(--color-base);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }

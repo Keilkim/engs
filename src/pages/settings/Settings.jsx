@@ -11,6 +11,7 @@ import {
   LEVEL_OPTIONS,
   resetAllSources,
   resetVocabulary,
+  resetGrammar,
 } from '../../services/settings';
 
 export default function Settings() {
@@ -152,6 +153,26 @@ export default function Settings() {
     } catch (err) {
       console.error('Reset vocabulary error:', err);
       setMessage({ type: 'error', text: 'Failed to reset vocabulary' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResetGrammar() {
+    const confirmed = window.confirm(
+      'Are you sure you want to reset your grammar cards?\nAll saved grammar patterns will be permanently deleted.'
+    );
+    if (!confirmed) return;
+
+    setLoading(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      await resetGrammar();
+      setMessage({ type: 'success', text: 'Grammar reset successfully' });
+    } catch (err) {
+      console.error('Reset grammar error:', err);
+      setMessage({ type: 'error', text: 'Failed to reset grammar' });
     } finally {
       setLoading(false);
     }
@@ -360,6 +381,13 @@ export default function Settings() {
               disabled={loading}
             >
               Reset Vocabulary
+            </button>
+            <button
+              className="danger-button"
+              onClick={handleResetGrammar}
+              disabled={loading}
+            >
+              Reset Grammar
             </button>
           </div>
         </section>
