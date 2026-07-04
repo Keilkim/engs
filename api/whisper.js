@@ -62,9 +62,12 @@ export default async function handler(req, res) {
 
       segments = [];
       for (const { c, data } of results) {
-        // Drop the overlap head (already covered by the previous chunk's tail).
+        // Each chunk owns exactly its nominal window [nominal, nextNominal):
+        // drop the leading overlap (previous chunk's tail) and the trailing
+        // overlap (next chunk's head) so nothing is duplicated or gapped.
         const dropBefore = c.i > 0 ? c.nominal : 0;
-        segments.push(...buildSegments(data, c.start, dropBefore));
+        const dropAfter = c.i < n - 1 ? (c.i + 1) * CHUNK_SEC : Infinity;
+        segments.push(...buildSegments(data, c.start, dropBefore, dropAfter));
       }
     }
 
@@ -118,12 +121,13 @@ async function transcribe(audioBuffer, language, apiKey) {
 // Convert one chunk's verbose_json into global-timeline segments.
 // `offset` shifts chunk-relative times to the whole-video timeline; segments
 // starting before `dropBefore` (the overlap head) are discarded as duplicates.
-function buildSegments(data, offset, dropBefore) {
+function buildSegments(data, offset, dropBefore, dropAfter = Infinity) {
   const words = data.words || [];
   const out = [];
   for (const seg of data.segments || []) {
     const gStart = seg.start + offset;
-    if (gStart < dropBefore) continue;
+    // A chunk keeps only segments that start within its owned window.
+    if (gStart < dropBefore || gStart >= dropAfter) continue;
     // Assign each word to its segment by midpoint (neither drops nor
     // double-counts boundary words), then shift to the global timeline.
     const segWords = words
