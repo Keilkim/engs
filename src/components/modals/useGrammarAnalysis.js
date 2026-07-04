@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { analyzeGrammarPatterns } from '../../services/ai';
 import { createAnnotation } from '../../services/annotation';
 import { logError } from '../../utils/errors';
@@ -60,7 +60,15 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Monotonic token for in-flight analyses. Every reset() or new handleAnalyze()
+  // bumps it; a resolved analysis only writes state if its token is still current.
+  // Without this, cancelling mid-analysis and immediately re-long-pressing the
+  // same sentence let the FIRST (stale) Gemini response arrive after re-open and
+  // flash the old result before the new one — the "결과가 2번 뜬다" bug.
+  const analyzeSeqRef = useRef(0);
+
   const reset = useCallback(() => {
+    analyzeSeqRef.current += 1; // invalidate any in-flight analysis
     setGrammarData(null);
     setCheckedPatterns([]);
     setLoading(false);
@@ -72,11 +80,15 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
   }, []);
 
   async function handleAnalyze() {
-    if (!word || loading) return;
+    if (!word) return;
+    const seq = ++analyzeSeqRef.current; // supersedes any earlier in-flight analysis
+    setError('');
+    setGrammarData(null); // clear stale data so nothing old flashes while loading
     setLoading(true);
 
     try {
       const result = await analyzeGrammarPatterns(word);
+      if (seq !== analyzeSeqRef.current) return; // superseded (closed/re-opened) → discard
       setGrammarData({
         originalText: word,
         translation: result.translation || '',
@@ -86,12 +98,13 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
       });
       setCheckedPatterns(result.patterns?.map((_, i) => i) || []);
     } catch {
+      if (seq !== analyzeSeqRef.current) return; // discard a stale failure too
       // Leave grammarData null so the UI shows a real "분석 실패" state
       // (a genuinely empty-but-successful analysis still returns normally).
       setError('grammarFailed');
       setGrammarData(null);
     } finally {
-      setLoading(false);
+      if (seq === analyzeSeqRef.current) setLoading(false);
     }
   }
 
