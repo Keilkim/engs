@@ -4,29 +4,30 @@ export function useCaptionSync(segments, currentTime) {
   const currentSegmentIndex = useMemo(() => {
     if (!segments || segments.length === 0) return -1;
 
-    // Exact match
-    for (let i = 0; i < segments.length; i++) {
-      if (currentTime >= segments[i].start && currentTime < segments[i].end) {
-        return i;
+    const n = segments.length;
+
+    // Before the first caption starts → nothing active.
+    if (currentTime < segments[0].start) return -1;
+
+    // Binary search for the right-most segment with start <= currentTime.
+    // For overlapping captions this deliberately prefers the LATER segment so
+    // the highlight follows the newest spoken line instead of lagging one line
+    // behind. Gaps between segments keep the previous line active (as before).
+    // O(log n) keeps this cheap even for very long (800+ line) transcripts.
+    let lo = 0;
+    let hi = n - 1;
+    let cand = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (segments[mid].start <= currentTime) {
+        cand = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
       }
     }
 
-    // Gap handling: if between two segments, keep the previous one active
-    for (let i = 0; i < segments.length; i++) {
-      if (currentTime < segments[i].start) {
-        if (i > 0 && currentTime >= segments[i - 1].end) {
-          return i - 1;
-        }
-        return -1;
-      }
-    }
-
-    // After last segment
-    if (currentTime >= segments[segments.length - 1].end) {
-      return segments.length - 1;
-    }
-
-    return -1;
+    return cand;
   }, [segments, currentTime]);
 
   const isActiveIndex = useCallback((index) => {

@@ -19,15 +19,22 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
   const [youtubePreview, setYoutubePreview] = useState(null); // { videoId, title, author, thumbnail }
   const [youtubeCaptions, setYoutubeCaptions] = useState(null);
   const [captionStatus, setCaptionStatus] = useState(''); // '' | 'loading' | 'found' | 'not_found'
+  const [warning, setWarning] = useState('');
+  const [titleTouched, setTitleTouched] = useState(false); // user typed the title manually
+  const youtubeSeqRef = useRef(0); // guards against out-of-order YouTube URL responses
 
   if (!isOpen) return null;
 
   async function handleFileUpload(e) {
-    const file = e.target.files[0];
+    const input = e.target;
+    const file = input.files[0];
+    // Reset immediately so re-selecting the same file re-fires onChange (allows retry).
+    input.value = '';
     if (!file) return;
 
     setLoading(true);
     setError('');
+    setWarning('');
 
     try {
       const fileType = file.type.includes('pdf') ? 'pdf' : 'image';
@@ -52,6 +59,10 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
       } else if (fileType === 'pdf') {
         try {
           pages = await convertPdfToImages(file, setLoadingStatus);
+          // Soft warning: large PDFs are stored inline and may exceed the request size limit.
+          if (pages.length > 30) {
+            setWarning(`이 PDF는 ${pages.length}페이지로 용량이 커서 저장에 실패할 수 있어요. 실패하면 더 적은 페이지로 나눠서 올려보세요.`);
+          }
           if (pages.length > 0) {
             setLoadingStatus('Generating thumbnail...');
             screenshot = await generateThumbnailFromPage(pages[0]);
@@ -74,8 +85,9 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
 
       onSuccess();
       handleClose();
-    } catch {
-      setError('Failed to upload file');
+    } catch (err) {
+      // Surface the real cause (auth expiry, oversized PDF insert, etc.) instead of a generic message.
+      setError(err?.message || 'Failed to upload file');
     } finally {
       setLoading(false);
       setLoadingStatus('');
@@ -92,6 +104,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
 
     setLoading(true);
     setError('');
+    setWarning('');
 
     try {
       setLoadingStatus('Capturing screenshot...');
@@ -115,8 +128,8 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
 
       onSuccess();
       handleClose();
-    } catch {
-      setError('Failed to capture screenshot');
+    } catch (err) {
+      setError(err?.message || 'Failed to capture screenshot');
     } finally {
       setLoading(false);
       setLoadingStatus('');
@@ -125,11 +138,16 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
 
   // YouTube URL input handler - auto-detect and load metadata
   async function handleYoutubeUrlChange(inputUrl) {
+    // Bump the sequence token: only the latest input's async responses are applied.
+    const seq = ++youtubeSeqRef.current;
+
     setYoutubeUrl(inputUrl);
     setError('');
     setYoutubePreview(null);
     setYoutubeCaptions(null);
     setCaptionStatus('');
+    // Clear any previously auto-filled title so a new URL doesn't keep the old video's title.
+    if (!titleTouched) setTitle('');
 
     const parsed = parseYouTubeUrl(inputUrl);
     if (!parsed) return;
@@ -137,16 +155,18 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
     try {
       setCaptionStatus('loading');
       const metadata = await getYouTubeMetadata(parsed.video_id);
+      if (seq !== youtubeSeqRef.current) return; // a newer URL was entered; ignore stale response
       setYoutubePreview({
         videoId: parsed.video_id,
         title: metadata.title,
         author: metadata.author,
         thumbnail: metadata.thumbnail_url_hq,
       });
-      if (!title) setTitle(metadata.title);
+      if (!titleTouched) setTitle(metadata.title);
 
       // Auto-fetch captions
       const captions = await fetchYouTubeCaptions(parsed.video_id);
+      if (seq !== youtubeSeqRef.current) return; // stale response, discard
       if (captions && captions.segments.length > 0) {
         setYoutubeCaptions(captions);
         setCaptionStatus('found');
@@ -154,6 +174,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
         setCaptionStatus('not_found');
       }
     } catch {
+      if (seq !== youtubeSeqRef.current) return;
       setCaptionStatus('not_found');
     }
   }
@@ -167,6 +188,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
 
     setLoading(true);
     setError('');
+    setWarning('');
 
     try {
       setLoadingStatus('Saving YouTube source...');
@@ -194,8 +216,19 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
 
   async function handleWhisperTranscribe() {
     if (!youtubePreview) return;
+
+    // Cost/time confirmation before kicking off a paid, potentially long transcription.
+    const perMinute = calculateWhisperCost(60); // { usd, krw } per minute of audio
+    const confirmed = window.confirm(
+      '음성 인식(Whisper)은 서버에서 유료 API를 사용합니다.\n\n' +
+      `비용: 영상 1분당 약 $${perMinute.usd.toFixed(3)} (약 ${perMinute.krw}원)\n` +
+      '소요 시간: 영상 길이에 따라 수 분이 걸릴 수 있어요.\n\n계속하시겠어요?'
+    );
+    if (!confirmed) return;
+
     setLoading(true);
     setError('');
+    setWarning('');
 
     try {
       const result = await transcribeYouTubeWithWhisper(
@@ -223,6 +256,8 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
     setYoutubeUrl('');
     setTitle('');
     setError('');
+    setWarning('');
+    setTitleTouched(false);
     setYoutubePreview(null);
     setYoutubeCaptions(null);
     setCaptionStatus('');
@@ -230,12 +265,24 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
     onClose();
   }
 
+  // Block closing while an upload/OCR is in flight so the user doesn't lose progress
+  // (and re-upload duplicates). Overlay taps are ignored; the ✕ button confirms first.
+  function handleOverlayClick() {
+    if (loading) return;
+    handleClose();
+  }
+
+  function handleCloseButton() {
+    if (loading && !window.confirm('업로드가 진행 중입니다. 창을 닫으면 진행이 취소돼요. 닫을까요?')) return;
+    handleClose();
+  }
+
   return (
-    <div className="modal-overlay" onClick={handleClose}>
+    <div className="modal-overlay" onClick={handleOverlayClick}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2><TranslatableText textKey="addSource.addNewSource">Add New Source</TranslatableText></h2>
-          <button className="modal-close" onClick={handleClose}>
+          <button className="modal-close" onClick={handleCloseButton}>
             ✕
           </button>
         </div>
@@ -262,6 +309,9 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
         </div>
 
         {error && <div className="error-message">{error}</div>}
+        {warning && (
+          <div className="file-hint" style={{ color: '#fb923c', padding: '0 4px' }}>{warning}</div>
+        )}
 
         <div className="modal-body">
           <div className="input-group">
@@ -272,7 +322,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
               id="title"
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => { setTitle(e.target.value); setTitleTouched(true); }}
               placeholder="Enter a title"
             />
           </div>
@@ -364,9 +414,9 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                 </div>
               )}
 
-              {captionStatus === 'not_found' && !isWhisperAvailable() && (
+              {captionStatus === 'not_found' && (
                 <p className="file-hint" style={{ color: '#fb923c' }}>
-                  캡션이 없습니다. Whisper 전사를 사용하려면 OPENAI_API_KEY를 서버 환경변수에 설정하세요.
+                  이 영상에는 사용할 수 있는 자막이 없어요. 음성 인식으로 자막을 만들거나, 자막 없이 먼저 저장할 수 있어요.
                 </p>
               )}
 
@@ -378,24 +428,29 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                 >
                   캡션 확인중...
                 </button>
-              ) : captionStatus === 'not_found' && isWhisperAvailable() ? (
-                <button
-                  type="button"
-                  className="submit-button"
-                  onClick={handleWhisperTranscribe}
-                  disabled={loading}
-                  style={{ background: '#7c3aed' }}
-                >
-                  {loading ? (loadingStatus || 'Transcribing...') : 'Whisper로 전사하기'}
-                </button>
               ) : (
-                <button
-                  type="submit"
-                  className="submit-button"
-                  disabled={loading || !youtubePreview || captionStatus !== 'found'}
-                >
-                  {loading ? (loadingStatus || 'Saving...') : 'Save'}
-                </button>
+                <>
+                  {captionStatus === 'not_found' && isWhisperAvailable() && (
+                    <button
+                      type="button"
+                      className="submit-button"
+                      onClick={handleWhisperTranscribe}
+                      disabled={loading}
+                      style={{ background: '#7c3aed', marginBottom: '8px' }}
+                    >
+                      {loading ? (loadingStatus || 'Transcribing...') : '음성 인식으로 자막 만들기 (Whisper)'}
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="submit-button"
+                    disabled={loading || !youtubePreview}
+                  >
+                    {loading
+                      ? (loadingStatus || 'Saving...')
+                      : (captionStatus === 'not_found' ? '자막 없이 저장' : 'Save')}
+                  </button>
+                </>
               )}
             </form>
           )}

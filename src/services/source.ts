@@ -1,6 +1,45 @@
 import { supabase } from './supabase';
 import type { Source, SourceListItem, OcrData, YouTubeData, CaptionsData } from '../types';
 
+const STORAGE_BUCKET = 'sources';
+
+/**
+ * Resolve the current user's id from the locally cached session (no network round-trip).
+ * Throws a user-facing auth error when the session is missing/expired so callers can
+ * surface a "please sign in again" message instead of a raw TypeError.
+ */
+export async function requireUserId(): Promise<string> {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  const userId = session?.user?.id;
+  if (!userId) {
+    throw new Error('로그인이 만료되었습니다. 다시 로그인한 후 시도해 주세요.');
+  }
+  return userId;
+}
+
+/**
+ * Extract the storage object path from a public URL so it can be removed later.
+ * Returns null when the URL is not a Supabase public-object URL for this bucket
+ * (e.g. YouTube thumbnails or raw web URLs stored in file_path for other source types).
+ */
+export function storagePathFromPublicUrl(
+  fileUrl: string | null | undefined,
+  bucket = STORAGE_BUCKET
+): string | null {
+  if (!fileUrl) return null;
+  const marker = `/storage/v1/object/public/${bucket}/`;
+  const idx = fileUrl.indexOf(marker);
+  if (idx === -1) return null;
+  const path = fileUrl.slice(idx + marker.length);
+  if (!path) return null;
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+
 export async function getSources(): Promise<SourceListItem[]> {
   const { data, error } = await supabase
     .from('sources')
@@ -38,7 +77,7 @@ interface CreateSourceInput {
 }
 
 export async function createSource(source: CreateSourceInput): Promise<Source> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const userId = await requireUserId();
 
   console.log('[DB] Creating source with ocr_data:', source.ocr_data ?
     `${source.ocr_data.pages?.length} pages, first page words: ${source.ocr_data.pages?.[0]?.words?.length || 0}` :
@@ -48,7 +87,7 @@ export async function createSource(source: CreateSourceInput): Promise<Source> {
     .from('sources')
     .insert({
       ...source,
-      user_id: user!.id,
+      user_id: userId,
     })
     .select()
     .single();
@@ -65,12 +104,32 @@ export async function createSource(source: CreateSourceInput): Promise<Source> {
 }
 
 export async function deleteSource(id: string): Promise<void> {
+  // Look up the file info first so we can clean up the storage object afterwards.
+  const { data: row } = await supabase
+    .from('sources')
+    .select('type, file_path')
+    .eq('id', id)
+    .single();
+
+  // Remove chat logs tied to this source. chat_logs.source_id is ON DELETE SET NULL,
+  // so without this they would linger as orphaned rows in the general chat history.
+  await supabase.from('chat_logs').delete().eq('source_id', id);
+
   const { error } = await supabase
     .from('sources')
     .delete()
     .eq('id', id);
 
   if (error) throw error;
+
+  // Best-effort storage cleanup (only pdf/image types store an uploaded object;
+  // youtube/screenshot/url keep a raw external URL in file_path).
+  if (row && (row.type === 'pdf' || row.type === 'image')) {
+    const path = storagePathFromPublicUrl(row.file_path);
+    if (path) {
+      await supabase.storage.from(STORAGE_BUCKET).remove([path]);
+    }
+  }
 }
 
 export async function updateSource(id: string, updates: Partial<Source>) {
@@ -85,10 +144,12 @@ export async function updateSource(id: string, updates: Partial<Source>) {
   return data as Source;
 }
 
-export async function uploadFile(file: File, bucket = 'sources') {
+export async function uploadFile(file: File, bucket = STORAGE_BUCKET) {
+  const userId = await requireUserId();
   const fileExt = file.name.split('.').pop();
-  const fileName = `${Date.now()}.${fileExt}`;
-  const filePath = `${fileName}`;
+  // Per-user folder + timestamp + random suffix: avoids enumeration and collisions
+  // when two uploads land in the same millisecond. Bucket stays public (getPublicUrl works).
+  const filePath = `${userId}/${Date.now()}-${crypto.randomUUID()}.${fileExt}`;
 
   const { data, error } = await supabase.storage
     .from(bucket)
@@ -140,7 +201,7 @@ interface CreateYouTubeSourceInput {
 }
 
 export async function createYouTubeSource({ title, youtubeData, captionsData }: CreateYouTubeSourceInput): Promise<Source> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const userId = await requireUserId();
 
   console.log('[DB] Creating YouTube source:', {
     videoId: youtubeData.video_id,
@@ -157,7 +218,7 @@ export async function createYouTubeSource({ title, youtubeData, captionsData }: 
       youtube_data: youtubeData,
       captions_data: captionsData,
       source_language: 'en',
-      user_id: user!.id,
+      user_id: userId,
     })
     .select()
     .single();

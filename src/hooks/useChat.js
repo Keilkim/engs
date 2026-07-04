@@ -36,25 +36,31 @@ export function useChat({ sourceId, sourceContext = '', topicTitle = '' }) {
   }
 
   const handleSend = useCallback(async (text, { languageOverride, conversationMode } = {}) => {
-    if (!text.trim() || loading) return;
+    const trimmed = text.trim();
+    if (!trimmed || loading) return;
 
     const userMessage = {
       tempId: Date.now(),
       role: 'user',
-      message: text.trim(),
+      message: trimmed,
     };
 
     setMessages(prev => [...prev, userMessage]);
     setLoading(true);
     setStreamingText('');
 
-    try {
-      // Save user message
-      const savedUser = await saveChatMessage(text.trim(), 'user', sourceId);
-      setMessages(prev =>
-        prev.map(m => m.tempId === userMessage.tempId ? savedUser : m)
-      );
+    // Save the user message in the background. A save failure must NOT block the
+    // (paid) AI call — keep the optimistic message on screen either way.
+    saveChatMessage(trimmed, 'user', sourceId)
+      .then(savedUser => {
+        if (savedUser) {
+          setMessages(prev => prev.map(m => m.tempId === userMessage.tempId ? savedUser : m));
+        }
+      })
+      .catch(() => { /* keep optimistic user message */ });
 
+    let fullText = '';
+    try {
       // Build context with topic restriction
       let context = sourceContext;
       if (topicTitle) {
@@ -62,23 +68,17 @@ export function useChat({ sourceId, sourceContext = '', topicTitle = '' }) {
         context = topicInstruction + (context ? '\n\n' + context : '');
       }
 
-      // Get current messages for history
-      const currentMessages = [...messages, savedUser || userMessage];
+      // History already includes the current user message as the last turn.
+      const currentMessages = [...messages, userMessage];
 
       // Stream AI response
-      const fullText = await chatStream(
-        text.trim(),
+      fullText = await chatStream(
+        trimmed,
         context,
         currentMessages,
         (_chunk, full) => setStreamingText(full),
         { languageOverride, conversationMode }
       );
-
-      // Save AI response first, then clear streaming text together with adding message
-      // This ensures both updates batch in one render so TTS useEffect can detect the transition
-      const savedAi = await saveChatMessage(fullText, 'assistant', sourceId);
-      setStreamingText('');
-      setMessages(prev => [...prev, savedAi]);
     } catch {
       setStreamingText('');
       setMessages(prev => [...prev, {
@@ -86,6 +86,30 @@ export function useChat({ sourceId, sourceContext = '', topicTitle = '' }) {
         role: 'assistant',
         message: 'Sorry, an error occurred. Please try again.',
       }]);
+      setLoading(false);
+      return;
+    }
+
+    // AI answered. Persist it, but if saving fails, DON'T discard the answer —
+    // show it with a temp id and retry the save in the background.
+    const aiTempId = Date.now() + 1;
+    try {
+      const savedAi = await saveChatMessage(fullText, 'assistant', sourceId);
+      // Clear streaming + append in the same tick so the TTS effect can detect
+      // the streaming→message transition.
+      setStreamingText('');
+      setMessages(prev => [...prev, savedAi]);
+    } catch {
+      setStreamingText('');
+      setMessages(prev => [...prev, { tempId: aiTempId, role: 'assistant', message: fullText }]);
+      // Background retry of the save only (answer already visible to the user).
+      saveChatMessage(fullText, 'assistant', sourceId)
+        .then(savedAi => {
+          if (savedAi) {
+            setMessages(prev => prev.map(m => m.tempId === aiTempId ? savedAi : m));
+          }
+        })
+        .catch(() => { /* leave temp message; user still has the answer */ });
     } finally {
       setLoading(false);
     }

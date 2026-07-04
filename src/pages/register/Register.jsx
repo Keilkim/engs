@@ -29,6 +29,11 @@ export default function Register() {
       setError('Password must be at least 8 characters');
       return false;
     }
+    // Match the stated policy ("8+ characters, letters & numbers").
+    if (!/[a-zA-Z]/.test(formData.password) || !/[0-9]/.test(formData.password)) {
+      setError('Password must include both letters and numbers');
+      return false;
+    }
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords don't match");
       return false;
@@ -53,13 +58,23 @@ export default function Register() {
     setLoading(true);
 
     try {
-      await signUp(formData.email, formData.password, formData.nickname);
+      const data = await signUp(formData.email, formData.password, formData.nickname);
+      // Supabase returns a user with an EMPTY identities array when the email is
+      // already registered (email-enumeration protection). Treat that as "already
+      // in use" instead of showing the false "verification email sent" modal.
+      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        setError('This email is already registered. Please sign in or reset your password.');
+        return;
+      }
       setShowVerificationModal(true);
     } catch (err) {
-      if (err.message.includes('already registered')) {
-        setError('Email already in use');
+      const msg = (err?.message || '').toLowerCase();
+      if (msg.includes('already registered') || msg.includes('already in use') || msg.includes('user already')) {
+        setError('This email is already registered. Please sign in or reset your password.');
+      } else if (msg.includes('network') || msg.includes('fetch')) {
+        setError('Network error. Please check your connection and try again.');
       } else {
-        setError('Sign up failed. Please try again');
+        setError(err?.message || 'Sign up failed. Please try again');
       }
     } finally {
       setLoading(false);

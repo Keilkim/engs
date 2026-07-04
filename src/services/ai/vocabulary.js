@@ -10,11 +10,17 @@ async function googleTranslate(text, targetLang = 'ko') {
   const response = await fetch(url);
   if (!response.ok) throw new Error('Translation failed');
   const data = await response.json();
-  return data[0]?.map(item => item[0]).join('') || text;
+  const joined = data[0]?.map(item => item[0]).join('') || text;
+  // Contract: always return a plain string.
+  return typeof joined === 'string' ? joined : String(joined ?? '');
 }
 
 /**
- * Word lookup using Free Dictionary API + Google Translate
+ * Word lookup using Free Dictionary API + Google Translate.
+ *
+ * Contract: the returned `definition` is ALWAYS a string. On failure the
+ * result carries a non-empty `error` code and an empty `definition` so callers
+ * can surface the error instead of persisting an empty/garbage card.
  */
 export async function lookupWord(word) {
   const cleanWord = word.replace(/[.,;:!?"'()[\]{}]/g, '').trim();
@@ -47,7 +53,7 @@ export async function lookupWord(word) {
       return {
         word: cleanWord,
         phonetic,
-        definition: translated,
+        definition: typeof translated === 'string' ? translated : '',
       };
     }
   } catch (err) {
@@ -59,12 +65,14 @@ export async function lookupWord(word) {
     return {
       word: cleanWord,
       phonetic: '',
-      definition: translated,
+      definition: typeof translated === 'string' ? translated : '',
     };
   } catch (err) {
     logError('lookupWord.translate', err);
   }
 
+  // gtx endpoint blocked / network filtered: return an explicit error so the
+  // caller can notify the user instead of silently saving an empty definition.
   return {
     word: cleanWord,
     phonetic: '',

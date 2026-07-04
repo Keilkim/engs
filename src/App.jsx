@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TranslationProvider } from './i18n';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -16,6 +16,17 @@ const Mypage = lazy(() => import('./pages/mypage/Mypage'));
 const Settings = lazy(() => import('./pages/settings/Settings'));
 const Onboarding = lazy(() => import('./pages/onboarding/Onboarding'));
 const YouTubeViewer = lazy(() => import('./pages/youtube-viewer/YouTubeViewer'));
+const ForgotPassword = lazy(() => import('./pages/forgot-password/ForgotPassword'));
+const Terms = lazy(() => import('./pages/terms/Terms'));
+const Privacy = lazy(() => import('./pages/privacy/Privacy'));
+
+// Unknown URL: send authenticated users home, everyone else to login,
+// so a typo/bookmark doesn't look like a lost session to a logged-in user.
+function NotFoundRedirect() {
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) return <div className="loading-screen">Loading...</div>;
+  return <Navigate to={isAuthenticated ? '/' : '/login'} replace />;
+}
 
 function App() {
   return (
@@ -28,6 +39,9 @@ function App() {
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
 
           {/* Protected Routes */}
           <Route
@@ -91,7 +105,7 @@ function App() {
           />
 
           {/* Catch-all route */}
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<NotFoundRedirect />} />
           </Routes>
           </Suspense>
           </BrowserRouter>

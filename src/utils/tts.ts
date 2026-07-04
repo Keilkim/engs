@@ -94,13 +94,18 @@ export function isSpeaking(): boolean {
  */
 export function preloadVoices(): Promise<void> {
   return new Promise((resolve) => {
-    const voices = window.speechSynthesis?.getVoices();
+    const synth = window.speechSynthesis;
+    if (!synth) {
+      resolve();
+      return;
+    }
+    const voices = synth.getVoices();
     if (voices && voices.length > 0) {
       resolve();
-    } else if (window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = () => resolve();
     } else {
-      resolve();
+      // Use an event listener (not onvoiceschanged assignment) so we never
+      // clobber a handler another part of the app may have registered.
+      synth.addEventListener('voiceschanged', () => resolve(), { once: true });
     }
   });
 }

@@ -36,10 +36,29 @@ export function extractOcrText(source) {
   return source.content || '';
 }
 
+// Cap the learning-material context per request so a 100-page PDF isn't
+// re-sent in full on every turn (token cost + first-chunk latency).
+const MAX_CONTEXT_CHARS = 8000;
+
+function truncateContext(context) {
+  if (!context || context.length <= MAX_CONTEXT_CHARS) return context;
+  return context.slice(0, MAX_CONTEXT_CHARS) + '\n\n[... content truncated ...]';
+}
+
+// Session cache for the My Dictionary context so we don't do 2 DB round-trips
+// on every single message. Short TTL so newly saved words still appear soon.
+const MY_DICT_TTL = 5 * 60 * 1000;
+let myDictCache = { lang: null, value: '', ts: 0 };
+
 /**
  * Build context from user's My Dictionary (vocabulary + grammar patterns)
  */
 async function buildMyDictionaryContext(chatLang) {
+  const now = Date.now();
+  if (myDictCache.lang === chatLang && now - myDictCache.ts < MY_DICT_TTL) {
+    return myDictCache.value;
+  }
+
   try {
     const [vocabItems, grammarItems] = await Promise.all([
       getVocabulary(),
@@ -47,6 +66,7 @@ async function buildMyDictionaryContext(chatLang) {
     ]);
 
     if (vocabItems.length === 0 && grammarItems.length === 0) {
+      myDictCache = { lang: chatLang, value: '', ts: now };
       return '';
     }
 
@@ -92,7 +112,9 @@ Saved grammar patterns: ${grammarList.join(' / ') || 'None'}
 `,
     };
 
-    return contextByLang[chatLang] || contextByLang.Korean;
+    const value = contextByLang[chatLang] || contextByLang.Korean;
+    myDictCache = { lang: chatLang, value, ts: now };
+    return value;
   } catch (err) {
     logError('buildMyDictionaryContext', err);
     return '';
@@ -107,10 +129,20 @@ function buildConversationHistory(messages, maxTurns = 6) {
 
   const recentMessages = messages.slice(-maxTurns * 2);
 
-  return recentMessages.map(msg => ({
-    role: msg.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: msg.message }],
-  }));
+  const mapped = recentMessages
+    .filter(msg => (msg.message ?? '').trim() !== '') // skip empty turns → no 'undefined'
+    .map(msg => ({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.message ?? '' }],
+    }));
+
+  // Gemini requires the turn list to start with a 'user' role. If slicing left
+  // a leading model turn, drop leading model turns to avoid a 400.
+  while (mapped.length > 0 && mapped[0].role !== 'user') {
+    mapped.shift();
+  }
+
+  return mapped;
 }
 
 /**
@@ -268,20 +300,18 @@ export async function chat(message, context = '', conversationHistory = []) {
   const level = getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate');
   const myDictContext = await buildMyDictionaryContext(chatLang);
 
-  const systemPrompts = getSystemPrompts(context, level);
+  const systemPrompts = getSystemPrompts(truncateContext(context), level);
   const systemPrompt = (systemPrompts[chatLang] || systemPrompts.Korean) + myDictContext;
 
+  // `conversationHistory` already includes the current user message as its last
+  // turn, so use it as-is (don't append `message` again → no duplicate).
   const history = buildConversationHistory(conversationHistory);
-
   const contents = history.length > 0
-    ? [
-        { role: 'user', parts: [{ text: systemPrompt + '\n\n---\n\n' + history[0]?.parts?.[0]?.text || '' }] },
-        ...history.slice(1),
-        { role: 'user', parts: [{ text: message }] },
-      ]
-    : [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + message }] }];
+    ? history
+    : [{ role: 'user', parts: [{ text: message ?? '' }] }];
 
   const data = await fetchGemini({
+    systemInstruction: { parts: [{ text: systemPrompt }] },
     contents,
     generationConfig: {
       temperature: 0.7,
@@ -300,7 +330,7 @@ export async function chatStream(message, context = '', conversationHistory = []
   const level = getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate');
   const myDictContext = await buildMyDictionaryContext(chatLang);
 
-  const systemPrompts = getSystemPrompts(context, level);
+  const systemPrompts = getSystemPrompts(truncateContext(context), level);
   let systemPrompt = (systemPrompts[chatLang] || systemPrompts.Korean) + myDictContext;
 
   if (conversationMode) {
@@ -313,17 +343,15 @@ You are having a real-time voice conversation with the user for English practice
 - Do NOT use markdown, bullet points, or formatting - just natural spoken English`;
   }
 
+  // `conversationHistory` already ends with the current user message, so use it
+  // directly — don't append `message` again (that double-sent the question).
   const history = buildConversationHistory(conversationHistory);
-
   const contents = history.length > 0
-    ? [
-        { role: 'user', parts: [{ text: systemPrompt + '\n\n---\n\n' + history[0]?.parts?.[0]?.text || '' }] },
-        ...history.slice(1),
-        { role: 'user', parts: [{ text: message }] },
-      ]
-    : [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + message }] }];
+    ? history
+    : [{ role: 'user', parts: [{ text: message ?? '' }] }];
 
   const response = await fetchGeminiStream({
+    systemInstruction: { parts: [{ text: systemPrompt }] },
     contents,
     generationConfig: {
       temperature: 0.7,
@@ -334,33 +362,47 @@ You are having a real-time voice conversation with the user for English practice
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let fullText = '';
+  let buffer = '';
+
+  // Parse a single SSE line ("data: {...}"). Tolerant of trailing \r and
+  // keep-alive/comment lines.
+  const processLine = (rawLine) => {
+    const line = rawLine.replace(/\r$/, '');
+    if (!line.startsWith('data: ')) return;
+
+    const jsonStr = line.slice(6).trim();
+    if (!jsonStr || jsonStr === '[DONE]') return;
+
+    try {
+      const data = JSON.parse(jsonStr);
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      if (text) {
+        fullText += text;
+        onChunk?.(text, fullText);
+      }
+    } catch {
+      // Malformed/partial JSON - ignore this line.
+    }
+  };
 
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n');
+      // Carry an incomplete trailing line over to the next read so a line split
+      // across chunk boundaries isn't silently dropped.
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const jsonStr = line.slice(6);
-            if (jsonStr.trim() === '[DONE]') continue;
+      for (const line of lines) processLine(line);
+    }
 
-            const data = JSON.parse(jsonStr);
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-            if (text) {
-              fullText += text;
-              onChunk?.(text, fullText);
-            }
-          } catch {
-            // JSON parsing failure - ignore
-          }
-        }
-      }
+    // Flush any bytes still buffered in the decoder + the last partial line.
+    buffer += decoder.decode();
+    if (buffer) {
+      for (const line of buffer.split('\n')) processLine(line);
     }
   } finally {
     reader.releaseLock();

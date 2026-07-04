@@ -30,6 +30,19 @@ export function analyzeGrammar(text) {
   const terms = doc.terms().json();
   const sentences = doc.sentences().json();
 
+  // Passive voice and relative clauses break the naive
+  // "first noun after the verb = object" heuristic (e.g. it colours the noun
+  // inside a prepositional phrase as the direct object). Detect them so the
+  // S/V/O overlay stays conservative instead of teaching a wrong structure.
+  let isComplex = false;
+  try {
+    isComplex = doc.has('#Passive')
+      || doc.has('(am|is|are|was|were|be|been|being) #Adverb? #PastTense')
+      || doc.has('(who|whom|whose|which|that) #Verb');
+  } catch {
+    isComplex = false;
+  }
+
   const words = terms.map((term, index) => {
     const innerTerm = term.terms?.[0] || term;
     const tags = innerTerm.tags || term.tags || [];
@@ -105,55 +118,63 @@ export function analyzeGrammar(text) {
     }
   }
 
-  if (verbIndex > 0) {
-    for (let i = verbIndex - 1; i >= 0; i--) {
-      if (words[i].role === 'Noun' || words[i].role === 'Pronoun') {
-        subjectIndex = i;
-        words[i].label = 'S';
-        words[i].color = GRAMMAR_COLORS.Subject;
-        break;
+  // Only overlay S/V/O roles for simple active declarative sentences.
+  if (!isComplex) {
+    if (verbIndex > 0) {
+      for (let i = verbIndex - 1; i >= 0; i--) {
+        if (words[i].role === 'Noun' || words[i].role === 'Pronoun') {
+          subjectIndex = i;
+          words[i].label = 'S';
+          words[i].color = GRAMMAR_COLORS.Subject;
+          break;
+        }
       }
     }
-  }
 
-  if (verbIndex === -1) {
-    for (let i = 0; i < words.length; i++) {
-      if (words[i].role === 'Noun' || words[i].role === 'Pronoun') {
-        subjectIndex = i;
-        words[i].label = 'S';
-        words[i].color = GRAMMAR_COLORS.Subject;
-        break;
+    if (verbIndex === -1) {
+      for (let i = 0; i < words.length; i++) {
+        if (words[i].role === 'Noun' || words[i].role === 'Pronoun') {
+          subjectIndex = i;
+          words[i].label = 'S';
+          words[i].color = GRAMMAR_COLORS.Subject;
+          break;
+        }
       }
     }
-  }
 
-  if (verbIndex !== -1) {
-    for (let i = verbIndex + 1; i < words.length; i++) {
-      if (words[i].role === 'Noun' || words[i].role === 'Pronoun') {
-        objectIndex = i;
-        words[i].label = 'O';
-        words[i].color = GRAMMAR_COLORS.Object;
-        break;
+    if (verbIndex !== -1) {
+      let sawPreposition = false;
+      for (let i = verbIndex + 1; i < words.length; i++) {
+        if (words[i].role === 'Preposition') sawPreposition = true;
+        if (words[i].role === 'Noun' || words[i].role === 'Pronoun') {
+          // A noun that follows a preposition is a prepositional object, not the
+          // verb's direct object — don't mislabel it as 'O'.
+          if (sawPreposition) break;
+          objectIndex = i;
+          words[i].label = 'O';
+          words[i].color = GRAMMAR_COLORS.Object;
+          break;
+        }
       }
     }
-  }
 
-  if (subjectIndex !== -1 && verbIndex !== -1) {
-    connections.push({
-      from: subjectIndex,
-      to: verbIndex,
-      label: 'S → V',
-      color: '#60a5fa',
-    });
-  }
+    if (subjectIndex !== -1 && verbIndex !== -1) {
+      connections.push({
+        from: subjectIndex,
+        to: verbIndex,
+        label: 'S → V',
+        color: '#60a5fa',
+      });
+    }
 
-  if (verbIndex !== -1 && objectIndex !== -1) {
-    connections.push({
-      from: verbIndex,
-      to: objectIndex,
-      label: 'V → O',
-      color: '#4ade80',
-    });
+    if (verbIndex !== -1 && objectIndex !== -1) {
+      connections.push({
+        from: verbIndex,
+        to: objectIndex,
+        label: 'V → O',
+        color: '#4ade80',
+      });
+    }
   }
 
   return {
@@ -161,6 +182,10 @@ export function analyzeGrammar(text) {
     words,
     connections,
     sentence: sentences[0] || null,
+    // This is a client-side heuristic; S/V/O guesses can be wrong. Callers
+    // should surface uncertainty (and skip role lines when `complex` is true).
+    approximate: true,
+    complex: isComplex,
   };
 }
 
@@ -215,25 +240,34 @@ BAD (don't include):
 
 Return ONLY valid JSON, no markdown.`;
 
+  const data = await fetchGemini({
+    contents: [{
+      parts: [{ text: prompt }],
+    }],
+    generationConfig: {
+      temperature: 0.3,
+    },
+  });
+
+  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
   try {
-    const data = await fetchGemini({
-      contents: [{
-        parts: [{ text: prompt }],
-      }],
-      generationConfig: {
-        temperature: 0.3,
-      },
-    });
-
-    const responseText = data.candidates[0].content.parts[0].text;
-
-    const result = parseGeminiJSON(responseText);
-    return result;
-  } catch (err) {
-    logError('analyzeGrammarPatterns', err);
-    return {
-      patterns: [],
-      sentence_structure: null,
-    };
+    return parseGeminiJSON(responseText);
+  } catch (parseErr) {
+    // Fallback: extract the first {...last } block before giving up.
+    const start = responseText.indexOf('{');
+    const end = responseText.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(responseText.slice(start, end + 1));
+      } catch {
+        // fall through to rethrow below
+      }
+    }
+    logError('analyzeGrammarPatterns', parseErr);
+    // Rethrow so the caller can show a real "analysis failed, retry" state
+    // instead of a misleading "no patterns found" message. (An empty
+    // `{ "patterns": [] }` from a successful call still returns normally.)
+    throw parseErr;
   }
 }

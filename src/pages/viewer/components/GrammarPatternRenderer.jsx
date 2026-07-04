@@ -1,5 +1,7 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo, useRef, useEffect } from 'react';
 import { getMobileSafeAreaBottom } from '../../../utils/positioning';
+
+const LONG_PRESS_DURATION = 500;
 
 /**
  * Renders grammar pattern underlines with long-press interaction
@@ -10,26 +12,32 @@ export default function GrammarPatternRenderer({
   imageContainerRef,
   openModal,
 }) {
-  if (!annotation.selection_rect) return null;
+  // ---- Hooks first (Rules of Hooks): never call hooks conditionally ----
 
-  let selectionData;
-  try {
-    selectionData = JSON.parse(annotation.selection_rect);
-  } catch {
-    return null;
-  }
+  // Parse selection_rect once; null when missing or malformed.
+  const selectionData = useMemo(() => {
+    if (!annotation.selection_rect) return null;
+    try {
+      return JSON.parse(annotation.selection_rect);
+    } catch {
+      return null;
+    }
+  }, [annotation.selection_rect]);
 
-  const bounds = selectionData.bounds || selectionData;
-  const lines = selectionData.lines;
+  const bounds = selectionData ? (selectionData.bounds || selectionData) : null;
+  const lines = selectionData ? selectionData.lines : null;
+  const hasValidBounds = !!bounds && bounds.width !== undefined;
+  const centerX = hasValidBounds ? bounds.x + bounds.width / 2 : 0;
 
-  if (!bounds || bounds.width === undefined) return null;
-
-  const centerX = bounds.x + bounds.width / 2;
+  // Timer state kept in refs (not render-local variables) so it survives
+  // re-renders triggered by zoom/pan without leaking or firing stray tooltips.
+  const longPressTimerRef = useRef(null);
+  const longPressTriggeredRef = useRef(false);
 
   // Show grammar tooltip below the underline
   const showGrammarTooltipBelow = useCallback(() => {
     const currentRect = imageContainerRef?.current?.getBoundingClientRect();
-    if (!currentRect) return;
+    if (!currentRect || !bounds) return;
 
     const firstLine = lines && lines.length > 0 ? lines[0] : bounds;
     const lastLine = lines && lines.length > 0 ? lines[lines.length - 1] : bounds;
@@ -58,43 +66,46 @@ export default function GrammarPatternRenderer({
     });
   }, [imageContainerRef, openModal, annotation, bounds, lines, centerX]);
 
-  // Long press detection (500ms)
-  let longPressTimer = null;
-  let longPressTriggered = false;
-  const LONG_PRESS_DURATION = 500;
-
-  const handlePointerDown = (e) => {
+  const handlePointerDown = useCallback((e) => {
     if (e.pointerType === 'touch') return;
 
-    longPressTriggered = false;
-    longPressTimer = setTimeout(() => {
-      longPressTriggered = true;
+    longPressTriggeredRef.current = false;
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
       showGrammarTooltipBelow();
-      longPressTimer = null;
+      longPressTimerRef.current = null;
     }, LONG_PRESS_DURATION);
-  };
+  }, [showGrammarTooltipBelow]);
 
-  const handlePointerUp = (e) => {
+  const handlePointerUp = useCallback((e) => {
     if (e.pointerType === 'touch') return;
 
-    if (longPressTriggered) {
+    if (longPressTriggeredRef.current) {
       e.stopPropagation();
       e.preventDefault();
     }
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
     }
-    longPressTriggered = false;
-  };
+    longPressTriggeredRef.current = false;
+  }, []);
 
-  const handlePointerLeave = () => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
+  const handlePointerLeave = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
     }
-    longPressTriggered = false;
-  };
+    longPressTriggeredRef.current = false;
+  }, []);
+
+  // Clean up any pending timer on unmount.
+  useEffect(() => () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+  }, []);
+
+  // ---- Early returns AFTER all hooks ----
+  if (!selectionData || !hasValidBounds) return null;
 
   // Render lines if available
   if (lines && lines.length > 0) {

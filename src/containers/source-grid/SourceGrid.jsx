@@ -120,6 +120,16 @@ export default function SourceGrid({ sources, loading, columnCount = 2, onSource
                 {source.type.toUpperCase().charAt(0)}
               </span>
 
+              {/* 카드 제목 + 타입 뱃지 (하단 오버레이) */}
+              {!isConfirming && (
+                <div className="source-card-caption">
+                  <span className="source-card-title" title={source.title}>
+                    {source.title || 'Untitled'}
+                  </span>
+                  <span className="source-card-type">{source.type?.toUpperCase()}</span>
+                </div>
+              )}
+
               {/* 선택 모드 체크박스 (가운데) */}
               {selectMode && (
                 <div className={`source-select-checkbox ${isSelected ? 'checked' : ''}`}>

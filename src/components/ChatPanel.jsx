@@ -38,21 +38,48 @@ export default function ChatPanel({ chat, sourceTitle }) {
   const conversationModeRef = useRef(false);
   const conversationPausedRef = useRef(false);
   const loadingRef = useRef(false);
+  const speakingRef = useRef(false);
+  const isListeningRef = useRef(false);
+  const prevLoadingRef = useRef(false);
+  const spokeThisTurnRef = useRef(false);
   const speechRateRef = useRef(speechRate);
   const stopListeningQuietRef = useRef(null);
+  // Track every pending setTimeout so we can clear them all on unmount.
+  const timeoutsRef = useRef(new Set());
+  const fallbackTimerRef = useRef(null);
 
   // Keep refs in sync
   useEffect(() => { conversationModeRef.current = conversationMode; }, [conversationMode]);
   useEffect(() => { conversationPausedRef.current = conversationPaused; }, [conversationPaused]);
   useEffect(() => { loadingRef.current = loading; }, [loading]);
+  useEffect(() => { speakingRef.current = speaking; }, [speaking]);
   useEffect(() => { speechRateRef.current = speechRate; }, [speechRate]);
 
-  // Auto-send callback for voice input - stop listening quietly, force English
+  // Managed timers: register every timeout so it can be cancelled on unmount.
+  const managedSetTimeout = useCallback((fn, ms) => {
+    const id = setTimeout(() => {
+      timeoutsRef.current.delete(id);
+      fn();
+    }, ms);
+    timeoutsRef.current.add(id);
+    return id;
+  }, []);
+  const clearAllTimers = useCallback(() => {
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current.clear();
+    fallbackTimerRef.current = null;
+  }, []);
+
+  // Auto-send callback for voice input - stop listening quietly, force English.
+  // Returns whether the text was actually dispatched (so useVoiceInput knows
+  // whether to clear its buffer or keep the speech for a retry).
   const handleAutoSend = useCallback((text) => {
     if (text.trim() && !loadingRef.current) {
       stopListeningQuietRef.current?.();
       handleSend(text, { languageOverride: 'English', conversationMode: true });
+      return true;
     }
+    return false;
   }, [handleSend]);
 
   // Voice input with auto-send
@@ -67,8 +94,9 @@ export default function ChatPanel({ chat, sourceTitle }) {
     clearTranscript,
   } = useVoiceInput({ onAutoSend: handleAutoSend });
 
-  // Keep ref in sync
+  // Keep refs in sync
   useEffect(() => { stopListeningQuietRef.current = stopListeningQuiet; }, [stopListeningQuiet]);
+  useEffect(() => { isListeningRef.current = isListening; }, [isListening]);
 
   const level = getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate');
   const levelLabel = LEVEL_OPTIONS.find(o => o.value === level)?.label || level;
@@ -83,39 +111,91 @@ export default function ChatPanel({ chat, sourceTitle }) {
     setSpeaking(false);
     if (conversationModeRef.current && !conversationPausedRef.current) {
       // Small delay before resuming listening
-      setTimeout(() => {
+      managedSetTimeout(() => {
         if (conversationModeRef.current && !conversationPausedRef.current) {
           startListening();
         }
       }, 500);
     }
-  }, [startListening]);
+  }, [startListening, managedSetTimeout]);
 
   // TTS for AI responses - auto-speak in conversation mode
   useEffect(() => {
-    if (!conversationMode) return;
+    if (!conversationMode) { prevStreamingRef.current = streamingText; return; }
 
     // When streaming finishes (streamingText becomes empty and we have a new message)
     if (prevStreamingRef.current && !streamingText) {
       const lastMsg = messages[messages.length - 1];
       if (lastMsg?.role === 'assistant') {
+        // Mark that TTS is handling resume this turn so the loading-recovery
+        // effect below doesn't also restart the mic (double startListening).
+        spokeThisTurnRef.current = true;
         let ttsStarted = false;
         speakText(lastMsg.message, {
           rate: speechRateRef.current,
-          onStart: () => { ttsStarted = true; setSpeaking(true); },
+          onStart: () => {
+            ttsStarted = true;
+            // TTS actually started → cancel the fallback so it can't re-open the
+            // mic under the AI's voice (echo → self-conversation loop).
+            if (fallbackTimerRef.current != null) {
+              clearTimeout(fallbackTimerRef.current);
+              timeoutsRef.current.delete(fallbackTimerRef.current);
+              fallbackTimerRef.current = null;
+            }
+            setSpeaking(true);
+          },
           onEnd: resumeListeningAfterTts,
           onError: resumeListeningAfterTts,
         });
-        // Fallback: if TTS doesn't start within 2s (e.g. mobile Safari blocks), resume listening
-        setTimeout(() => {
-          if (!ttsStarted && conversationModeRef.current && !conversationPausedRef.current) {
+        // Fallback: if TTS doesn't start within 2s (e.g. mobile Safari blocks),
+        // resume listening — but only when the synth isn't actually speaking or
+        // pending, so we don't capture the AI's own audio.
+        fallbackTimerRef.current = managedSetTimeout(() => {
+          fallbackTimerRef.current = null;
+          if (!ttsStarted && conversationModeRef.current && !conversationPausedRef.current
+              && !window.speechSynthesis?.speaking && !window.speechSynthesis?.pending) {
             resumeListeningAfterTts();
           }
         }, 2000);
       }
     }
     prevStreamingRef.current = streamingText;
-  }, [streamingText, messages, conversationMode, resumeListeningAfterTts]);
+  }, [streamingText, messages, conversationMode, resumeListeningAfterTts, managedSetTimeout]);
+
+  // Recover conversation mode if a stream fails before producing any text.
+  // In that case the TTS effect never runs (nothing to speak) and the mic would
+  // otherwise stay off forever. When loading finishes and nothing is speaking or
+  // listening, resume listening.
+  useEffect(() => {
+    if (!conversationMode) { prevLoadingRef.current = loading; return; }
+    const wasLoading = prevLoadingRef.current;
+    prevLoadingRef.current = loading;
+
+    // New turn beginning → reset the "TTS spoke" flag.
+    if (!wasLoading && loading) {
+      spokeThisTurnRef.current = false;
+    }
+
+    if (wasLoading && !loading && conversationModeRef.current && !conversationPausedRef.current) {
+      managedSetTimeout(() => {
+        // Only take over when TTS never ran this turn (stream failed before any
+        // text) and nothing is already speaking or listening.
+        if (!spokeThisTurnRef.current
+            && conversationModeRef.current && !conversationPausedRef.current
+            && !speakingRef.current && !isListeningRef.current
+            && !window.speechSynthesis?.speaking && !window.speechSynthesis?.pending) {
+          startListening();
+        }
+      }, 700);
+    }
+  }, [loading, conversationMode, startListening, managedSetTimeout]);
+
+  // Cleanup on unmount: stop any speech and cancel all pending timers so a
+  // detached closure can't restart the mic or keep speaking after navigation.
+  useEffect(() => () => {
+    stopSpeaking();
+    clearAllTimers();
+  }, [clearAllTimers]);
 
   // Start/stop conversation mode
   const toggleConversationMode = useCallback(() => {
@@ -183,12 +263,12 @@ export default function ChatPanel({ chat, sourceTitle }) {
     if (!conversationModeRef.current || !conversationPausedRef.current) return;
     setConversationPaused(false);
     conversationPausedRef.current = false;
-    setTimeout(() => {
+    managedSetTimeout(() => {
       if (conversationModeRef.current && !conversationPausedRef.current) {
         startListening();
       }
     }, 300);
-  }, [startListening]);
+  }, [startListening, managedSetTimeout]);
 
   // Chat message word short press → vocabulary lookup
   const handleChatWordPress = useCallback((word, rect) => {

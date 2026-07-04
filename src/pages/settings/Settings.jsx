@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { updateProfile, updatePassword, signOut } from '../../services/auth';
+import { updateProfile, updatePassword, signOut, deleteAccount } from '../../services/auth';
 import { TranslatableText } from '../../components/translatable';
 import {
   getSetting,
@@ -160,22 +160,24 @@ export default function Settings() {
 
   async function handleDeleteAccount() {
     const confirmed = window.confirm(
-      'Are you sure you want to delete your account?\nAll data will be permanently deleted.'
+      'Are you sure you want to delete your account?\nAll your data (sources, highlights, chats, review items and stats) will be permanently deleted.'
     );
     if (!confirmed) return;
 
     const doubleConfirm = window.confirm(
-      'Final confirmation. Delete your account?'
+      'Final confirmation. This cannot be undone. Delete your account and all data?'
     );
     if (!doubleConfirm) return;
 
     setLoading(true);
+    setMessage({ type: '', text: '' });
     try {
-      await signOut();
+      await deleteAccount();
+      setMessage({ type: 'success', text: 'Your data has been deleted. Signing out...' });
       navigate('/login');
     } catch (err) {
-      setMessage({ type: 'error', text: 'Failed to delete account' });
-    } finally {
+      console.error('Delete account error:', err);
+      setMessage({ type: 'error', text: 'Failed to delete account. Please try again.' });
       setLoading(false);
     }
   }

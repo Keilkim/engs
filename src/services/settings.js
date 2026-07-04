@@ -1,5 +1,9 @@
 import { supabase } from './supabase';
 import { safeJsonParse } from '../utils/errors';
+import { storagePathFromPublicUrl } from './source';
+
+// Max ids per PostgREST .in() filter to avoid URL length limits on large deletes
+const DELETE_CHUNK_SIZE = 200;
 
 // Settings keys
 export const SETTINGS_KEYS = {
@@ -64,6 +68,22 @@ export async function resetAllSources() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('User not authenticated');
 
+  // Collect uploaded storage objects before removing rows so we can delete the
+  // actual files afterwards (otherwise they linger and keep accruing storage cost).
+  const { data: sourceRows } = await supabase
+    .from('sources')
+    .select('type, file_path')
+    .eq('user_id', user.id);
+
+  // Delete chat logs. sources.source_id is ON DELETE SET NULL, so deleting sources
+  // alone would leave orphaned chat rows haunting the general AI-tutor history.
+  const { error: chatError } = await supabase
+    .from('chat_logs')
+    .delete()
+    .eq('user_id', user.id);
+
+  if (chatError) throw chatError;
+
   // Delete all annotations first (foreign key constraint)
   const { error: annotationError } = await supabase
     .from('annotations')
@@ -87,6 +107,18 @@ export async function resetAllSources() {
     .eq('user_id', user.id);
 
   if (sourceError) throw sourceError;
+
+  // Best-effort storage cleanup for uploaded pdf/image objects.
+  const paths = (sourceRows || [])
+    .filter((r) => r.type === 'pdf' || r.type === 'image')
+    .map((r) => storagePathFromPublicUrl(r.file_path))
+    .filter(Boolean);
+
+  if (paths.length > 0) {
+    for (let i = 0; i < paths.length; i += DELETE_CHUNK_SIZE) {
+      await supabase.storage.from('sources').remove(paths.slice(i, i + DELETE_CHUNK_SIZE));
+    }
+  }
 
   return true;
 }
@@ -113,12 +145,16 @@ export async function resetVocabulary() {
     })
     .map(item => item.id);
 
-  if (vocabIds.length > 0) {
+  // Delete in chunks so the PostgREST query string stays within URL length limits
+  // even when the user has thousands of vocabulary items.
+  for (let i = 0; i < vocabIds.length; i += DELETE_CHUNK_SIZE) {
+    const chunk = vocabIds.slice(i, i + DELETE_CHUNK_SIZE);
+
     // Delete related review items first
     const { error: reviewError } = await supabase
       .from('review_items')
       .delete()
-      .in('annotation_id', vocabIds);
+      .in('annotation_id', chunk);
 
     if (reviewError) throw reviewError;
 
@@ -126,7 +162,7 @@ export async function resetVocabulary() {
     const { error: vocabError } = await supabase
       .from('annotations')
       .delete()
-      .in('id', vocabIds);
+      .in('id', chunk);
 
     if (vocabError) throw vocabError;
   }

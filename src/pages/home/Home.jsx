@@ -14,6 +14,7 @@ export default function Home() {
   const [sources, setSources] = useState([]);
   const [reviewCount, setReviewCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
   // 검색 및 필터 상태
@@ -55,22 +56,44 @@ export default function Home() {
     return result;
   }, [sources, searchQuery, statusFilter]);
 
-  // 소스 상태 업데이트 핸들러
+  // 소스 상태 업데이트 핸들러 (낙관적 업데이트 + 실패 시 스냅샷 복원)
   const handleSourceUpdated = useCallback(async (sourceId, updates) => {
-    setSources(prev => prev.map(source =>
-      source.id === sourceId ? { ...source, ...updates } : source
-    ));
+    let snapshot = null;
+    setSources(prev => {
+      snapshot = prev.find(source => source.id === sourceId) || null;
+      return prev.map(source =>
+        source.id === sourceId ? { ...source, ...updates } : source
+      );
+    });
 
     try {
       await updateSource(sourceId, updates);
     } catch {
-      setSources(prev => prev.map(source =>
-        source.id === sourceId
-          ? { ...source, ...Object.fromEntries(Object.keys(updates).map(k => [k, !updates[k]])) }
-          : source
-      ));
+      // 이전 값의 부정(negation)이 아니라 실제 스냅샷으로 복원
+      if (snapshot) {
+        setSources(prev => prev.map(source =>
+          source.id === sourceId ? snapshot : source
+        ));
+      }
     }
   }, []);
+
+  // 가장 최근에 학습한 소스 (이어서 학습하기 카드용)
+  const recentSource = useMemo(() => {
+    const accessed = sources.filter(s => s.last_accessed);
+    if (accessed.length === 0) return null;
+    return [...accessed].sort(
+      (a, b) => new Date(b.last_accessed) - new Date(a.last_accessed)
+    )[0];
+  }, [sources]);
+
+  function openSource(source) {
+    if (source.type === 'youtube') {
+      navigate(`/youtube/${source.id}`);
+    } else {
+      navigate(`/viewer/${source.id}`);
+    }
+  }
 
   useEffect(() => {
     // 페이지 진입 시 스크롤 상단으로 이동
@@ -80,14 +103,17 @@ export default function Home() {
   }, []);
 
   function checkOnboarding() {
-    const hasSeenOnboarding = localStorage.getItem('onboarding_completed');
-    if (!hasSeenOnboarding) {
+    // 계정에 저장된 플래그(user_metadata)를 우선 사용하고, 없으면 로컬 캐시로 폴백.
+    const seenOnAccount = user?.user_metadata?.onboarding_completed === true;
+    const seenLocally = localStorage.getItem('onboarding_completed') === 'true';
+    if (!seenOnAccount && !seenLocally) {
       navigate('/onboarding');
     }
   }
 
   async function loadData() {
     setLoading(true);
+    setLoadError(false);
     try {
       const [sourcesData, count] = await Promise.all([
         getSources(),
@@ -96,7 +122,8 @@ export default function Home() {
       setSources(sourcesData || []);
       setReviewCount(count || 0);
     } catch {
-      // ignore
+      // 네트워크/서버 오류를 '소스 없음'으로 위장하지 않고 명시적 오류 상태로 표시
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -157,6 +184,34 @@ export default function Home() {
           <ReviewCard count={reviewCount} loading={loading} />
         </section>
 
+        {loadError ? (
+          <section className="load-error-state">
+            <p className="load-error-title">
+              <TranslatableText textKey="home.loadErrorTitle">Couldn't load your library</TranslatableText>
+            </p>
+            <p className="load-error-hint">
+              <TranslatableText textKey="home.loadErrorHint">
+                Your data is safe. This looks like a temporary connection problem.
+              </TranslatableText>
+            </p>
+            <button className="retry-button" onClick={loadData}>
+              <TranslatableText textKey="home.retry">Try Again</TranslatableText>
+            </button>
+          </section>
+        ) : (
+        <>
+        {!loading && recentSource && statusFilter === 'all' && !searchQuery.trim() && (
+          <section className="continue-section">
+            <div className="section-header">
+              <h2><TranslatableText textKey="home.continueLearning">Continue Learning</TranslatableText></h2>
+            </div>
+            <button className="continue-card" onClick={() => openSource(recentSource)}>
+              <span className="continue-type">{recentSource.type?.toUpperCase()}</span>
+              <span className="continue-title">{recentSource.title || 'Untitled'}</span>
+            </button>
+          </section>
+        )}
+
         <section className="source-section">
           {/* 필터 탭 */}
           <div className="filter-tabs">
@@ -205,6 +260,8 @@ export default function Home() {
             onSourceUpdated={handleSourceUpdated}
           />
         </section>
+        </>
+        )}
       </main>
 
       <nav className="bottom-nav">

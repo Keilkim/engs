@@ -36,8 +36,10 @@ export function buildPatternRegex(parts: string[]): RegExp | null {
     return `(${words.join('\\s+')})`;
   });
 
-  // Join parts with a flexible gap (1-200 chars between)
-  const pattern = regexParts.join('[\\s\\S]{1,200}?');
+  // Join parts with a flexible gap (0-200 chars) that must NOT cross a sentence
+  // boundary (., !, ?) — otherwise unrelated words in different sentences get
+  // falsely matched as one correlative construction.
+  const pattern = regexParts.join('[^.!?]{0,200}?');
   try {
     return new RegExp(pattern, 'gi');
   } catch {
@@ -157,12 +159,27 @@ export function highlightSentencePatterns(htmlContent: string, patterns: Pattern
     }
   }
 
+  // Remove overlapping highlights: two patterns matching the same span (e.g.
+  // "not only...but also" vs "only...but") would otherwise splice <mark> tags
+  // inside each other and produce broken HTML. Sort ascending, keep the first
+  // (earliest / longest on tie) of any overlapping group.
+  partHighlights.sort((a, b) => a.start - b.start || b.end - a.end);
+  const dedupedHighlights: typeof partHighlights = [];
+  let lastEnd = -1;
+  for (const h of partHighlights) {
+    if (h.start >= lastEnd) {
+      dedupedHighlights.push(h);
+      lastEnd = h.end;
+    }
+    // else: overlaps a kept highlight → skip to avoid corrupting the markup
+  }
+
   // Sort by start position descending to insert from end (avoid offset shifting)
-  partHighlights.sort((a, b) => b.start - a.start);
+  dedupedHighlights.sort((a, b) => b.start - a.start);
 
   // Map plain-text offsets to HTML offsets
   let result = htmlContent;
-  for (const highlight of partHighlights) {
+  for (const highlight of dedupedHighlights) {
     const { htmlStart, htmlEnd } = mapTextOffsetToHtml(htmlContent, highlight.start, highlight.end);
     if (htmlStart === -1 || htmlEnd === -1) continue;
 

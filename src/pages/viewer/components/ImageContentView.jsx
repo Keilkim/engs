@@ -1,6 +1,8 @@
+import DOMPurify from 'dompurify';
 import { TranslatableText } from '../../../components/translatable';
 import { PenCanvas } from '../../../components/pen-mode';
 import { GrammarPatternRenderer } from './index';
+import { safeJsonParse } from '../../../utils/errors';
 
 // Convert path points to SVG path string
 function pathToSvg(points) {
@@ -13,8 +15,11 @@ function pathToSvg(points) {
 // Render vocabulary markers (green shadow + rounded)
 function renderVocabMarkers(vocabAnnotations, highlightedVocabId) {
   return vocabAnnotations.map(annotation => {
-    const selectionData = JSON.parse(annotation.selection_rect);
+    // A single corrupted selection_rect must not crash the whole overlay.
+    const selectionData = safeJsonParse(annotation.selection_rect, null);
+    if (!selectionData) return null;
     const bounds = selectionData.bounds || selectionData;
+    if (!bounds || bounds.width === undefined) return null;
 
     const padX = 0.3;
     const heightScale = 0.7;
@@ -140,13 +145,15 @@ function renderRegularAnnotations(annotations, isVocabularyAnnotation, isGrammar
       const isGrammar = isGrammarAnnotation(a);
       if (isVocab || isGrammar) return false;
       if (currentPage !== null) {
-        const data = JSON.parse(a.selection_rect);
-        return data.page === currentPage;
+        // Malformed/legacy selection_rect must skip only this item, not crash.
+        const data = safeJsonParse(a.selection_rect, null);
+        return data ? data.page === currentPage : false;
       }
       return true;
     })
     .map(annotation => {
-      const data = JSON.parse(annotation.selection_rect);
+      const data = safeJsonParse(annotation.selection_rect, null);
+      if (!data) return null;
       if (data.path) {
         return (
           <path
@@ -292,7 +299,14 @@ export default function ImageContentView({
         )}
         <div
           className="article-content"
-          dangerouslySetInnerHTML={{ __html: highlightVocabularyWords(source.content) }}
+          dangerouslySetInnerHTML={{
+            // Sanitize the external article HTML (after highlight <mark>s are
+            // inserted) to prevent stored XSS. mark/sup + data-* attributes used
+            // by the highlight click handlers are preserved.
+            __html: DOMPurify.sanitize(highlightVocabularyWords(source.content), {
+              ADD_ATTR: ['data-vocab-id', 'data-pattern-id', 'data-pattern-idx', 'target'],
+            }),
+          }}
         />
         <a
           href={source.file_path}

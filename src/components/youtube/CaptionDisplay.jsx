@@ -43,14 +43,18 @@ export default function CaptionDisplay({
 
   return (
     <div className="caption-display" ref={scrollContainerRef}>
-      {segments.map((segment, index) => (
+      {segments.map((segment, index) => {
+        const active = isActiveIndex(index);
+        return (
         <CaptionLine
           key={segment.id ?? index}
           segment={segment}
           index={index}
-          isActive={isActiveIndex(index)}
+          isActive={active}
           isPlaying={isPlaying}
-          currentTime={currentTime}
+          // Only the active line needs the ticking currentTime; inactive lines
+          // get a stable `undefined` so React.memo skips re-rendering them.
+          currentTime={active ? currentTime : undefined}
           onSeek={onSeek}
           onWordLongPress={onWordLongPress}
           onLineLongPress={onLineLongPress}
@@ -58,7 +62,8 @@ export default function CaptionDisplay({
           onPressEndNoMenu={onPressEndNoMenu}
           savedWords={savedWords}
         />
-      ))}
+        );
+      })}
     </div>
   );
 }

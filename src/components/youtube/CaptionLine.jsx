@@ -1,8 +1,13 @@
-import { useRef, useCallback, useMemo } from 'react';
+import { memo, useRef, useEffect, useCallback, useMemo } from 'react';
 import { formatTime } from '../../services/ai/youtube';
 
 const LONG_PRESS_DURATION = 500;
 const TAP_MOVE_THRESHOLD = 10;
+const PUNCT_RE = /^[.,;:!?"'()[\]{}]+|[.,;:!?"'()[\]{}]+$/g;
+
+// Normalize a token for text-based matching between the caption text and the
+// Whisper word list (strips punctuation/spacing, lowercases).
+const normalizeToken = (s) => (s || '').toLowerCase().replace(/[^a-z0-9']/g, '');
 
 /**
  * Individual caption line component
@@ -10,7 +15,7 @@ const TAP_MOVE_THRESHOLD = 10;
  * - Short press on word: seek to that word's timestamp
  * - Long press on word: show word definition menu
  */
-export default function CaptionLine({
+function CaptionLine({
   segment,
   index,
   isActive,
@@ -27,30 +32,62 @@ export default function CaptionLine({
   const timerRef = useRef(null);
   const lastTouchEndRef = useRef(0); // Prevent synthetic mouse events after touch
 
-  // Use word timings from Whisper if available, otherwise estimate
+  // Word timings aligned 1:1 with the rendered words (punctuation stripped).
+  // This is the single source of truth for both seeking and highlighting, so
+  // it MUST stay index-aligned with renderWords() below.
   const wordTimings = useMemo(() => {
     if (!segment?.text) return [];
 
-    if (segment.words && segment.words.length > 0) {
-      return segment.words.map((w, i) => ({
-        word: w.word,
-        start: w.start,
-        end: w.end,
-        index: i,
-      }));
+    // Rendered words = whitespace-split tokens with surrounding punctuation
+    // removed and empty (punctuation-only) tokens dropped.
+    const tokens = segment.text
+      .split(/\s+/)
+      .map(t => t.replace(PUNCT_RE, ''))
+      .filter(t => t.length > 0);
+    if (tokens.length === 0) return [];
+
+    const segStart = segment.start;
+    const segEnd = segment.end || segment.start + 3;
+    const estimate = (i) => ({
+      word: tokens[i],
+      start: segStart + ((segEnd - segStart) * i) / tokens.length,
+      end: segStart + ((segEnd - segStart) * (i + 1)) / tokens.length,
+      index: i,
+    });
+
+    const whisper = segment.words;
+    if (!whisper || whisper.length === 0) {
+      // Fallback: estimate by uniform distribution
+      return tokens.map((_, i) => estimate(i));
     }
 
-    // Fallback: estimate by uniform distribution
-    const words = segment.text.split(/\s+/).filter(w => w.length > 0);
-    const segmentDuration = (segment.end || segment.start + 3) - segment.start;
-    const timePerWord = segmentDuration / words.length;
-
-    return words.map((word, i) => ({
-      word,
-      start: segment.start + i * timePerWord,
-      end: segment.start + (i + 1) * timePerWord,
-      index: i,
-    }));
+    // Align Whisper words to rendered tokens by text (not raw index) so a
+    // dropped/extra Whisper word or a punctuation-only token cannot shift every
+    // subsequent timestamp. A short look-ahead absorbs minor mismatches; when
+    // nothing lines up we fall back to a positional/estimated timing.
+    const timings = [];
+    let wi = 0;
+    for (let ti = 0; ti < tokens.length; ti++) {
+      const tnorm = normalizeToken(tokens[ti]);
+      let matched = null;
+      for (let scan = wi; scan < whisper.length && scan <= wi + 2; scan++) {
+        if (normalizeToken(whisper[scan].word) === tnorm) {
+          matched = whisper[scan];
+          wi = scan + 1;
+          break;
+        }
+      }
+      if (!matched && wi < whisper.length) {
+        matched = whisper[wi];
+        wi += 1;
+      }
+      timings.push(
+        matched
+          ? { word: tokens[ti], start: matched.start, end: matched.end, index: ti }
+          : estimate(ti)
+      );
+    }
+    return timings;
   }, [segment]);
 
   // Find which word is currently active based on currentTime
@@ -68,6 +105,10 @@ export default function CaptionLine({
       timerRef.current = null;
     }
   }, []);
+
+  // Clear a pending long-press timer if the component unmounts mid-press
+  // (e.g. user navigates back) so the stale callback never fires.
+  useEffect(() => () => clearTimer(), [clearTimer]);
 
   const handlePointerDown = useCallback((e) => {
     // Ignore synthetic mouse events after touch
@@ -174,7 +215,12 @@ export default function CaptionLine({
     return parts.map((part, i) => {
       if (/^\s+$/.test(part)) return <span key={i}>{part}</span>;
 
-      const cleanWord = part.replace(/^[.,;:!?"'()[\]{}]+|[.,;:!?"'()[\]{}]+$/g, '');
+      const cleanWord = part.replace(PUNCT_RE, '');
+      // Punctuation-only token (e.g. a leading "-"): render as plain text and
+      // do NOT consume a word index, otherwise every following word's index
+      // (and its timestamp) would be shifted by one.
+      if (!cleanWord) return <span key={i}>{part}</span>;
+
       const thisWordIdx = wordIdx;
       wordIdx++;
 
@@ -185,7 +231,7 @@ export default function CaptionLine({
         <span
           key={i}
           className={`caption-word ${isCurrentWord ? 'reading' : ''} ${isSavedWord ? 'saved' : ''}`}
-          data-word={cleanWord || undefined}
+          data-word={cleanWord}
           data-word-index={thisWordIdx}
         >
           {part}
@@ -214,3 +260,8 @@ export default function CaptionLine({
     </div>
   );
 }
+
+// Memoized so the 200ms playback poll only re-renders the active line.
+// Inactive lines receive a stable `currentTime={undefined}` (see CaptionDisplay)
+// and stable callback/props, so shallow comparison skips their re-render.
+export default memo(CaptionLine);

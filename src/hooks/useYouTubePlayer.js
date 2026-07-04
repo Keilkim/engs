@@ -30,11 +30,13 @@ export function useYouTubePlayer() {
 
   useEffect(() => {
     if (playerState === PLAYER_STATES.PLAYING) {
+      // 200ms is smooth enough for line/word highlighting while cutting the
+      // per-tick work (and battery cost) by ~4x versus the old 50ms poll.
       intervalRef.current = setInterval(() => {
         if (playerRef.current) {
           setCurrentTime(playerRef.current.getCurrentTime());
         }
-      }, 50);
+      }, 200);
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);

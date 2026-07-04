@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS sources (
   pages TEXT,
   ocr_data JSONB,
   file_path TEXT,
+  youtube_data JSONB,
+  captions_data JSONB,
+  source_language VARCHAR(10),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   last_accessed TIMESTAMP WITH TIME ZONE,
   pinned BOOLEAN DEFAULT FALSE,
@@ -73,7 +76,8 @@ CREATE TABLE IF NOT EXISTS sources (
 -- ALTER TABLE sources ADD CONSTRAINT sources_type_check
 --   CHECK (type IN ('pdf', 'url', 'image', 'screenshot', 'youtube'));
 
--- Migration: Add YouTube-related columns
+-- YouTube-related columns (youtube_data / captions_data / source_language) are part of
+-- the CREATE TABLE above. For an existing table, apply them with:
 -- ALTER TABLE sources ADD COLUMN IF NOT EXISTS youtube_data JSONB;
 -- ALTER TABLE sources ADD COLUMN IF NOT EXISTS captions_data JSONB;
 -- ALTER TABLE sources ADD COLUMN IF NOT EXISTS source_language VARCHAR(10);
@@ -97,7 +101,8 @@ CREATE TABLE IF NOT EXISTS sources (
 CREATE TABLE IF NOT EXISTS annotations (
   id BIGSERIAL PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  source_id BIGINT REFERENCES sources(id) ON DELETE CASCADE NOT NULL,
+  -- Nullable: manual dictionary entries (Add Word / Add Pattern) are not tied to a source.
+  source_id BIGINT REFERENCES sources(id) ON DELETE CASCADE,
   type VARCHAR(20) NOT NULL CHECK (type IN ('highlight', 'memo')),
   coordinates TEXT,
   selected_text TEXT,
@@ -294,4 +299,10 @@ WITH CHECK (bucket_id = 'sources');
 CREATE POLICY "Allow public read"
 ON storage.objects FOR SELECT
 TO public
+USING (bucket_id = 'sources');
+
+-- 삭제 허용 (소스/프로젝트 초기화 시 클라이언트에서 실제 파일 삭제가 가능하도록)
+CREATE POLICY "Allow authenticated deletes"
+ON storage.objects FOR DELETE
+TO authenticated
 USING (bucket_id = 'sources');

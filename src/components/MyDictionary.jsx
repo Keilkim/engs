@@ -14,6 +14,7 @@ export default function MyDictionary({ onSelectForChat }) {
   const [grammarPatterns, setGrammarPatterns] = useState([]);
   const [sentencePatterns, setSentencePatterns] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [newWord, setNewWord] = useState('');
@@ -31,6 +32,7 @@ export default function MyDictionary({ onSelectForChat }) {
 
   async function loadData() {
     setLoading(true);
+    setLoadError(false);
     try {
       const [vocabData, grammarData, patternData] = await Promise.all([
         getVocabularyWithSource(),
@@ -41,7 +43,9 @@ export default function MyDictionary({ onSelectForChat }) {
       setGrammarPatterns(grammarData);
       setSentencePatterns(patternData);
     } catch {
-      // ignore
+      // Distinguish "load failed" from "empty" so users don't think their
+      // saved words were deleted.
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -72,7 +76,7 @@ export default function MyDictionary({ onSelectForChat }) {
         return newSet;
       });
     } catch {
-      // ignore
+      alert('삭제에 실패했습니다. 다시 시도해 주세요.');
     }
   }
 
@@ -86,7 +90,7 @@ export default function MyDictionary({ onSelectForChat }) {
       setNewDefinition('');
       await loadData();
     } catch {
-      // ignore
+      alert('단어 추가에 실패했습니다. 다시 시도해 주세요.');
     } finally {
       setAdding(false);
     }
@@ -110,7 +114,7 @@ export default function MyDictionary({ onSelectForChat }) {
       setNewPatternExample('');
       await loadData();
     } catch {
-      // ignore
+      alert('패턴 추가에 실패했습니다. 다시 시도해 주세요.');
     } finally {
       setAdding(false);
     }
@@ -133,9 +137,14 @@ export default function MyDictionary({ onSelectForChat }) {
   function handleChatWithSelected() {
     if (selectedIds.size === 0) return;
 
-    const items = tab === 'words'
-      ? vocabulary.filter(v => selectedIds.has(v.id))
-      : grammarPatterns.filter(g => selectedIds.has(g.id));
+    // Map each tab to its own list (Patterns tab was incorrectly filtering the
+    // grammar list, sending an empty context to the AI tutor).
+    const source = tab === 'words'
+      ? vocabulary
+      : tab === 'grammar'
+      ? grammarPatterns
+      : sentencePatterns;
+    const items = source.filter(i => selectedIds.has(i.id));
 
     onSelectForChat?.(items, tab);
   }
@@ -153,7 +162,9 @@ export default function MyDictionary({ onSelectForChat }) {
   function getDefinition(item) {
     try {
       const json = JSON.parse(item.ai_analysis_json || '{}');
-      return json.definition || '';
+      // Defensive: legacy corrupted rows stored an object here — never return a
+      // non-string or React will crash when rendering it.
+      return typeof json.definition === 'string' ? json.definition : '';
     } catch {
       return '';
     }
@@ -217,6 +228,11 @@ export default function MyDictionary({ onSelectForChat }) {
       <div className="dictionary-list">
         {loading ? (
           <div className="dictionary-loading">Loading...</div>
+        ) : loadError ? (
+          <div className="dictionary-empty">
+            불러오기에 실패했습니다.
+            <button className="retry-btn" onClick={loadData}>다시 시도</button>
+          </div>
         ) : currentItems.length === 0 ? (
           <div className="dictionary-empty">
             {tab === 'words'

@@ -1,6 +1,17 @@
 import { supabase } from './supabase';
 import { safeJsonParse } from '../utils/errors';
+import { localDateString } from '../utils/dateUtils';
 import type { Annotation, SelectionRect, BBox } from '../types';
+
+// 복습 카드로 만들 수 있는 분석 데이터가 있는지 판단.
+// isVocabulary 단어 또는 grammar 분석만 플래시카드로 렌더링되므로,
+// ai_analysis_json이 없거나(펜 스트로크 등) 해당 데이터가 없으면 review_item을 만들지 않는다.
+// (질문=답이 되는 '분석 없는' 카드가 복습 큐에 들어가는 것을 근절)
+function hasReviewableAnalysis(aiAnalysisJson: string | null | undefined): boolean {
+  if (!aiAnalysisJson) return false;
+  const json = safeJsonParse<Record<string, unknown>>(aiAnalysisJson, {});
+  return json.isVocabulary === true || json.type === 'grammar';
+}
 
 export async function getAnnotations(sourceId: string): Promise<Annotation[]> {
   const { data, error } = await supabase
@@ -37,7 +48,8 @@ export async function createAnnotation(annotation: CreateAnnotationInput): Promi
 
   if (error) throw error;
 
-  if (annotation.type === 'highlight') {
+  // 분석 데이터가 있는 highlight만 복습 카드로 생성 (펜 스트로크/분석 없는 카드 제외)
+  if (annotation.type === 'highlight' && hasReviewableAnalysis(annotation.ai_analysis_json)) {
     await createReviewItem(data.id);
   }
 
@@ -67,7 +79,19 @@ export async function updateAnnotation(id: string, updates: Partial<Annotation>)
 
 async function createReviewItem(annotationId: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
-  const today = new Date().toISOString().split('T')[0];
+
+  // 중복 방지: 동일 annotation에 대한 review_item이 이미 있으면 생성하지 않는다
+  // (재시도/중복 저장 로직으로 인한 같은 카드의 중복 출제 방지)
+  const { data: existing } = await supabase
+    .from('review_items')
+    .select('id')
+    .eq('annotation_id', annotationId)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return;
+
+  const today = localDateString();
 
   const { error } = await supabase
     .from('review_items')
@@ -87,11 +111,14 @@ async function createReviewItem(annotationId: string): Promise<void> {
 export async function getVocabulary(): Promise<Annotation[]> {
   const { data: { user } } = await supabase.auth.getUser();
 
+  // 서버측에서 vocabulary만 필터: 펜 스트로크(ai_analysis_json=null) 등이
+  // limit 창을 잠식해 저장 단어가 사전에서 사라지는 것을 방지한다.
   const { data, error } = await supabase
     .from('annotations')
     .select('*')
     .eq('user_id', user!.id)
     .eq('type', 'highlight')
+    .ilike('ai_analysis_json', '%"isVocabulary":true%')
     .order('created_at', { ascending: false })
     .limit(200);
 
@@ -129,32 +156,16 @@ export async function createVocabularyItem(
   return data as Annotation;
 }
 
-export async function isWordSaved(word: string): Promise<boolean> {
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const { data, error } = await supabase
-    .from('annotations')
-    .select('id, ai_analysis_json')
-    .eq('user_id', user!.id)
-    .eq('type', 'highlight')
-    .ilike('selected_text', word);
-
-  if (error) throw error;
-
-  return (data || []).some(item => {
-    const json = safeJsonParse(item.ai_analysis_json, {});
-    return json.isVocabulary === true;
-  });
-}
-
 export async function getVocabularyWithSource() {
   const { data: { user } } = await supabase.auth.getUser();
 
+  // 서버측에서 vocabulary만 필터 (getVocabulary와 동일한 이유)
   const { data, error } = await supabase
     .from('annotations')
     .select('*, sources(title)')
     .eq('user_id', user!.id)
     .eq('type', 'highlight')
+    .ilike('ai_analysis_json', '%"isVocabulary":true%')
     .order('created_at', { ascending: false })
     .limit(200);
 

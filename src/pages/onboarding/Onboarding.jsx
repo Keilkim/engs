@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { updateProfile } from '../../services/auth';
 import { TranslatableText } from '../../components/translatable';
 
 const STEPS = [
@@ -95,7 +96,10 @@ export default function Onboarding() {
   }
 
   function completeOnboarding() {
+    // 로컬 캐시(즉시 반영) + 계정 저장(기기/브라우저 간 일관성).
     localStorage.setItem('onboarding_completed', 'true');
+    // 계정에 저장. 실패해도 온보딩 진행을 막지 않음(로컬 캐시로 폴백).
+    updateProfile({ onboarding_completed: true }).catch(() => {});
     navigate('/');
   }
 
@@ -138,12 +142,6 @@ export default function Onboarding() {
             ))}
           </ul>
         )}
-
-        <p className="click-hint">
-          <TranslatableText textKey="onboarding.clickHint">
-            Tap any English text to see Korean translation
-          </TranslatableText>
-        </p>
       </main>
 
       <footer className="onboarding-footer">

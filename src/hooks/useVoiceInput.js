@@ -16,6 +16,7 @@ export function useVoiceInput({ onAutoSend } = {}) {
   const silenceTimerRef = useRef(null);
   const finalTextRef = useRef('');
   const onAutoSendRef = useRef(onAutoSend);
+  const unmountedRef = useRef(false);
   const isSupported = !!SpeechRecognition;
 
   // Keep callback ref fresh
@@ -24,28 +25,40 @@ export function useVoiceInput({ onAutoSend } = {}) {
   }, [onAutoSend]);
 
   useEffect(() => {
+    unmountedRef.current = false;
     return () => {
-      recognitionRef.current?.abort();
+      unmountedRef.current = true;
+      // Clear the buffered transcript BEFORE aborting so the recognition's
+      // onend handler doesn't fire a "ghost" auto-send after unmount.
+      finalTextRef.current = '';
       clearTimeout(silenceTimerRef.current);
+      recognitionRef.current?.abort();
     };
+  }, []);
+
+  // Dispatch the buffered transcript. Only clears it when the consumer actually
+  // sent it (returns !== false); otherwise the speech is kept for a later retry.
+  const flushAutoSend = useCallback(() => {
+    const text = finalTextRef.current.trim();
+    if (!text || !onAutoSendRef.current) return;
+    const sent = onAutoSendRef.current(text);
+    if (sent !== false) {
+      finalTextRef.current = '';
+      setTranscript('');
+      setInterimText('');
+    }
   }, []);
 
   const resetSilenceTimer = useCallback(() => {
     clearTimeout(silenceTimerRef.current);
     silenceTimerRef.current = setTimeout(() => {
       // 2 seconds of silence → auto-send
-      const text = finalTextRef.current.trim();
-      if (text && onAutoSendRef.current) {
-        onAutoSendRef.current(text);
-        finalTextRef.current = '';
-        setTranscript('');
-        setInterimText('');
-      }
+      flushAutoSend();
     }, 2000);
-  }, []);
+  }, [flushAutoSend]);
 
   const startListening = useCallback(() => {
-    if (!isSupported) return;
+    if (!isSupported || unmountedRef.current) return;
 
     // Clean up existing recognition if any (allows restart without waiting for state)
     if (recognitionRef.current) {
@@ -88,14 +101,9 @@ export function useVoiceInput({ onAutoSend } = {}) {
     recognition.onend = () => {
       setIsListening(false);
       clearTimeout(silenceTimerRef.current);
-      // Auto-send remaining text when recognition ends naturally
-      const text = finalTextRef.current.trim();
-      if (text && onAutoSendRef.current) {
-        onAutoSendRef.current(text);
-        finalTextRef.current = '';
-        setTranscript('');
-        setInterimText('');
-      }
+      // Auto-send remaining text when recognition ends naturally.
+      // (finalTextRef is cleared on unmount, so this won't ghost-send.)
+      flushAutoSend();
     };
 
     recognition.onerror = (e) => {
@@ -110,7 +118,7 @@ export function useVoiceInput({ onAutoSend } = {}) {
     setTranscript('');
     setInterimText('');
     recognition.start();
-  }, [isSupported, resetSilenceTimer]);
+  }, [isSupported, resetSilenceTimer, flushAutoSend]);
 
   const stopListening = useCallback(() => {
     clearTimeout(silenceTimerRef.current);

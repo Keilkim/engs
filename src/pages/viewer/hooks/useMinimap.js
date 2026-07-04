@@ -42,15 +42,26 @@ export function useMinimap(scrollContainerRef) {
     container.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
   }, [scrollContainerRef]);
 
+  // Map a clientY on the minimap to a document percentage.
+  // The minimap image lives inside a scrollable `.minimap-content`; when it is
+  // scrolled we must add its scrollTop and divide by its full scrollHeight,
+  // otherwise clicking near the top jumps to the wrong place.
+  const clientYToPercentage = useCallback((clientY) => {
+    const sidebar = minimapRef.current;
+    if (!sidebar) return null;
+    const content = sidebar.querySelector('.minimap-content') || sidebar;
+    const rect = content.getBoundingClientRect();
+    const localY = clientY - rect.top;
+    const denom = content.scrollHeight || rect.height;
+    const percentage = ((content.scrollTop + localY) / denom) * 100;
+    return Math.max(0, Math.min(100, percentage));
+  }, []);
+
   // Minimap click handler
   const handleMinimapClick = useCallback((e) => {
-    if (!minimapRef.current) return;
-
-    const rect = minimapRef.current.getBoundingClientRect();
-    const clickY = e.clientY - rect.top;
-    const percentage = (clickY / rect.height) * 100;
-    scrollToPosition(percentage);
-  }, [scrollToPosition]);
+    const percentage = clientYToPercentage(e.clientY);
+    if (percentage !== null) scrollToPosition(percentage);
+  }, [scrollToPosition, clientYToPercentage]);
 
   // Minimap drag handlers
   const handleMinimapMouseDown = useCallback((e) => {
@@ -59,13 +70,10 @@ export function useMinimap(scrollContainerRef) {
   }, [handleMinimapClick]);
 
   const handleMinimapMouseMove = useCallback((e) => {
-    if (!minimapDragging.current || !minimapRef.current) return;
-
-    const rect = minimapRef.current.getBoundingClientRect();
-    const clickY = e.clientY - rect.top;
-    const percentage = Math.max(0, Math.min(100, (clickY / rect.height) * 100));
-    scrollToPosition(percentage);
-  }, [scrollToPosition]);
+    if (!minimapDragging.current) return;
+    const percentage = clientYToPercentage(e.clientY);
+    if (percentage !== null) scrollToPosition(percentage);
+  }, [scrollToPosition, clientYToPercentage]);
 
   const handleMinimapMouseUp = useCallback(() => {
     minimapDragging.current = false;
@@ -75,23 +83,16 @@ export function useMinimap(scrollContainerRef) {
   const handleMinimapTouchStart = useCallback((e) => {
     minimapDragging.current = true;
     if (e.touches[0]) {
-      const rect = minimapRef.current?.getBoundingClientRect();
-      if (rect) {
-        const touchY = e.touches[0].clientY - rect.top;
-        const percentage = (touchY / rect.height) * 100;
-        scrollToPosition(percentage);
-      }
+      const percentage = clientYToPercentage(e.touches[0].clientY);
+      if (percentage !== null) scrollToPosition(percentage);
     }
-  }, [scrollToPosition]);
+  }, [scrollToPosition, clientYToPercentage]);
 
   const handleMinimapTouchMove = useCallback((e) => {
-    if (!minimapDragging.current || !minimapRef.current) return;
-
-    const rect = minimapRef.current.getBoundingClientRect();
-    const touchY = e.touches[0].clientY - rect.top;
-    const percentage = Math.max(0, Math.min(100, (touchY / rect.height) * 100));
-    scrollToPosition(percentage);
-  }, [scrollToPosition]);
+    if (!minimapDragging.current || !e.touches[0]) return;
+    const percentage = clientYToPercentage(e.touches[0].clientY);
+    if (percentage !== null) scrollToPosition(percentage);
+  }, [scrollToPosition, clientYToPercentage]);
 
   const handleMinimapTouchEnd = useCallback(() => {
     minimapDragging.current = false;

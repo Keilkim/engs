@@ -112,12 +112,15 @@ export default function PenCanvas({
       const coords = getPercentageCoords(e, container);
 
       // 지우개 모드 감지 (가로 스와이프)
-      if (swipeStartRef.current && strokes.length > 0) {
+      // 현재 페이지의 스트로크만 대상으로 삼아, 화면에 보이지 않는 다른 페이지
+      // 필기가 함께 지워지는 것을 방지한다.
+      const pageStrokes = strokes.filter((s) => s.page === currentPage);
+      if (swipeStartRef.current && pageStrokes.length > 0) {
         if (isHorizontalSwipe(swipeStartRef.current, coords)) {
           const preview = calculateEraserBoundingBox(
             swipeStartRef.current,
             coords,
-            strokes
+            pageStrokes
           );
           setEraserPreview(preview);
 
@@ -139,7 +142,7 @@ export default function PenCanvas({
         };
       });
     },
-    [penModeActive, containerRef, strokes]
+    [penModeActive, containerRef, strokes, currentPage]
   );
 
   const handlePointerUp = useCallback(
@@ -151,9 +154,10 @@ export default function PenCanvas({
 
       isDrawing.current = false;
 
-      // 지우개 모드 처리
+      // 지우개 모드 처리 - 현재 페이지 스트로크만 삭제 대상
       if (eraserPreview) {
-        const strokeIdsToDelete = getStrokesToDelete(strokes, eraserPreview);
+        const pageStrokes = strokes.filter((s) => s.page === currentPage);
+        const strokeIdsToDelete = getStrokesToDelete(pageStrokes, eraserPreview);
         if (strokeIdsToDelete.length > 0) {
           onStrokesDelete?.(strokeIdsToDelete);
         }

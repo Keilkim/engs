@@ -1,7 +1,10 @@
 // Supabase table types
 
+// NOTE: id / foreign-key columns are BIGSERIAL/BIGINT in the DB, so they come back
+// as numbers. Callers that compare against string DOM attributes must normalize
+// (e.g. String(row.id) === attr).
 export interface Source {
-  id: string;
+  id: number;
   user_id: string;
   title: string;
   type: 'image' | 'pdf' | 'url' | 'screenshot' | 'youtube';
@@ -15,6 +18,7 @@ export interface Source {
   captions_data: CaptionsData | null;
   source_language: string | null;
   pinned: boolean;
+  to_read: boolean;
   created_at: string;
   last_accessed: string | null;
 }
@@ -44,10 +48,11 @@ export interface CaptionsData {
 }
 
 export interface Annotation {
-  id: string;
+  id: number;
   user_id: string;
-  source_id: string;
+  source_id: number | null; // nullable: manual dictionary entries have no source
   type: 'highlight' | 'memo';
+  coordinates: string | null; // JSON string (legacy)
   selected_text: string | null;
   selection_rect: string | null; // JSON string
   ai_analysis_json: string | null; // JSON string
@@ -56,25 +61,26 @@ export interface Annotation {
 }
 
 export interface ChatLog {
-  id: string;
+  id: number;
   user_id: string;
-  source_id: string | null;
+  source_id: number | null;
   role: 'user' | 'assistant';
   message: string;
-  is_bookmarked: boolean;
+  is_scrapped: boolean;
   created_at: string;
 }
 
 export interface ReviewItem {
-  id: string;
+  id: number;
   user_id: string;
-  annotation_id: string;
+  annotation_id: number;
   next_review_date: string;
   interval_days: number;
   ease_factor: number;
   repetitions: number;
-  status: 'active' | 'completed';
-  last_reviewed_at: string | null;
+  stack: number;
+  status: 'active' | 'completed' | 'suspended';
+  last_reviewed: string | null;
 }
 
 // Parsed JSON subtypes
@@ -139,7 +145,7 @@ export interface GrammarPattern {
 
 // Source list item (subset for grid display)
 export interface SourceListItem {
-  id: string;
+  id: number;
   title: string;
   type: Source['type'];
   pinned: boolean;

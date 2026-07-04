@@ -4,6 +4,8 @@ import YouTube from 'react-youtube';
 import { getSource, deleteSource } from '../../services/source';
 import { getAnnotations, deleteAnnotation } from '../../services/annotation';
 import useYouTubePlayer, { PLAYBACK_SPEEDS } from '../../hooks/useYouTubePlayer';
+import useCaptionSync from '../../hooks/useCaptionSync';
+import { formatTime } from '../../services/ai/youtube';
 import { useChat } from '../../hooks';
 import CaptionDisplay from '../../components/youtube/CaptionDisplay';
 import WordQuickMenu from '../../components/modals/WordQuickMenu';
@@ -18,6 +20,9 @@ export default function YouTubeViewer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [annotations, setAnnotations] = useState([]);
+  // Always-current mirror of annotations for use inside async reconcile loops.
+  const annotationsRef = useRef([]);
+  useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
 
   // Word menu state (separate from Viewer's touch system)
   const [selectedWord, setSelectedWord] = useState(null);
@@ -189,18 +194,72 @@ export default function YouTubeViewer() {
     }
   }, [playVideo]);
 
+  // Reconcile optimistic temp rows with the real DB rows. The actual insert is
+  // done by useWordLookup's fire-and-forget createAnnotation(), so we poll
+  // getAnnotations() a few times and swap each temp-<ts> row for its real row
+  // (with a real UUID) as it lands. Without this the temp id sticks around and
+  // deleting the just-saved word fails with a Postgres uuid error.
+  const reconcileAnnotations = useCallback(async () => {
+    let pendingTemps = [];
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      let fresh;
+      try {
+        fresh = await getAnnotations(id);
+      } catch {
+        continue;
+      }
+
+      const serverTexts = new Set(
+        (fresh || []).map(a => (a.selected_text || '').toLowerCase())
+      );
+      pendingTemps = annotationsRef.current.filter(a =>
+        typeof a.id === 'string' &&
+        a.id.startsWith('temp-') &&
+        !serverTexts.has((a.selected_text || '').toLowerCase())
+      );
+      setAnnotations([...(fresh || []), ...pendingTemps]);
+      if (pendingTemps.length === 0) return;
+    }
+
+    // Still unresolved after retries → the background save likely failed
+    // (createAnnotation swallows its own error). Surface it instead of leaving a
+    // phantom "saved" word that can't be deleted.
+    if (pendingTemps.length > 0) {
+      console.warn('[YouTubeViewer] Saved word did not persist to server');
+      alert('단어 저장이 서버에 반영되지 않았을 수 있습니다. 새로고침 후 다시 확인해주세요.');
+    }
+  }, [id]);
+
   const handleWordSaved = useCallback((tempAnnotation) => {
+    // Optimistic insert for instant "saved" feedback, then reconcile the temp
+    // id with the real server row.
     setAnnotations(prev => [...prev, tempAnnotation]);
-  }, []);
+    reconcileAnnotations();
+  }, [reconcileAnnotations]);
 
   const handleWordDeleted = useCallback(async () => {
     if (!existingAnnotationForWord) return;
+    const annId = existingAnnotationForWord.id;
+
+    // Not-yet-persisted temp row: never call the server (a temp-<ts> id would
+    // trigger a Postgres "invalid input syntax for type uuid" error). Just drop
+    // it locally.
+    if (typeof annId === 'string' && annId.startsWith('temp-')) {
+      setAnnotations(prev => prev.filter(a => a.id !== annId));
+      closeWordModal();
+      return;
+    }
+
     try {
-      await deleteAnnotation(existingAnnotationForWord.id);
-      setAnnotations(prev => prev.filter(a => a.id !== existingAnnotationForWord.id));
+      await deleteAnnotation(annId);
+      setAnnotations(prev => prev.filter(a => a.id !== annId));
       closeWordModal();
     } catch (err) {
       console.error('[YouTubeViewer] Delete annotation error:', err);
+      alert('단어 삭제에 실패했습니다');
+      closeWordModal();
     }
   }, [existingAnnotationForWord, closeWordModal]);
 
@@ -214,13 +273,45 @@ export default function YouTubeViewer() {
   };
 
   const videoId = source?.youtube_data?.video_id;
-  const segments = source?.captions_data?.segments || [];
+  const segments = useMemo(() => source?.captions_data?.segments || [], [source]);
 
-  // Chat integration
-  const captionContext = useMemo(() =>
-    segments.map(s => s.text).join(' '),
-    [segments]
-  );
+  const { currentSegmentIndex } = useCaptionSync(segments, currentTime);
+
+  // Chat integration.
+  // Instead of shipping the full transcript on every chat turn (thousands of
+  // tokens per message for long videos), send a sampled overview of the whole
+  // video plus the segments around the current playback position.
+  const CONTEXT_CHAR_BUDGET = 1500;
+
+  const captionOverview = useMemo(() => {
+    if (segments.length === 0) return '';
+    const full = segments.map(s => s.text).join(' ');
+    if (full.length <= CONTEXT_CHAR_BUDGET) return full;
+    const step = Math.ceil(segments.length / 50);
+    return segments
+      .filter((_, i) => i % step === 0)
+      .map(s => s.text)
+      .join(' ')
+      .slice(0, CONTEXT_CHAR_BUDGET);
+  }, [segments]);
+
+  const captionContext = useMemo(() => {
+    if (segments.length === 0) return '';
+    const full = segments.map(s => s.text).join(' ');
+    // Short transcript: cheap enough to send whole.
+    if (full.length <= CONTEXT_CHAR_BUDGET) return full;
+
+    // Long transcript: overview + a window around the current position.
+    const idx = currentSegmentIndex >= 0 ? currentSegmentIndex : 0;
+    const from = Math.max(0, idx - 6);
+    const to = Math.min(segments.length, idx + 10);
+    const windowText = segments
+      .slice(from, to)
+      .map(s => `[${formatTime(s.start)}] ${s.text}`)
+      .join('\n');
+    return `[영상 전체 개요]\n${captionOverview}\n\n[현재 위치(${formatTime(segments[idx]?.start ?? 0)}) 부근 자막]\n${windowText}`;
+  }, [segments, currentSegmentIndex, captionOverview]);
+
   const chatHook = useChat({ sourceId: id, sourceContext: captionContext, topicTitle: source?.title || '' });
 
   // Auto-pause video when chat panel opens
@@ -333,6 +424,7 @@ export default function YouTubeViewer() {
         segmentIndex={selectedSegmentIndex}
         wordIndex={selectedWordIndex}
         timestamp={selectedTimestamp}
+        sentence={segments?.[selectedSegmentIndex]?.text}
         existingAnnotation={existingAnnotationForWord}
         onClose={closeWordModal}
         onSaved={handleWordSaved}

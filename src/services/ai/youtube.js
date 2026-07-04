@@ -63,70 +63,47 @@ export async function getYouTubeMetadata(videoId) {
 }
 
 /**
- * Fetch YouTube captions using multiple methods
- * Tries: 1) Direct API, 2) CORS proxy, 3) Page scraping
+ * Fetch YouTube captions.
+ *
+ * Note: the browser cannot call YouTube's timedtext/watch endpoints directly
+ * (CORS), so we load the watch page through a CORS proxy, read its embedded
+ * caption track list, then fetch the chosen track (also via proxy).
+ *
+ * Returns null when the video genuinely has no caption tracks. A proxy/network
+ * failure also returns null but is logged distinctly so it is clear the video
+ * may in fact have captions (do not blindly treat null as "no captions").
  */
 export async function fetchYouTubeCaptions(videoId, lang = 'en') {
   console.log('[YouTube] Fetching captions for:', videoId);
 
-  // Method 1: Try direct timedtext API
   try {
-    const directResult = await fetchCaptionsDirect(videoId, lang);
-    if (directResult) {
-      console.log('[YouTube] Got captions via direct API');
-      return directResult;
+    const result = await fetchCaptionsFromPage(videoId, lang);
+    if (result) {
+      console.log(`[YouTube] Got captions (${result.segments.length} segments)`);
+      return result;
     }
+    console.log('[YouTube] No caption tracks found for this video');
+    return null;
   } catch (e) {
-    console.log('[YouTube] Direct API failed:', e.message);
+    // Distinct log: this is a fetch/proxy failure, NOT a confirmed absence of
+    // captions. Callers should avoid over-eagerly steering the user to paid
+    // Whisper transcription on this path.
+    console.warn('[YouTube] Caption fetch failed (proxy/network):', e.message);
+    return null;
   }
-
-  // Method 2: Try via CORS proxy
-  try {
-    const proxyResult = await fetchCaptionsViaProxy(videoId, lang);
-    if (proxyResult) {
-      console.log('[YouTube] Got captions via proxy');
-      return proxyResult;
-    }
-  } catch (e) {
-    console.log('[YouTube] Proxy method failed:', e.message);
-  }
-
-  // Method 3: Try scraping YouTube page for caption data
-  try {
-    const scrapeResult = await fetchCaptionsViaScrape(videoId, lang);
-    if (scrapeResult) {
-      console.log('[YouTube] Got captions via scraping');
-      return scrapeResult;
-    }
-  } catch (e) {
-    console.log('[YouTube] Scrape method failed:', e.message);
-  }
-
-  console.log('[YouTube] All caption fetch methods failed');
-  return null;
 }
 
-// Direct YouTube timedtext API
-async function fetchCaptionsDirect(videoId, lang) {
-  const captionUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}&fmt=json3`;
-  const response = await fetch(captionUrl);
-  if (!response.ok) return null;
-  const data = await response.json();
-  return parseYouTubeCaptionData(data, lang);
-}
-
-// CORS proxy helper - try multiple proxies
+// CORS proxy helper - try multiple proxies, return the first that responds.
 async function fetchWithProxy(url) {
   const proxies = [
-    (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
     (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
   ];
 
   for (const proxyFn of proxies) {
     try {
-      const proxyUrl = proxyFn(url);
-      const response = await fetch(proxyUrl);
+      const response = await fetch(proxyFn(url));
       if (response.ok) return response;
     } catch (e) {
       console.log('[YouTube] Proxy attempt failed:', e.message);
@@ -135,64 +112,81 @@ async function fetchWithProxy(url) {
   return null;
 }
 
-// Via CORS proxy
-async function fetchCaptionsViaProxy(videoId, lang) {
+// Load the watch page, extract the caption track list, and fetch the best track.
+async function fetchCaptionsFromPage(videoId, lang) {
   const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
   const response = await fetchWithProxy(pageUrl);
-  if (!response) return null;
+  if (!response) throw new Error('Could not load video page through any proxy');
 
   const html = await response.text();
-  const captionUrlMatch = html.match(/"captionTracks":\s*\[(.*?)\]/);
-  if (!captionUrlMatch) return null;
+  const tracks = extractCaptionTracks(html);
+  if (!tracks || tracks.length === 0) return null; // genuinely no captions
 
+  const track = pickCaptionTrack(tracks, lang);
+  if (!track?.baseUrl) return null;
+
+  const baseUrl = decodeCaptionUrl(track.baseUrl);
+  // Prefer json3 (has word-ish segments); fall back to the track's default
+  // XML format if json3 isn't served.
+  const candidateUrls = [
+    baseUrl.includes('fmt=') ? baseUrl : `${baseUrl}&fmt=json3`,
+    baseUrl,
+  ];
+
+  for (const url of candidateUrls) {
+    const capRes = await fetchWithProxy(url);
+    if (!capRes) continue;
+    const parsed = parseCaptionText(await capRes.text(), track.languageCode || lang);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+// Extract the captionTracks JSON array from the watch page HTML.
+function extractCaptionTracks(html) {
+  const match = html.match(/"captionTracks":\s*(\[.*?\])/s);
+  if (!match) return null;
   try {
-    const captionTracksStr = `[${captionUrlMatch[1]}]`;
-    const captionTracks = JSON.parse(captionTracksStr);
-
-    const enTrack = captionTracks.find(t =>
-      t.languageCode === lang || t.languageCode?.startsWith(lang)
-    ) || captionTracks[0];
-
-    if (!enTrack?.baseUrl) return null;
-
-    const captionResponse = await fetchWithProxy(enTrack.baseUrl + '&fmt=json3');
-    if (!captionResponse) return null;
-
-    const captionData = await captionResponse.json();
-    return parseYouTubeCaptionData(captionData, lang);
-  } catch (e) {
-    console.log('[YouTube] Failed to parse caption tracks:', e);
+    return JSON.parse(match[1].replace(/\\u0026/g, '&'));
+  } catch {
     return null;
   }
 }
 
-// Scrape YouTube page for embedded caption data
-async function fetchCaptionsViaScrape(videoId, lang) {
-  const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const response = await fetchWithProxy(pageUrl);
-  if (!response) return null;
+// Prefer a human (non-ASR) track in the requested language, then any variant,
+// then any track at all.
+function pickCaptionTrack(tracks, lang) {
+  return (
+    tracks.find(t => t.languageCode === lang && t.kind !== 'asr') ||
+    tracks.find(t => t.languageCode?.startsWith(lang) && t.kind !== 'asr') ||
+    tracks.find(t => t.languageCode === lang) ||
+    tracks.find(t => t.languageCode?.startsWith(lang)) ||
+    tracks[0]
+  );
+}
 
-  const html = await response.text();
-  const timedtextMatch = html.match(/timedtext[^"]*v=([^&"]+)[^"]*/);
-  if (timedtextMatch) {
-    const extractedUrl = timedtextMatch[0].replace(/\\u0026/g, '&');
-    const fullUrl = `https://www.youtube.com/api/${extractedUrl}&fmt=json3&lang=${lang}`;
+function decodeCaptionUrl(url) {
+  return url.replace(/\\u0026/g, '&').replace(/&amp;/g, '&').replace(/\\\//g, '/');
+}
 
+// Parse a caption payload that may be json3 or XML.
+function parseCaptionText(text, lang) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('{')) {
     try {
-      const dataResponse = await fetchWithProxy(fullUrl);
-      if (dataResponse) {
-        const data = await dataResponse.json();
-        return parseYouTubeCaptionData(data, lang);
-      }
+      return parseYouTubeCaptionData(JSON.parse(trimmed), lang);
     } catch {
-      // Continue
+      return null;
     }
   }
-
+  if (trimmed.startsWith('<')) {
+    return parseCaptionXml(trimmed, lang);
+  }
   return null;
 }
 
-// Parse YouTube caption JSON format
+// Parse YouTube caption json3 format
 function parseYouTubeCaptionData(data, lang) {
   if (!data?.events || data.events.length === 0) return null;
 
@@ -213,6 +207,32 @@ function parseYouTubeCaptionData(data, lang) {
   if (segments.length === 0) return null;
 
   return { segments, language: lang, source: 'youtube' };
+}
+
+// Parse the legacy XML caption format (<text start="" dur="">...</text>)
+function parseCaptionXml(xml, lang) {
+  const segments = [];
+  const re = /<text start="([\d.]+)"(?:\s+dur="([\d.]+)")?[^>]*>([\s\S]*?)<\/text>/g;
+  let m;
+  while ((m = re.exec(xml)) !== null) {
+    const start = parseFloat(m[1]);
+    const dur = m[2] ? parseFloat(m[2]) : 3;
+    const text = decodeHtmlEntities(m[3]).replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    segments.push({ id: segments.length, start, end: start + dur, text });
+  }
+  if (segments.length === 0) return null;
+  return { segments, language: lang, source: 'youtube' };
+}
+
+function decodeHtmlEntities(s) {
+  return (s || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)));
 }
 
 /**

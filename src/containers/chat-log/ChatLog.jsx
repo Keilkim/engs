@@ -20,7 +20,8 @@ export default function ChatLog({ messages, onScrapToggle, streamingText = '', i
       }
       onScrapToggle?.();
     } catch {
-      // ignore
+      // Don't fail silently - the user thinks the message was saved otherwise.
+      alert('저장에 실패했습니다. 네트워크를 확인하고 다시 시도해 주세요.');
     }
   }
 

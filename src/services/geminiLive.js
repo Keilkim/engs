@@ -26,6 +26,8 @@ export class GeminiLiveSession {
     // Audio playback queue
     this.audioQueue = [];
     this.isProcessingQueue = false;
+    this.currentSource = null;      // AudioBufferSourceNode currently playing
+    this.currentPlayResolve = null; // resolver for the in-flight playAudio()
 
     // System instruction
     this.systemInstruction = options.systemInstruction || this.getDefaultSystemInstruction();
@@ -54,6 +56,21 @@ export class GeminiLiveSession {
     }
 
     return new Promise((resolve, reject) => {
+      // Settle exactly once. Without this, a setup failure or early close would
+      // leave connect() pending forever (UI stuck on a loading spinner).
+      let settled = false;
+      const settle = (isResolve, arg) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        isResolve ? resolve(arg) : reject(arg);
+      };
+
+      const timeoutId = setTimeout(() => {
+        settle(false, new Error('Gemini Live connection timed out'));
+        try { this.ws?.close(); } catch { /* noop */ }
+      }, 10000);
+
       try {
         this.ws = new WebSocket(cachedWsUrl);
 
@@ -69,24 +86,27 @@ export class GeminiLiveSession {
         this.ws.onerror = (error) => {
           console.error('[GeminiLive] WebSocket error:', error);
           this.onError(error);
-          reject(error);
+          settle(false, error);
         };
 
         this.ws.onclose = (event) => {
           console.log('[GeminiLive] WebSocket closed:', event.code, event.reason);
           this.isConnected = false;
           this.onConnectionChange(false);
+          // If setup never completed, reject the pending connect() so the caller
+          // isn't stuck awaiting forever.
+          settle(false, new Error(`Gemini Live connection closed before setup (code ${event.code})`));
         };
 
         // Setup success callback
         this.onSetupComplete = () => {
           this.isConnected = true;
           this.onConnectionChange(true);
-          resolve();
+          settle(true);
         };
 
       } catch (err) {
-        reject(err);
+        settle(false, err);
       }
     });
   }
@@ -96,7 +116,9 @@ export class GeminiLiveSession {
       setup: {
         model: 'models/gemini-2.0-flash-exp',
         generationConfig: {
-          responseModalities: ['AUDIO', 'TEXT'],
+          // Live API allows only ONE response modality. Request AUDIO and get
+          // the text via output transcription below.
+          responseModalities: ['AUDIO'],
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: {
@@ -108,6 +130,8 @@ export class GeminiLiveSession {
         systemInstruction: {
           parts: [{ text: this.systemInstruction }],
         },
+        // Receive a text transcript of the spoken audio response.
+        outputAudioTranscription: {},
       },
     };
 
@@ -149,6 +173,12 @@ export class GeminiLiveSession {
           }
         }
 
+        // Output audio transcription (text of the spoken response, since
+        // responseModalities is AUDIO-only)
+        if (content.outputTranscription?.text) {
+          this.onTextResponse(content.outputTranscription.text);
+        }
+
         // Turn complete
         if (content.turnComplete) {
           console.log('[GeminiLive] Turn complete');
@@ -180,7 +210,26 @@ export class GeminiLiveSession {
 
   clearAudioQueue() {
     this.audioQueue = [];
+
+    // Barge-in: stop the chunk that's playing right now, otherwise the AI voice
+    // keeps talking over the user for a few seconds after an interrupt.
+    const source = this.currentSource;
+    this.currentSource = null;
+    if (source) {
+      try {
+        source.onended = null;
+        source.stop();
+      } catch { /* already stopped */ }
+    }
+
+    // Unblock the awaiting playAudio() promise so processAudioQueue can drain.
+    const resolve = this.currentPlayResolve;
+    this.currentPlayResolve = null;
+
     this.isPlaying = false;
+    this.onAudioResponse(false);
+
+    if (resolve) resolve();
   }
 
   async processAudioQueue() {
@@ -226,14 +275,22 @@ export class GeminiLiveSession {
       const source = this.audioContext.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(this.audioContext.destination);
+      this.currentSource = source;
 
       this.isPlaying = true;
       this.onAudioResponse(true);
 
       return new Promise((resolve) => {
+        this.currentPlayResolve = resolve;
         source.onended = () => {
-          this.isPlaying = false;
-          this.onAudioResponse(false);
+          // Only clear state if this source is still the active one (clearAudioQueue
+          // may have already swapped it out during a barge-in).
+          if (this.currentSource === source) {
+            this.currentSource = null;
+            this.isPlaying = false;
+            this.onAudioResponse(false);
+          }
+          if (this.currentPlayResolve === resolve) this.currentPlayResolve = null;
           resolve();
         };
         source.start();
@@ -242,6 +299,7 @@ export class GeminiLiveSession {
     } catch (err) {
       console.error('[GeminiLive] Audio playback error:', err);
       this.isPlaying = false;
+      this.currentSource = null;
     }
   }
 

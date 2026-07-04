@@ -28,9 +28,18 @@ export default function WordQuickMenu({
   segmentIndex,
   wordIndex,
   timestamp,
+  // Optional source sentence for context/recall (omitted when unavailable)
+  sentence,
 }) {
   const isYouTube = sourceType === 'youtube';
   const { ko } = useTranslation();
+
+  // Context sentence for the saved card: prefer an explicit `sentence`, else
+  // reconstruct one from the tapped line's words (Viewer passes sentenceWords).
+  const contextSentence = sentence
+    || (Array.isArray(sentenceWords) && sentenceWords.length > 0
+      ? sentenceWords.map((w) => (typeof w === 'string' ? w : w?.text || '')).join(' ').replace(/\s+/g, ' ').trim()
+      : undefined);
   const [dynamicPosition, setDynamicPosition] = useState(null);
   const [positionReady, setPositionReady] = useState(false);
   const rafRef = useRef(null);
@@ -42,7 +51,7 @@ export default function WordQuickMenu({
     if (isOpen) openTimeRef.current = Date.now();
   }, [isOpen]);
 
-  const vocab = useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp });
+  const vocab = useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp, sentence: contextSentence });
   const grammar = useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp });
 
   // Position update (wordBbox % → viewport coords)
@@ -200,8 +209,10 @@ export default function WordQuickMenu({
           loading={vocab.loading}
           error={vocab.error}
           speaking={vocab.speaking}
+          canSave={vocab.canSave}
           existingAnnotation={existingAnnotation}
           onSave={vocab.handleSave}
+          onRetry={vocab.handleLookup}
           onDelete={onDeleted}
           onClose={onClose}
           onSpeak={vocab.speak}

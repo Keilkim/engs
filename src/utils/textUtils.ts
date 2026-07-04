@@ -1,10 +1,12 @@
 /**
  * Remove special characters from text for display.
- * Keeps: letters, numbers, spaces, Korean characters, hyphens, underscores.
+ * Keeps: any Unicode letter (incl. accented like caf\u00E9) or number, spaces,
+ * apostrophes (straight ' and curly \u2019) so contractions like "don't" survive,
+ * hyphens, and underscores.
  */
 export function cleanDisplayText(text: string | null | undefined): string {
   if (!text) return '';
-  return text.replace(/[^\w\s\uAC00-\uD7AF\u3130-\u318F-_]/g, '').trim();
+  return text.replace(/[^\p{L}\p{N}\s'\u2019\-_]/gu, '').trim();
 }
 
 /**

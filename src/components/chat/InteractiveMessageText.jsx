@@ -1,7 +1,35 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 
 const LONG_PRESS_DURATION = 500;
 const TAP_MOVE_THRESHOLD = 10;
+
+/**
+ * Extract the single sentence that contains the word at `partIndex`
+ * (index into text.split(/(\s+)/)). Falls back to the whole text.
+ */
+function extractSentenceAt(text, partIndex) {
+  if (!text) return '';
+  if (partIndex == null || Number.isNaN(partIndex)) return text;
+
+  const parts = text.split(/(\s+)/);
+  let offset = 0;
+  for (let k = 0; k < partIndex && k < parts.length; k++) {
+    offset += parts[k].length;
+  }
+  offset = Math.min(offset, text.length - 1);
+
+  const isBoundary = (ch) => ch === '.' || ch === '!' || ch === '?';
+
+  let start = 0;
+  for (let i = offset - 1; i >= 0; i--) {
+    if (isBoundary(text[i])) { start = i + 1; break; }
+  }
+  let end = text.length;
+  for (let i = offset; i < text.length; i++) {
+    if (isBoundary(text[i])) { end = i + 1; break; }
+  }
+  return text.slice(start, end).trim() || text;
+}
 
 /**
  * Renders message text as interactive word spans with short/long press detection.
@@ -26,9 +54,16 @@ export default function InteractiveMessageText({
     }
   }, []);
 
+  // Cancel a pending long-press timer if the component unmounts mid-press
+  // (e.g. tempId → id swap re-mounts the row), otherwise a stale timer fires
+  // and opens the grammar menu at a wrong position.
+  useEffect(() => () => clearTimer(), [clearTimer]);
+
   const handlePointerDown = useCallback((e) => {
     const target = e.target;
     const word = target.dataset?.word;
+    const rawIndex = target.dataset?.index;
+    const partIndex = rawIndex != null ? parseInt(rawIndex, 10) : null;
     const clientX = e.touches?.[0]?.clientX ?? e.clientX;
     const clientY = e.touches?.[0]?.clientY ?? e.clientY;
 
@@ -37,6 +72,7 @@ export default function InteractiveMessageText({
       startY: clientY,
       startTime: Date.now(),
       word: word || null,
+      partIndex,
       target,
       moved: false,
       executed: false,
@@ -48,9 +84,10 @@ export default function InteractiveMessageText({
     timerRef.current = setTimeout(() => {
       if (touchStateRef.current && !touchStateRef.current.moved && !touchStateRef.current.executed) {
         touchStateRef.current.executed = true;
-        // Long press → grammar analysis on full text
+        // Long press → grammar analysis on the tapped sentence only
+        // (not the entire multi-paragraph message).
         const rect = target.getBoundingClientRect();
-        onLongPress?.(text, rect);
+        onLongPress?.(extractSentenceAt(text, touchStateRef.current.partIndex), rect);
       }
     }, LONG_PRESS_DURATION);
   }, [text, onLongPress, onPressStart]);
@@ -133,6 +170,7 @@ export default function InteractiveMessageText({
             key={i}
             className="interactive-word"
             data-word={cleanWord || undefined}
+            data-index={i}
           >
             {part}
           </span>

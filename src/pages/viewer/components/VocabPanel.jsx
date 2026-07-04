@@ -42,19 +42,28 @@ export default function VocabPanel({
                     className="vocab-item"
                     onClick={() => {
                       const targetPage = selData.page || 0;
-                      if (targetPage !== currentPage) {
+                      const changingPage = targetPage !== currentPage;
+                      if (changingPage) {
                         setCurrentPage(targetPage);
                       }
                       closeModal();
                       highlightVocab(item.id, 5000);
 
-                      setTimeout(() => {
-                        const bounds = selData.bounds || selData;
-                        if (scrollContainerRef.current && bounds) {
-                          const scrollY = (bounds.y / 100) * scrollContainerRef.current.scrollHeight - 100;
-                          scrollContainerRef.current.scrollTo({ top: Math.max(0, scrollY), behavior: 'smooth' });
-                        }
-                      }, targetPage !== currentPage ? 100 : 0);
+                      const bounds = selData.bounds || selData;
+                      const doScroll = () => {
+                        // Skip items without positional bounds (e.g. YouTube words)
+                        if (!scrollContainerRef.current || !bounds || bounds.y === undefined) return;
+                        const scrollY = (bounds.y / 100) * scrollContainerRef.current.scrollHeight - 100;
+                        scrollContainerRef.current.scrollTo({ top: Math.max(0, scrollY), behavior: 'smooth' });
+                      };
+
+                      if (changingPage) {
+                        // Wait for the new page's layout to settle instead of a
+                        // fixed 100ms guess, so scrollHeight is accurate.
+                        requestAnimationFrame(() => requestAnimationFrame(doScroll));
+                      } else {
+                        doScroll();
+                      }
 
                       setShowVocabPanel(false);
                     }}

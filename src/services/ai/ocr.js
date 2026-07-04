@@ -10,6 +10,33 @@ async function loadTesseract() {
   return Tesseract;
 }
 
+// Shared OCR worker reused across pages so we don't pay the (30-90s for large PDFs)
+// re-initialization cost per page. Callers must invoke terminateOcrWorker() when done.
+let ocrWorker = null;
+async function getOcrWorker() {
+  if (!ocrWorker) {
+    const tess = await loadTesseract();
+    ocrWorker = await tess.createWorker('eng', 1);
+  }
+  return ocrWorker;
+}
+
+/**
+ * Terminate the shared OCR worker and release its Web Worker + WASM memory.
+ * Safe to call when no worker exists. Call once after a batch (or in a finally).
+ */
+export async function terminateOcrWorker() {
+  if (ocrWorker) {
+    const worker = ocrWorker;
+    ocrWorker = null;
+    try {
+      await worker.terminate();
+    } catch {
+      // ignore terminate errors (worker may already be gone)
+    }
+  }
+}
+
 /**
  * Levenshtein distance calculation for string similarity
  */
@@ -226,8 +253,8 @@ export async function extractTextWithWordPositions(base64Image) {
     const { width: imageWidth, height: imageHeight } = await imgLoadPromise;
     console.log('[OCR-Extract] Image dimensions:', imageWidth, 'x', imageHeight);
 
-    const tess = await loadTesseract();
-    const worker = await tess.createWorker('eng', 1);
+    // Reuse the shared worker across pages; terminateOcrWorker() releases it after the batch.
+    const worker = await getOcrWorker();
 
     let allWords = [];
     let fullText = '';
@@ -268,8 +295,6 @@ export async function extractTextWithWordPositions(base64Image) {
       allWords = extractWordsFromResult(result.data);
       fullText = result.data.text || '';
     }
-
-    await worker.terminate();
 
     if (allWords.length === 0) {
       console.log('[OCR-Extract] NO WORDS FOUND!');

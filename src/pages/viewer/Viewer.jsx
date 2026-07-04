@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { deleteSource } from '../../services/source';
 import { deleteAnnotation } from '../../services/annotation';
@@ -19,12 +19,13 @@ export default function Viewer() {
   // Source data (from custom hook)
   const {
     source, annotations, vocabulary, sentencePatterns, loading, error,
-    loadData, refreshAnnotations, getPages,
+    loadData, refreshAnnotations, pages, getPages,
     setSource, setAnnotations,
   } = useSourceData(id);
 
-  // Chat integration
-  const sourceContext = source ? extractOcrText(source) : '';
+  // Chat integration - memoize OCR text extraction (avoid re-parsing pages/OCR
+  // on every render / keystroke).
+  const sourceContext = useMemo(() => (source ? extractOcrText(source) : ''), [source]);
   const chatHook = useChat({ sourceId: id, sourceContext, topicTitle: source?.title || '' });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -40,13 +41,13 @@ const zoomOrigin = { x: 0, y: 0 };
   const scrollContainerRef = useRef(null); // For scroll tracking
 
   // Page navigation (from custom hook)
-  const pages = getPages();
+  // `pages` is the shared memoized parse from useSourceData (no re-parsing here).
   const totalPages = pages ? pages.length : 0;
   const {
     currentPage, setCurrentPage,
     handlePrevPage, handleNextPage,
     mobileNavRef,
-  } = usePageNavigation(totalPages);
+  } = usePageNavigation(totalPages, id);
 
   // Minimap navigation (from custom hook)
   const {
@@ -237,7 +238,7 @@ const zoomOrigin = { x: 0, y: 0 };
     if (activeModal.type === 'wordMenu' || activeModal.type === 'grammarTooltip') {
       closeModal();
       menuJustClosed.current = true;
-      setTimeout(() => { menuJustClosed.current = false; }, 400);
+      setTimeout(() => { menuJustClosed.current = false; }, 150);
       return;
     }
 
@@ -451,7 +452,7 @@ const zoomOrigin = { x: 0, y: 0 };
     }
     closeModal();
     menuJustClosed.current = true;
-    setTimeout(() => { menuJustClosed.current = false; }, 400);
+    setTimeout(() => { menuJustClosed.current = false; }, 150);
   }, [closeModal]);
 
   // Handle word menu saved (with optimistic update)
@@ -460,10 +461,23 @@ const zoomOrigin = { x: 0, y: 0 };
     if (tempAnnotation) {
       setAnnotations(prev => [...prev, tempAnnotation]);
     }
-    // closeWordMenu는 WordQuickMenu의 onClose에서 호출되므로 여기서는 생략
-    // 백그라운드에서 서버 데이터 동기화 (실제 ID 가져오기)
-    setTimeout(() => refreshAnnotations(), 500);
-  }, []);
+
+    // 고정 지연(500ms) 대신, background insert가 실제로 반영될 때까지
+    // 재시도하며 병합한다. refreshAnnotations는 아직 서버에 없는 temp를
+    // 유지하므로, 방금 저장한 단어가 화면에서 사라지지 않는다.
+    const temps = tempAnnotation ? [tempAnnotation] : [];
+    let attempts = 0;
+    const reconcile = async () => {
+      attempts += 1;
+      const res = await refreshAnnotations(temps);
+      // 실제 행이 아직 없으면(=temp가 여전히 pending) 잠시 후 다시 시도
+      if (res && res.stillPending.length > 0 && attempts < 5) {
+        setTimeout(reconcile, 500);
+      }
+    };
+    // insert가 시작될 여유를 준 뒤 첫 동기화
+    setTimeout(reconcile, 300);
+  }, [refreshAnnotations, setAnnotations]);
 
   // Handle word menu delete
   const handleWordMenuDelete = useCallback(async () => {
@@ -497,7 +511,6 @@ const zoomOrigin = { x: 0, y: 0 };
 
   // Get the display image (screenshot or original)
   function getDisplayImage() {
-    const pages = getPages();
     if (pages && pages.length > 0) {
       return pages[currentPage];
     }
@@ -510,6 +523,12 @@ const zoomOrigin = { x: 0, y: 0 };
   // Keyboard navigation + Spacebar for panning
   useEffect(() => {
     function handleKeyDown(e) {
+      // Don't hijack keys while typing in the chat / any editable field.
+      const t = e.target;
+      if (t && typeof t.closest === 'function' && t.closest('input, textarea, [contenteditable]')) {
+        return;
+      }
+
       // Spacebar for pan mode
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault();
@@ -521,7 +540,6 @@ const zoomOrigin = { x: 0, y: 0 };
         return;
       }
 
-      const pages = getPages();
       if (!pages || pages.length <= 1) return;
 
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
@@ -551,14 +569,13 @@ const zoomOrigin = { x: 0, y: 0 };
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [currentPage, source, handlePrevPage, handleNextPage]);
+  }, [currentPage, pages, handlePrevPage, handleNextPage]);
 
   // Wheel handler: trackpad pinch zoom + page navigation (combined to prevent conflicts)
   useEffect(() => {
     const container = imageContainerRef.current;
     if (!container) return;
 
-    const pages = getPages();
     const isMultiPage = pages && pages.length > 1;
     let lastPinchTime = 0;
 
@@ -611,7 +628,7 @@ const zoomOrigin = { x: 0, y: 0 };
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [source, currentPage, handleNextPage, handlePrevPage, triggerShake, zoomScale, panOffset, clampPanOffset, setZoomScale, setPanOffset]);
+  }, [pages, currentPage, handleNextPage, handlePrevPage, triggerShake, zoomScale, panOffset, clampPanOffset, setZoomScale, setPanOffset]);
 
   // Reset zoom and pan when page changes
   useEffect(() => {

@@ -16,7 +16,7 @@ export default function Mypage() {
   const nickname = user?.user_metadata?.nickname || 'User';
   const email = user?.email || '';
   const createdAt = user?.created_at
-    ? new Date(user.created_at).toLocaleDateString('en-US')
+    ? new Date(user.created_at).toLocaleDateString('ko-KR')
     : '';
 
   async function handleLogout() {

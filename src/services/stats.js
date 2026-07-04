@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { localDateString } from '../utils/dateUtils';
 
 // 사용자 통계 조회
 export async function getUserStats() {
@@ -17,11 +18,14 @@ export async function getUserStats() {
     .eq('user_id', user.id);
 
   // 복습 완료 수
+  // 기준을 last_reviewed IS NOT NULL로 사용: SM-2에서 오답 시 repetitions가 0으로
+  // 리셋되므로 repetitions>0만 세면 '틀리기만 한 카드'가 누락된다. 한 번이라도
+  // 복습한 카드를 세는 last_reviewed 기준이 더 일관적이다.
   const { count: reviewedCount } = await supabase
     .from('review_items')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id)
-    .gt('repetitions', 0);
+    .not('last_reviewed', 'is', null);
 
   // 총 복습 아이템 수
   const { count: totalReviewCount } = await supabase
@@ -52,7 +56,7 @@ export async function getWeeklyStats() {
   for (let i = 6; i >= 0; i--) {
     const date = new Date();
     date.setDate(date.getDate() - i);
-    days.push(date.toISOString().split('T')[0]);
+    days.push(localDateString(date));
   }
 
   const { data, error } = await supabase
@@ -81,7 +85,7 @@ export async function getWeeklyStats() {
 // 오늘 학습 통계 업데이트
 export async function updateTodayStats(field, increment = 1) {
   const { data: { user } } = await supabase.auth.getUser();
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateString();
 
   // 오늘 데이터 조회
   const { data: existing } = await supabase

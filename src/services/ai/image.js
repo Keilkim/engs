@@ -35,8 +35,9 @@ Only crop more aggressively if there are obvious ads or empty margins.`;
  * Crop image using Canvas (percentage-based region)
  */
 export async function cropImage(base64Image, region) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
+    img.onerror = () => reject(new Error('Failed to load image for cropping'));
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -61,8 +62,9 @@ export async function cropImage(base64Image, region) {
  * Crop specific region from image pages
  */
 export async function cropImageRegion(pages, page, region) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
+    img.onerror = () => reject(new Error('Failed to load image for cropping'));
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');

@@ -70,7 +70,7 @@ export default function VocabTooltip({
             🔊
           </button>
         </div>
-        <pre className="vocab-tooltip-definition">{definition}</pre>
+        <pre className="vocab-tooltip-definition">{typeof definition === 'string' ? definition : ''}</pre>
         {annotation && (
           <div className="vocab-tooltip-actions">
             <button className="delete-btn" onClick={onDelete}>

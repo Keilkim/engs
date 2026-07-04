@@ -70,9 +70,16 @@ export default async function handler(req, res) {
 
     // Step 4: Parse segments
     const segments = (data.segments || []).map((seg, index) => {
-      const segmentWords = (data.words || []).filter(
-        w => w.start >= seg.start && w.end <= seg.end
-      );
+      // Assign each word to exactly one segment by its midpoint. The old
+      // `w.start >= seg.start && w.end <= seg.end` dropped any word that
+      // straddled a segment boundary (or lost one to float rounding), which
+      // shifted every following word index — breaking highlight/seek/saved
+      // timestamps. Midpoint assignment neither drops nor double-counts
+      // boundary words.
+      const segmentWords = (data.words || []).filter((w) => {
+        const mid = (w.start + w.end) / 2;
+        return mid >= seg.start && mid < seg.end;
+      });
       return {
         id: index,
         start: seg.start,

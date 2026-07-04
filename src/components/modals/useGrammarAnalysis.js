@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { analyzeGrammarPatterns } from '../../services/ai';
 import { createAnnotation } from '../../services/annotation';
+import { logError } from '../../utils/errors';
 
 // Build line groups from sentenceWords for selection_rect storage
 function buildLineGroups(sentenceWords) {
@@ -135,17 +136,19 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
         }),
       };
 
-      const tempAnnotation = {
-        ...annotationData,
-        id: `temp-${Date.now()}`,
-        created_at: new Date().toISOString(),
-      };
-      onSaved?.(tempAnnotation);
+      // Await persistence so createAnnotation + its review_items insert either
+      // both succeed (hand the real row to the optimistic list) or the failure
+      // is surfaced to the user — no more silent data loss.
+      const saved = await createAnnotation(annotationData);
+      onSaved?.(saved);
       onClose(true);
-
-      createAnnotation(annotationData).catch(() => {});
-    } catch {
+    } catch (err) {
+      logError('useGrammarAnalysis.save', err);
+      // Nothing was optimistically added, so nothing to roll back. Keep the menu
+      // open and alert the user so they can retry.
+      setError('saveFailed');
       setLoading(false);
+      alert('저장에 실패했습니다. 네트워크를 확인하고 다시 시도해 주세요.');
     }
   }
 

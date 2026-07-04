@@ -24,21 +24,26 @@ export async function saveChatMessage(message, role, sourceId = null) {
 export async function getChatLogs(sourceId = null, limit = 50) {
   const { data: { user } } = await supabase.auth.getUser();
 
+  // Fetch the most recent `limit` rows (descending), then reverse to
+  // chronological order. Ordering ascending + limit would return the OLDEST
+  // messages and drop the recent context once history exceeds `limit`.
   let query = supabase
     .from('chat_logs')
     .select('*')
     .eq('user_id', user.id)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(limit);
 
   if (sourceId) {
     query = query.eq('source_id', sourceId);
+  } else {
+    query = query.is('source_id', null);
   }
 
   const { data, error } = await query;
 
   if (error) throw error;
-  return data;
+  return (data || []).reverse();
 }
 
 // 메시지 스크랩

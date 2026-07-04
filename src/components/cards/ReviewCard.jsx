@@ -18,7 +18,10 @@ export default function ReviewCard({ count, loading }) {
   }
 
   return (
-    <div className="review-card" onClick={handleClick}>
+    <div
+      className={`review-card ${count > 0 ? '' : 'review-card-done'}`}
+      onClick={count > 0 ? handleClick : undefined}
+    >
       <div className="review-card-header">
         <h2><TranslatableText textKey="reviewCard.title">Today's Review</TranslatableText></h2>
       </div>
@@ -43,13 +46,12 @@ export default function ReviewCard({ count, loading }) {
           </>
         )}
       </div>
-      <button className="review-start-button">
-        {count > 0 ? (
+      {/* 복습할 카드가 없으면 눌러도 빈 화면만 나오는 'Review Again' 버튼을 숨긴다 */}
+      {count > 0 && (
+        <button className="review-start-button">
           <TranslatableText textKey="reviewCard.startReview">Start Review</TranslatableText>
-        ) : (
-          <TranslatableText textKey="reviewCard.reviewAgain">Review Again</TranslatableText>
-        )}
-      </button>
+        </button>
+      )}
     </div>
   );
 }
