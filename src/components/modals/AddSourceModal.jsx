@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createSource, createYouTubeSource, uploadFile, captureWebpageScreenshot } from '../../services/source';
 import { convertPdfToImages } from '../../utils/pdfUtils';
 import { generateImageThumbnail, generateThumbnailFromPage, ocrAllPages } from './sourceHelpers';
@@ -24,7 +24,7 @@ function formatStep(status) {
   return { label, percent };
 }
 
-export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
+export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl = null, fromShelf = false }) {
   const [activeTab, setActiveTab] = useState('file'); // 'file' | 'link'
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -41,6 +41,18 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
   const [warning, setWarning] = useState('');
   const [titleTouched, setTitleTouched] = useState(false); // user typed the title manually
   const linkSeqRef = useRef(0); // guards against out-of-order link responses
+
+  // Prefill from the Home "next to decode" shelf: when opened with a URL, switch to
+  // the link tab and run the same preview/caption flow as a manual paste. This must
+  // stay above the early return so hook order is stable; the modal has no other
+  // lifecycle, so it's the single prefill entry point. Fires once per open.
+  useEffect(() => {
+    if (isOpen && initialUrl) {
+      setActiveTab('link');
+      handleLinkChange(initialUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, initialUrl]);
 
   if (!isOpen) return null;
 
@@ -186,6 +198,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
           thumbnail_url: youtubePreview.thumbnail,
         },
         captionsData: youtubeCaptions,
+        toRead: fromShelf,
       });
       onSuccess();
       handleClose();

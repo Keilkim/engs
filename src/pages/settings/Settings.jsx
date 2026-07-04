@@ -40,6 +40,9 @@ export default function Settings() {
   const [englishLevel, setEnglishLevel] = useState(
     getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate')
   );
+  const [includeShorts, setIncludeShorts] = useState(
+    getSetting(SETTINGS_KEYS.SHELF_INCLUDE_SHORTS, 'false') === 'true'
+  );
 
   // Save language settings when changed
   function handleAiChatLangChange(value) {
@@ -60,6 +63,13 @@ export default function Settings() {
     setEnglishLevel(value);
     setSetting(SETTINGS_KEYS.ENGLISH_LEVEL, value);
     setMessage({ type: 'success', text: 'English level updated' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 2000);
+  }
+
+  function handleShortsToggle(value) {
+    setIncludeShorts(value);
+    setSetting(SETTINGS_KEYS.SHELF_INCLUDE_SHORTS, value ? 'true' : 'false');
+    setMessage({ type: 'success', text: 'Shorts setting updated' });
     setTimeout(() => setMessage({ type: '', text: '' }), 2000);
   }
 
@@ -241,6 +251,22 @@ export default function Settings() {
                   </option>
                 ))}
               </select>
+            </div>
+          </div>
+        </section>
+
+        {/* Discovery — Home "next to decode" shelf */}
+        <section className="settings-section">
+          <div className="section-title">Discovery</div>
+          <div className="settings-card">
+            <div className="setting-row">
+              <label htmlFor="include-shorts">Show Shorts in recommendations</label>
+              <input
+                id="include-shorts"
+                type="checkbox"
+                checked={includeShorts}
+                onChange={(e) => handleShortsToggle(e.target.checked)}
+              />
             </div>
           </div>
         </section>

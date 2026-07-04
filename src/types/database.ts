@@ -26,6 +26,8 @@ export interface Source {
 export interface YouTubeData {
   video_id: string;
   channel: string;
+  channel_id?: string; // UC... — captured at add time (Phase 2) or backfilled lazily by the shelf
+  author_url?: string; // noembed channel URL (backfill material)
   duration?: number;
   has_captions: boolean;
   caption_source: 'youtube' | 'whisper' | 'manual';
