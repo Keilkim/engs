@@ -6,9 +6,6 @@ const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
-// Well-known public InnerTube key (used by youtube.com itself).
-const INNERTUBE_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -20,14 +17,18 @@ export default async function handler(req, res) {
   if (!videoId) return res.status(400).json({ error: 'videoId is required' });
 
   try {
-    // 1) Get the caption track list (watch page first, InnerTube as fallback).
-    let tracks = await tracksFromWatchPage(videoId);
+    // 1) Get the caption track list from the watch page.
+    const wp = await tracksFromWatchPage(videoId);
+    const tracks = wp.tracks;
     if (!tracks || tracks.length === 0) {
-      tracks = await tracksFromInnertube(videoId);
-    }
-    if (!tracks || tracks.length === 0) {
-      // Genuinely no captions available for this video.
-      return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false });
+      // Genuinely no captions, OR YouTube served this datacenter IP a page
+      // without them. _debug tells which (removed once confirmed).
+      return res.status(200).json({
+        segments: [],
+        source: 'youtube',
+        hasCaptions: false,
+        _debug: { watchOk: wp.ok, status: wp.status, htmlLen: wp.htmlLen, hasCaptionSubstr: wp.hasCaptionSubstr, parsed: wp.parsedCount },
+      });
     }
 
     // 2) Pick the best track and fetch its content (json3 preferred, else xml).
@@ -62,36 +63,33 @@ async function tracksFromWatchPage(videoId) {
       Cookie: 'CONSENT=YES+1; SOCS=CAI',
     },
   });
-  if (!r.ok) return null;
-  const html = await r.text();
-  const m = html.match(/"captionTracks":\s*(\[.*?\])/s);
-  if (!m) return null;
-  try {
-    return JSON.parse(m[1].replace(/\\u0026/g, '&'));
-  } catch {
-    return null;
-  }
-}
+  const out = { ok: r.ok, status: r.status, htmlLen: 0, hasCaptionSubstr: false, parsedCount: 0, tracks: null };
+  if (!r.ok) return out;
 
-async function tracksFromInnertube(videoId) {
-  const r = await fetch(`https://youtubei.googleapis.com/youtubei/v1/player?key=${INNERTUBE_KEY}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
-    body: JSON.stringify({
-      videoId,
-      context: {
-        client: {
-          clientName: 'ANDROID',
-          clientVersion: '19.09.37',
-          androidSdkVersion: 30,
-          hl: 'en',
-        },
-      },
-    }),
-  });
-  if (!r.ok) return null;
-  const data = await r.json().catch(() => null);
-  return data?.captions?.playerCaptionsTracklistRenderer?.captionTracks || null;
+  const html = await r.text();
+  out.htmlLen = html.length;
+  const key = '"captionTracks":';
+  const i = html.indexOf(key);
+  out.hasCaptionSubstr = i !== -1;
+  if (i === -1) return out;
+
+  // Bracket-match the array so a caption name's nested `runs:[...]` can't
+  // truncate it (which a non-greedy regex would).
+  const start = html.indexOf('[', i);
+  if (start === -1) return out;
+  let depth = 0, end = -1;
+  for (let k = start; k < html.length; k++) {
+    const c = html[k];
+    if (c === '[') depth++;
+    else if (c === ']') { depth--; if (depth === 0) { end = k; break; } }
+  }
+  if (end === -1) return out;
+  try {
+    const arr = JSON.parse(html.slice(start, end + 1).replace(/\\u0026/g, '&'));
+    out.parsedCount = arr.length;
+    out.tracks = arr;
+  } catch { /* leave tracks null */ }
+  return out;
 }
 
 function pickTrack(tracks, lang) {
