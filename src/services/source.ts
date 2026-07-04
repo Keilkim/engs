@@ -66,6 +66,29 @@ export async function getSource(id: string): Promise<Source> {
   return data as Source;
 }
 
+// Captions can be large (word-level Whisper timings for the whole video), so the
+// review list query deliberately omits them. When a review card needs the exact
+// sentence boundaries for scene playback we fetch just this one column, once per
+// source, and memoize it for the rest of the session.
+const captionsCache = new Map<string, CaptionsData | null>();
+
+export async function getSourceCaptions(id: string | number): Promise<CaptionsData | null> {
+  const key = String(id);
+  if (captionsCache.has(key)) return captionsCache.get(key) ?? null;
+
+  const { data, error } = await supabase
+    .from('sources')
+    .select('captions_data')
+    .eq('id', id)
+    .single();
+
+  if (error) throw error;
+
+  const captions = (data?.captions_data ?? null) as CaptionsData | null;
+  captionsCache.set(key, captions);
+  return captions;
+}
+
 interface CreateSourceInput {
   title: string;
   type: string;

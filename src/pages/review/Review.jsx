@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { getTodayReviewItems, getTotalReviewCount, updateReviewResult } from '../../services/review';
 import { updateTodayStats } from '../../services/stats';
 import Flashcard from '../../containers/flashcard/Flashcard';
+import ScenePlayer from '../../containers/flashcard/ScenePlayer';
 import { TranslatableText } from '../../components/translatable';
+import { safeJsonParse } from '../../utils/errors';
 
 export default function Review() {
   const navigate = useNavigate();
@@ -209,6 +211,17 @@ export default function Review() {
   const currentItem = items[currentIndex];
   const progress = ((currentIndex + 1) / items.length) * 100;
 
+  // 이 카드가 YouTube 장면에서 저장된 단어라면, 원본 오디오를 다시 들을 수 있게
+  // Whisper 타임스탬프로 그 장면을 재생 연결한다.
+  const annotation = currentItem?.annotation;
+  const sceneRect = safeJsonParse(annotation?.selection_rect, null);
+  const youtubeData = annotation?.source?.type === 'youtube' ? annotation.source.youtube_data : null;
+  const sceneVideoId = youtubeData?.video_id;
+  const sceneStart = sceneRect?.type === 'youtube_word' && typeof sceneRect.timestamp === 'number'
+    ? sceneRect.timestamp
+    : null;
+  const canPlayScene = Boolean(sceneVideoId) && sceneStart != null;
+
   return (
     <div className="review-screen">
       <header className="review-header">
@@ -236,6 +249,16 @@ export default function Review() {
           exiting={exiting}
           onReveal={() => setShowAnswer(true)}
         />
+
+        {canPlayScene && (
+          <ScenePlayer
+            key={`scene-${currentIndex}`}
+            videoId={sceneVideoId}
+            sourceId={annotation.source.id}
+            segmentIndex={sceneRect.segmentIndex}
+            fallbackStart={sceneStart}
+          />
+        )}
 
         {currentItem?.annotation?.source?.title && (
           <p className="review-source-label">

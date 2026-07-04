@@ -1,7 +1,6 @@
 import nlp from 'compromise';
-import { GRAMMAR_COLORS, fetchGemini, LANG_CODES } from './config';
+import { GRAMMAR_COLORS, fetchGemini } from './config';
 import { parseGeminiJSON } from './gemini';
-import { googleTranslate } from './vocabulary';
 import { getSetting, SETTINGS_KEYS } from '../settings';
 import { logError } from '../../utils/errors';
 
@@ -230,53 +229,37 @@ Return ONLY valid JSON, no markdown:
   ]
 }`;
 
-  // Primary: Gemini gives translation + idioms + grammar structures.
-  let geminiError = null;
+  // Gemini gives translation + idioms + grammar structures.
+  // 실패하면 폴백(번역으로 때우기)하지 않고 그대로 실패로 반려한다 →
+  // 호출부가 '분석 실패'를 명확히 보여주고 다시 시도하게 한다.
+  let data;
   try {
-    const data = await fetchGemini({
+    data = await fetchGemini({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.3 },
     });
-
-    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    let parsed = null;
-    try {
-      parsed = parseGeminiJSON(responseText);
-    } catch {
-      // Fallback: extract the first {...last } block.
-      const start = responseText.indexOf('{');
-      const end = responseText.lastIndexOf('}');
-      if (start !== -1 && end > start) {
-        parsed = JSON.parse(responseText.slice(start, end + 1));
-      }
-    }
-
-    if (parsed && (parsed.translation || parsed.patterns?.length > 0)) {
-      return { translation: parsed.translation || '', patterns: parsed.patterns || [] };
-    }
-    // Got a response but it had no candidates/usable content (e.g. safety block
-    // or empty body) — treat as a degraded AI result, not a genuine "empty".
-    geminiError = new Error(data?.error?.message || 'AI가 빈 응답을 반환했어요');
   } catch (err) {
-    // Gemini unavailable (key/quota/network/parse). Don't fail outright —
-    // degrade to a translation-only card using the reliable translate path.
-    logError('analyzeGrammarPatterns.gemini', err);
-    geminiError = err;
+    logError('analyzeGrammarPatterns', err);
+    throw err;
   }
 
-  // Fallback: at least translate the sentence so the card is still useful.
-  // (Uses the same gtx path that word lookup relies on.) If this also fails,
-  // it throws → the caller shows a real "analysis failed" state.
-  const translationLang = getSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, 'Korean');
-  const langCode = LANG_CODES[translationLang] || 'ko';
-  const translation = await googleTranslate(text, langCode);
-  return {
-    translation,
-    patterns: [],
-    // Signals the UI that AI pattern analysis didn't run (so it can say
-    // "AI 연결 실패" instead of a misleading "no expressions"), plus the reason.
-    degraded: true,
-    reason: geminiError ? `${geminiError.status ? geminiError.status + ' ' : ''}${geminiError.message || ''}`.trim() : '',
-  };
+  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  let parsed = null;
+  try {
+    parsed = parseGeminiJSON(responseText);
+  } catch {
+    // Last resort: extract the first {...last } block.
+    const start = responseText.indexOf('{');
+    const end = responseText.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      try { parsed = JSON.parse(responseText.slice(start, end + 1)); } catch { parsed = null; }
+    }
+  }
+
+  if (parsed && (parsed.translation || parsed.patterns?.length > 0)) {
+    return { translation: parsed.translation || '', patterns: parsed.patterns || [] };
+  }
+
+  // 응답은 왔지만 쓸 내용이 없음 → 빈 결과로 위장하지 않고 실패로 반려.
+  throw new Error(data?.error?.message || 'AI 문법 분석에 실패했어요');
 }

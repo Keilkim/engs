@@ -41,8 +41,8 @@ export async function getTodayReviewItems() {
     .select(`
       *,
       annotation:annotations(
-        id, selected_text, ai_analysis_json, memo_content,
-        source:sources(id, title)
+        id, selected_text, ai_analysis_json, memo_content, selection_rect,
+        source:sources(id, title, type, youtube_data)
       )
     `)
     .lte('next_review_date', today)

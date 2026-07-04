@@ -145,17 +145,25 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
       });
       if (!titleTouched) setTitle(metadata.title);
 
-      const captions = await fetchYouTubeCaptions(parsed.video_id);
-      if (seq !== linkSeqRef.current) return; // stale response, discard
-      if (captions && captions.segments.length > 0) {
-        setYoutubeCaptions(captions);
-        setCaptionStatus('found');
-      } else {
-        setCaptionStatus('not_found');
+      try {
+        const captions = await fetchYouTubeCaptions(parsed.video_id);
+        if (seq !== linkSeqRef.current) return; // stale response, discard
+        if (captions && captions.segments.length > 0) {
+          setYoutubeCaptions(captions);
+          setCaptionStatus('found');
+        } else {
+          setCaptionStatus('not_found'); // 진짜로 자막이 없는 영상
+        }
+      } catch {
+        // 자막 '불러오기 실패' — '자막 없음'으로 위장하지 않고 실패로 명확히 표시(반려).
+        if (seq !== linkSeqRef.current) return;
+        setCaptionStatus('error');
+        setError('자막을 불러오지 못했어요. 잠시 후 다시 시도하거나, 자막 없이 저장/음성 인식을 이용해 주세요.');
       }
     } catch {
       if (seq !== linkSeqRef.current) return;
-      setCaptionStatus('not_found');
+      setCaptionStatus('error');
+      setError('유튜브 정보를 불러오지 못했어요. 링크를 확인하고 다시 시도해 주세요.');
     }
   }
 
@@ -436,6 +444,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                       {captionStatus === 'loading' && <span style={{ color: 'var(--text-secondary)' }}>캡션 확인 중...</span>}
                       {captionStatus === 'found' && <span style={{ color: '#4ade80' }}>캡션 {youtubeCaptions?.segments?.length}개 발견</span>}
                       {captionStatus === 'not_found' && <span style={{ color: '#fb923c' }}>캡션 없음</span>}
+                      {captionStatus === 'error' && <span style={{ color: '#f87171' }}>자막 불러오기 실패</span>}
                     </div>
                   </div>
                 </div>
@@ -453,7 +462,18 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                   <button type="button" className="submit-button" disabled>캡션 확인중...</button>
                 ) : (
                   <>
-                    {captionStatus === 'not_found' && isWhisperAvailable() && (
+                    {captionStatus === 'error' && (
+                      <button
+                        type="button"
+                        className="submit-button"
+                        onClick={() => handleLinkChange(url)}
+                        disabled={loading}
+                        style={{ background: 'transparent', border: '1px solid var(--border-color, #444)', marginBottom: '8px' }}
+                      >
+                        자막 다시 불러오기
+                      </button>
+                    )}
+                    {(captionStatus === 'not_found' || captionStatus === 'error') && isWhisperAvailable() && (
                       <button
                         type="button"
                         className="submit-button"
@@ -471,7 +491,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
                     >
                       {loading
                         ? (loadingStatus || 'Saving...')
-                        : (captionStatus === 'not_found' ? '자막 없이 저장' : 'Save')}
+                        : ((captionStatus === 'not_found' || captionStatus === 'error') ? '자막 없이 저장' : 'Save')}
                     </button>
                   </>
                 )
