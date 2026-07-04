@@ -71,43 +71,31 @@ export default function Settings() {
   function handleAiChatLangChange(value) {
     setAiChatLang(value);
     setSetting(SETTINGS_KEYS.AI_CHAT_LANGUAGE, value);
-    setMessage({ type: 'success', text: 'AI Chat language updated' });
-    setTimeout(() => setMessage({ type: '', text: '' }), 2000);
   }
 
   function handleTranslationLangChange(value) {
     setTranslationLang(value);
     setSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, value);
-    setMessage({ type: 'success', text: 'Translation language updated' });
-    setTimeout(() => setMessage({ type: '', text: '' }), 2000);
   }
 
   function handleEnglishLevelChange(value) {
     setEnglishLevel(value);
     setSetting(SETTINGS_KEYS.ENGLISH_LEVEL, value);
-    setMessage({ type: 'success', text: 'English level updated' });
-    setTimeout(() => setMessage({ type: '', text: '' }), 2000);
   }
 
   function handleShortsToggle(value) {
     setIncludeShorts(value);
     setSetting(SETTINGS_KEYS.SHELF_INCLUDE_SHORTS, value ? 'true' : 'false');
-    setMessage({ type: 'success', text: 'Shorts setting updated' });
-    setTimeout(() => setMessage({ type: '', text: '' }), 2000);
   }
 
   function handleCaptionTranslationToggle(value) {
     setShowCaptionTranslation(value);
     setSetting(SETTINGS_KEYS.CAPTION_SHOW_TRANSLATION, value ? 'true' : 'false');
-    setMessage({ type: 'success', text: 'Caption translation setting updated' });
-    setTimeout(() => setMessage({ type: '', text: '' }), 2000);
   }
 
   function handleVirtualSlowToggle(value) {
     setVirtualSlowMode(value);
     setSetting(SETTINGS_KEYS.VIRTUAL_SLOW_MODE, value ? 'true' : 'false');
-    setMessage({ type: 'success', text: '또박또박 느리게 모드 설정이 변경되었어요' });
-    setTimeout(() => setMessage({ type: '', text: '' }), 2000);
   }
 
   async function handleUpdateProfile(e) {
@@ -382,7 +370,6 @@ export default function Settings() {
             <div className="setting-row">
               <label htmlFor="virtual-slow-mode">
                 또박또박 느리게 모드 (실험)
-                <span className="setting-hint">호흡 단위 자막 · 원속 유지 감속 재생. 켜면 영상별 정밀 타이밍 업그레이드가 필요해요.</span>
               </label>
               <input
                 id="virtual-slow-mode"
