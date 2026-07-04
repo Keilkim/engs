@@ -244,7 +244,14 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }) {
         setError('Transcription returned no results');
       }
     } catch (err) {
-      setError(`Whisper failed: ${err.message}`);
+      const msg = (err?.message || '').toLowerCase();
+      if (msg.includes('extract') || msg.includes('audio') || msg.includes('추출')) {
+        // 외부 오디오 추출 서버가 유튜브 음성을 못 가져오는 경우
+        // (대개 유튜브 제한 또는 추출 서버(yt-dlp 등) 문제 — 앱이 아닌 서버 이슈)
+        setError('이 영상의 음성을 가져오지 못했어요. 유튜브 제한이거나 오디오 추출 서버 문제일 수 있어요. 자막이 있는 다른 영상을 이용하거나 잠시 후 다시 시도해 주세요.');
+      } else {
+        setError(`음성 인식에 실패했어요: ${err.message}`);
+      }
     } finally {
       setLoading(false);
       setLoadingStatus('');
