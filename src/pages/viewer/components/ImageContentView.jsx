@@ -239,7 +239,7 @@ function PenCanvasSection({
 export default function ImageContentView({
   source, annotations, currentPage, setCurrentPage,
   // Refs
-  imageContainerRef, zoomWrapperRef, scrollContainerRef, contentRef, mobileNavRef,
+  imageContainerRef, setImageContainer, zoomWrapperRef, scrollContainerRef, contentRef, mobileNavRef,
   // Zoom/Pan
   zoomScale, zoomOrigin, panOffset, isShaking,
   // Mouse handlers
@@ -372,7 +372,7 @@ export default function ImageContentView({
         </div>
 
         <div className="screenshot-main">
-          <div ref={imageContainerRef} className={containerClass(' multi-page')} {...mouseHandlers}>
+          <div ref={setImageContainer} className={containerClass(' multi-page')} {...mouseHandlers}>
             {renderImageCore()}
           </div>
 
@@ -405,7 +405,7 @@ export default function ImageContentView({
     return (
       <div className="screenshot-viewer single-image">
         <div className="screenshot-main">
-          <div ref={imageContainerRef} className={containerClass()} {...mouseHandlers}>
+          <div ref={setImageContainer} className={containerClass()} {...mouseHandlers}>
             {renderImageCore()}
           </div>
         </div>
@@ -446,7 +446,7 @@ export default function ImageContentView({
 
       <div className="screenshot-main">
         <div ref={scrollContainerRef} className="screenshot-scroll-container">
-          <div ref={imageContainerRef} className={containerClass()} {...mouseHandlers}>
+          <div ref={setImageContainer} className={containerClass()} {...mouseHandlers}>
             {renderImageCore()}
           </div>
         </div>
