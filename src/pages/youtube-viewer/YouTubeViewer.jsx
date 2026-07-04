@@ -5,6 +5,7 @@ import { getSource, deleteSource } from '../../services/source';
 import { getAnnotations, deleteAnnotation } from '../../services/annotation';
 import useYouTubePlayer, { PLAYBACK_SPEEDS } from '../../hooks/useYouTubePlayer';
 import useCaptionSync from '../../hooks/useCaptionSync';
+import useGapExpandedPlayback from '../../hooks/useGapExpandedPlayback';
 import { formatTime } from '../../services/ai/youtube';
 import { useChat } from '../../hooks';
 import { getSetting, setSetting, SETTINGS_KEYS } from '../../services/settings';
@@ -15,6 +16,7 @@ import ChatPanel from '../../components/ChatPanel';
 import WhisperUpgradeBanner from '../../components/youtube/WhisperUpgradeBanner';
 import useWhisperUpgrade from '../../hooks/useWhisperUpgrade';
 import { getWordTimeline } from '../../utils/captionWords';
+import { buildPauseChunks } from '../../utils/pauseChunker';
 import '../../styles/pages/youtube-viewer.css';
 
 export default function YouTubeViewer() {
@@ -39,6 +41,12 @@ export default function YouTubeViewer() {
     () => getSetting(SETTINGS_KEYS.VIRTUAL_SLOW_MODE, 'false') === 'true'
   );
   const [upgradeDismissed, setUpgradeDismissed] = useState(false);
+  // Caption row granularity (only meaningful when the master feature is ON and
+  // the source has word timings): 'chunks' = pause-based breath units, 'cues' =
+  // original source segments.
+  const [rowMode, setRowMode] = useState(
+    () => getSetting(SETTINGS_KEYS.CAPTION_ROW_MODE, 'chunks')
+  );
 
   const [source, setSource] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -52,8 +60,11 @@ export default function YouTubeViewer() {
   const [selectedWord, setSelectedWord] = useState(null);
   const [wordPosition, setWordPosition] = useState(null);
   const [selectedSegmentIndex, setSelectedSegmentIndex] = useState(null);
+  const [selectedRowIndex, setSelectedRowIndex] = useState(null);
   const [selectedWordIndex, setSelectedWordIndex] = useState(null);
   const [selectedTimestamp, setSelectedTimestamp] = useState(null);
+  const [selectedSceneStart, setSelectedSceneStart] = useState(null);
+  const [selectedSceneEnd, setSelectedSceneEnd] = useState(null);
   const [existingAnnotationForWord, setExistingAnnotationForWord] = useState(null);
   const [menuPlacement, setMenuPlacement] = useState('below');
 
@@ -130,18 +141,20 @@ export default function YouTubeViewer() {
     };
   }, [isDragging, layout]);
 
+  const player = useYouTubePlayer();
   const {
     currentTime,
     isPlaying,
     onReady,
     onStateChange,
     onEnd,
+    onPlaybackRateChange,
     seekTo,
     pauseVideo,
     playVideo,
     playbackRate,
-    setPlaybackRate,
-  } = useYouTubePlayer();
+    subRatesSupported,
+  } = player;
 
   // Track if video was playing before pause (to resume on menu close)
   const wasPlayingRef = useRef(false);
@@ -194,39 +207,115 @@ export default function YouTubeViewer() {
     });
   }, [annotations]);
 
-  // Press start → pause video only if playing
-  const handlePressStart = useCallback(() => {
-    wasPlayingRef.current = isPlaying;
-    if (isPlaying) pauseVideo();
-  }, [isPlaying, pauseVideo]);
+  const videoId = source?.youtube_data?.video_id;
+  const segments = useMemo(() => source?.captions_data?.segments || [], [source]);
 
-  // Short tap or drag cancel (no menu opened) → resume video
+  // Word-level timing (Whisper) availability — gates the pause-chunk display and
+  // the virtual-slow buttons. null for plain YouTube-caption sources.
+  const wordTimeline = useMemo(() => getWordTimeline(source?.captions_data), [source]);
+  const hasWordTimeline = !!wordTimeline;
+  const upgrade = useWhisperUpgrade({
+    source,
+    onUpgraded: (row) => setSource(row),
+  });
+
+  // Pause chunks (shared by the chunk-row display AND the virtual-slow audio
+  // engine, so both agree). Computed whenever word timings exist, independent of
+  // the display row-mode toggle. Passed the STORED segments so each chunk carries
+  // a sourceSegmentIndex for annotation-index translation.
+  const engineChunks = useMemo(
+    () => (featureOn && wordTimeline ? buildPauseChunks(wordTimeline.whisperSegments, segments) : []),
+    [featureOn, wordTimeline, segments]
+  );
+
+  // Display rows: pause chunks in chunk mode (master ON + word timings), else the
+  // original stored segments (byte-identical, exactly as before).
+  const useChunks = featureOn && rowMode === 'chunks' && !!wordTimeline;
+  const rows = useChunks ? engineChunks : segments;
+
+  // Virtual-slow ("또박또박 느리게") playback engine. Gated on the master feature,
+  // word timings, and the embed actually honoring sub-1x rates.
+  const virtualEnabled = featureOn && hasWordTimeline && subRatesSupported;
+  const gap = useGapExpandedPlayback({
+    videoId,
+    videoDuration: source?.youtube_data?.duration || 0,
+    chunks: engineChunks,
+    player,
+    enabled: virtualEnabled,
+  });
+
+  // Transport facade: while virtual-slow is active, playback control routes to the
+  // engine (which drives the muted video); otherwise straight to the player.
+  const transportIsPlaying = gap.virtualActive ? gap.virtualIsPlaying : isPlaying;
+  const transportPause = useCallback(() => {
+    if (gap.virtualActive) gap.virtualPause(); else pauseVideo();
+  }, [gap.virtualActive, gap.virtualPause, pauseVideo]);
+  const transportPlay = useCallback(() => {
+    if (gap.virtualActive) gap.virtualPlay(); else playVideo();
+  }, [gap.virtualActive, gap.virtualPlay, playVideo]);
+  const handleSeek = useCallback((t) => {
+    if (gap.virtualActive) gap.virtualSeek(t); else seekTo(t);
+  }, [gap.virtualActive, gap.virtualSeek, seekTo]);
+
+  // Clock/flags the captions render from — engine content time only once the
+  // engine is actually PLAYING (during 'loading' the video plays via native
+  // ARMING and virtualTime hasn't ticked yet, so fall back to the video clock).
+  const virtualClockLive = gap.virtualActive && gap.virtualState !== 'loading';
+  const displayTime = virtualClockLive ? gap.virtualTime : currentTime;
+  const displayIsPlaying = virtualClockLive ? gap.virtualIsPlaying : isPlaying;
+
+  // Press start → pause playback (engine or video) only if playing
+  const handlePressStart = useCallback(() => {
+    wasPlayingRef.current = transportIsPlaying;
+    if (transportIsPlaying) transportPause();
+  }, [transportIsPlaying, transportPause]);
+
+  // Short tap or drag cancel (no menu opened) → resume playback
   const handlePressEndNoMenu = useCallback(() => {
     if (wasPlayingRef.current) {
-      playVideo();
+      transportPlay();
       wasPlayingRef.current = false;
     }
-  }, [playVideo]);
+  }, [transportPlay]);
+
+  // CaptionLine passes the DISPLAY row index. Translate it to the STORED-segment
+  // index (chunk rows carry sourceSegmentIndex; cue rows are 1:1) and capture the
+  // row's authoritative scene bounds, so saved annotations stay valid even though
+  // the visible rows are derived chunks. See useSceneBounds / annotation save path.
+  const rowScene = useCallback((rowIndex) => {
+    const row = rows[rowIndex];
+    return {
+      storedIndex: row?.sourceSegmentIndex ?? rowIndex,
+      sceneStart: typeof row?.start === 'number' ? row.start : null,
+      sceneEnd: typeof row?.end === 'number' ? row.end : null,
+      text: row?.text,
+    };
+  }, [rows]);
 
   // Word long-press → vocab search
-  const handleWordLongPress = useCallback((word, rect, segmentIndex, wordIdx, timestamp) => {
+  const handleWordLongPress = useCallback((word, rect, rowIndex, wordIdx, timestamp) => {
     if (!word) return;
     const existing = findExistingAnnotation(word);
+    const scene = rowScene(rowIndex);
 
     const anchor = computeMenuAnchor(rect, 240);
     setSelectedWord(word);
     setIsGrammarMode(false);
     setWordPosition({ x: anchor.x, y: anchor.y });
     setMenuPlacement(anchor.placement);
-    setSelectedSegmentIndex(segmentIndex);
+    setSelectedSegmentIndex(scene.storedIndex);
+    setSelectedRowIndex(rowIndex);
+    setSelectedSceneStart(scene.sceneStart);
+    setSelectedSceneEnd(scene.sceneEnd);
     setSelectedWordIndex(wordIdx);
     setSelectedTimestamp(timestamp);
     setExistingAnnotationForWord(existing || null);
-  }, [findExistingAnnotation, computeMenuAnchor]);
+  }, [findExistingAnnotation, computeMenuAnchor, rowScene]);
 
   // Line long-press → grammar search
-  const handleLineLongPress = useCallback((sentenceText, rect, segmentIndex, timestamp) => {
+  const handleLineLongPress = useCallback((sentenceText, rect, rowIndex, timestamp) => {
     if (!sentenceText) return;
+    const scene = rowScene(rowIndex);
 
     const anchor = computeMenuAnchor(rect, 340);
     setSelectedWord(sentenceText);
@@ -234,28 +323,34 @@ export default function YouTubeViewer() {
     setSelectedSentenceText(sentenceText);
     setWordPosition({ x: anchor.x, y: anchor.y });
     setMenuPlacement(anchor.placement);
-    setSelectedSegmentIndex(segmentIndex);
+    setSelectedSegmentIndex(scene.storedIndex);
+    setSelectedRowIndex(rowIndex);
+    setSelectedSceneStart(scene.sceneStart);
+    setSelectedSceneEnd(scene.sceneEnd);
     setSelectedWordIndex(null);
     setSelectedTimestamp(timestamp);
     setExistingAnnotationForWord(null);
-  }, [computeMenuAnchor]);
+  }, [computeMenuAnchor, rowScene]);
 
   const closeWordModal = useCallback(() => {
     setSelectedWord(null);
     setWordPosition(null);
     setSelectedSegmentIndex(null);
+    setSelectedRowIndex(null);
     setSelectedWordIndex(null);
     setSelectedTimestamp(null);
+    setSelectedSceneStart(null);
+    setSelectedSceneEnd(null);
     setExistingAnnotationForWord(null);
     setIsGrammarMode(false);
     setSelectedSentenceText(null);
 
-    // Resume video if it was playing before
+    // Resume playback if it was playing before
     if (wasPlayingRef.current) {
-      playVideo();
+      transportPlay();
       wasPlayingRef.current = false;
     }
-  }, [playVideo]);
+  }, [transportPlay]);
 
   // Reconcile optimistic temp rows with the real DB rows. The actual insert is
   // done by useWordLookup's fire-and-forget createAnnotation(), so we poll
@@ -335,18 +430,6 @@ export default function YouTubeViewer() {
     }
   };
 
-  const videoId = source?.youtube_data?.video_id;
-  const segments = useMemo(() => source?.captions_data?.segments || [], [source]);
-
-  // Word-level timing (Whisper) availability — gates the pause-chunk display and
-  // the virtual-slow buttons. null for plain YouTube-caption sources.
-  const wordTimeline = useMemo(() => getWordTimeline(source?.captions_data), [source]);
-  const hasWordTimeline = !!wordTimeline;
-  const upgrade = useWhisperUpgrade({
-    source,
-    onUpgraded: (row) => setSource(row),
-  });
-
   const { currentSegmentIndex } = useCaptionSync(segments, currentTime);
 
   // Chat integration.
@@ -390,11 +473,11 @@ export default function YouTubeViewer() {
   const chatWasPlayingRef = useRef(false);
   useEffect(() => {
     if (chatHook.showPanel) {
-      chatWasPlayingRef.current = isPlaying;
-      pauseVideo();
+      chatWasPlayingRef.current = transportIsPlaying;
+      transportPause();
     } else {
       if (chatWasPlayingRef.current) {
-        playVideo();
+        transportPlay();
         chatWasPlayingRef.current = false;
       }
     }
@@ -444,9 +527,14 @@ export default function YouTubeViewer() {
               onReady={onReady}
               onStateChange={onStateChange}
               onEnd={onEnd}
+              onPlaybackRateChange={onPlaybackRateChange}
               className="youtube-player"
             />
           )}
+          {/* While virtual-slow is active the video is muted and engine-driven.
+              A transparent overlay blocks the embed's own controls, whose tap
+              would auto-unmute the player (double audio). */}
+          {gap.virtualActive && <div className="virtual-slow-overlay" aria-hidden="true" />}
         </div>
 
         {/* 영상/자막 크기 조절 핸들. 오른쪽 배치=세로 구분선(좌우 드래그),
@@ -463,15 +551,19 @@ export default function YouTubeViewer() {
         <div className="speed-control">
           <span className="speed-label">속도</span>
           <div className="speed-buttons">
-            {PLAYBACK_SPEEDS.map((speed) => (
-              <button
-                key={speed}
-                className={`speed-button ${playbackRate === speed ? 'active' : ''}`}
-                onClick={() => setPlaybackRate(speed)}
-              >
-                {speed === 1 ? '1.0x' : `${speed}x`}
-              </button>
-            ))}
+            {PLAYBACK_SPEEDS.map((speed) => {
+              const isVirtualLoading = gap.virtualActive && gap.virtualState === 'loading' && playbackRate === speed;
+              return (
+                <button
+                  key={speed}
+                  className={`speed-button ${playbackRate === speed ? 'active' : ''} ${isVirtualLoading ? 'loading' : ''}`}
+                  onClick={() => gap.requestRate(speed)}
+                  title={virtualEnabled && speed < 1 ? '또박또박 느리게 (원속 유지·간격 확장)' : undefined}
+                >
+                  {speed === 1 ? '1.0x' : `${speed}x`}
+                </button>
+              );
+            })}
           </div>
           <button
             className="layout-toggle"
@@ -493,6 +585,20 @@ export default function YouTubeViewer() {
               </svg>
             )}
           </button>
+          {featureOn && hasWordTimeline && (
+            <button
+              className={`row-mode-toggle ${rowMode === 'chunks' ? 'active' : ''}`}
+              onClick={() => {
+                const next = rowMode === 'chunks' ? 'cues' : 'chunks';
+                setRowMode(next);
+                setSetting(SETTINGS_KEYS.CAPTION_ROW_MODE, next);
+              }}
+              title={rowMode === 'chunks' ? '원본 자막으로' : '호흡 단위로'}
+              aria-label={rowMode === 'chunks' ? '원본 자막으로' : '호흡 단위로'}
+            >
+              {rowMode === 'chunks' ? '호흡' : '원본'}
+            </button>
+          )}
         </div>
 
         {featureOn && source.type === 'youtube' && !hasWordTimeline && !upgradeDismissed && (
@@ -505,12 +611,14 @@ export default function YouTubeViewer() {
 
         <div className="captions-container">
           <CaptionDisplay
-            // Remount on source change so caption-translation state starts clean.
-            key={id}
-            segments={segments}
-            currentTime={currentTime}
-            isPlaying={isPlaying}
-            onSeek={seekTo}
+            // Remount on source change, row-mode toggle, AND a mid-session
+            // upgrade flipping chunks on (useChunks), so the index-keyed
+            // caption-translation state starts clean and never serves a wrong row.
+            key={`${id}:${rowMode}:${useChunks}`}
+            segments={rows}
+            currentTime={displayTime}
+            isPlaying={displayIsPlaying}
+            onSeek={handleSeek}
             onWordLongPress={handleWordLongPress}
             onLineLongPress={handleLineLongPress}
             onPressStart={handlePressStart}
@@ -534,7 +642,11 @@ export default function YouTubeViewer() {
         segmentIndex={selectedSegmentIndex}
         wordIndex={selectedWordIndex}
         timestamp={selectedTimestamp}
-        sentence={segments?.[selectedSegmentIndex]?.text}
+        sceneStart={selectedSceneStart}
+        sceneEnd={selectedSceneEnd}
+        // Sentence = the tapped DISPLAY row's text (the chunk the user studied),
+        // not the stored cue — this string is persisted onto the saved card.
+        sentence={rows?.[selectedRowIndex]?.text}
         existingAnnotation={existingAnnotationForWord}
         onClose={closeWordModal}
         onSaved={handleWordSaved}

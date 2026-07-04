@@ -20,6 +20,10 @@ export function useYouTubePlayer() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRateState] = useState(1.0);
+  // Whether the embed actually honors sub-1.0 playback rates. Some environments
+  // report getAvailablePlaybackRates() === [1]; the virtual-slow feature must be
+  // gated on this or the muted video would run 4x faster than the audio plan.
+  const [subRatesSupported, setSubRatesSupported] = useState(true);
   const pendingSeekRef = useRef(null); // For seeking from UNSTARTED state
 
   useEffect(() => {
@@ -53,13 +57,42 @@ export function useYouTubePlayer() {
     playerRef.current = event.target;
     setIsReady(true);
     setDuration(event.target.getDuration());
+    try {
+      const rates = event.target.getAvailablePlaybackRates?.();
+      if (Array.isArray(rates)) setSubRatesSupported(rates.some((r) => r < 1));
+    } catch { /* keep optimistic default */ }
   }, []);
+
+  // Keep our rate state honest: IFrame rate changes are advisory/async, so mirror
+  // the player's actual rate when it reports one (wire onPlaybackRateChange).
+  const onPlaybackRateChange = useCallback((event) => {
+    if (typeof event?.data === 'number') setPlaybackRateState(event.data);
+  }, []);
+
+  const mute = useCallback(() => { try { playerRef.current?.mute?.(); } catch { /* ignore */ } }, []);
+  const unMute = useCallback(() => { try { playerRef.current?.unMute?.(); } catch { /* ignore */ } }, []);
+  const isMuted = useCallback(() => {
+    try { return !!playerRef.current?.isMuted?.(); } catch { return false; }
+  }, []);
+  // Volume is a SEPARATE lever from the muted flag: setting it to 0 keeps the
+  // video silent even if a native-control tap flips `muted` back off — belt-and-
+  // suspenders against the slowed video audio bleeding under the engine's spans.
+  const setVolume = useCallback((v) => { try { playerRef.current?.setVolume?.(v); } catch { /* ignore */ } }, []);
 
   const onStateChange = useCallback((event) => {
     setPlayerState(event.data);
     if (event.target && event.data !== PLAYER_STATES.UNSTARTED) {
       const dur = event.target.getDuration();
       if (dur > 0 && dur !== duration) setDuration(dur);
+      // Re-check sub-rate support once playback has actually started — some embeds
+      // report getAvailablePlaybackRates() === [1] before the first play, which
+      // would otherwise permanently disable virtual-slow for the session.
+      if (event.data === PLAYER_STATES.PLAYING) {
+        try {
+          const rates = event.target.getAvailablePlaybackRates?.();
+          if (Array.isArray(rates) && rates.some((r) => r < 1)) setSubRatesSupported(true);
+        } catch { /* keep current */ }
+      }
     }
     // Handle pending seek from UNSTARTED state: once player starts, seek (keep playing)
     if (pendingSeekRef.current !== null && (event.data === PLAYER_STATES.PLAYING || event.data === PLAYER_STATES.BUFFERING)) {
@@ -109,15 +142,22 @@ export function useYouTubePlayer() {
     isReady,
     currentTime,
     duration,
+    playerState,
     isPlaying: playerState === PLAYER_STATES.PLAYING,
     playbackRate,
+    subRatesSupported,
     onReady,
     onStateChange,
     onEnd,
+    onPlaybackRateChange,
     seekTo,
     pauseVideo,
     playVideo,
     setPlaybackRate,
+    mute,
+    unMute,
+    isMuted,
+    setVolume,
   };
 }
 
