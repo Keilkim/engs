@@ -6,7 +6,7 @@
 
 /* Import base styles */
 @import './styles/base/variables.css';
-@import './styles/base/candidates.css'; /* TEMPORARY: palette exploration — remove when a winner is baked in */
+@import './styles/base/themes.css'; /* accent overrides + (soon) light mode */
 @import './styles/base/reset.css';
 @import './styles/base/typography.css';
 

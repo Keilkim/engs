@@ -1,0 +1,48 @@
+/*
+ * ===========================================
+ * Themes — accent overrides (+ light mode, coming next)
+ * ===========================================
+ *
+ * Two axes drive the look, set as data attributes on <html> by services/theme.js:
+ *   data-mode="dark|light"    → neutrals (base / text / borders / glass / shadow)
+ *   data-accent="blue|indigo|royal|violet" → the --color-highlight family
+ *
+ * DARK is the base theme in variables.css. BLUE is the base accent (no block
+ * needed). --color-highlight-subtle and --focus-ring are color-mix on
+ * --color-highlight, so they follow the accent automatically. Semantic colors
+ * (success / warning / error / info) are intentionally NOT accent-driven.
+ */
+
+/* ========== Accents (apply in both modes) ========== */
+
+:root[data-accent="indigo"] {
+  --color-highlight: #5B63D3;      /* Linear / Stripe */
+  --color-highlight-light: #7B82E2;
+  --color-highlight-dark: #474EB8;
+}
+
+:root[data-accent="royal"] {
+  --color-highlight: #2563EB;      /* Tailwind / Vercel */
+  --color-highlight-light: #4B82F5;
+  --color-highlight-dark: #1D4FD1;
+}
+
+:root[data-accent="violet"] {
+  --color-highlight: #7C5CFF;      /* Modern violet */
+  --color-highlight-light: #9B82FF;
+  --color-highlight-dark: #6440E0;
+}
+
+/* ========== Light mode — SHIPS NEXT ==========
+ * Will override the neutral tokens for a light surface: base / base-sub / accent
+ * / sub-accent / text*, plus the white-on-dark helpers that would be invisible
+ * on a light background (--glass-*, --color-bg-hover, --shadow-card*). The four
+ * accents above then compose with it to give the 4 light themes.
+ *
+ * :root[data-mode="light"] {
+ *   --color-base: #FFFFFF;
+ *   --color-text: #1D1D1F;
+ *   --glass-bg: rgba(0, 0, 0, 0.04);
+ *   ...
+ * }
+ */

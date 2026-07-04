@@ -124,8 +124,8 @@
   --shadow-btn: 0 0 0 1px rgba(255, 255, 255, 0.1);
   --shadow-btn-hover: 0 0 0 1px rgba(255, 255, 255, 0.2);
 
-  /* Focus ring */
-  --focus-ring: 0 0 0 3px rgba(10, 132, 255, 0.4);
+  /* Focus ring (follows the accent) */
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--color-highlight) 40%, transparent);
 
 
   /* ========== Overlays ========== */

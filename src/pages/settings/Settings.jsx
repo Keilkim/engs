@@ -12,6 +12,14 @@ import {
   resetAllSources,
   resetVocabulary,
 } from '../../services/settings';
+import {
+  getTheme,
+  setTheme,
+  MODES,
+  ACCENTS,
+  ACCENT_META,
+  MODE_ENABLED,
+} from '../../services/theme';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -46,6 +54,14 @@ export default function Settings() {
   const [showCaptionTranslation, setShowCaptionTranslation] = useState(
     getSetting(SETTINGS_KEYS.CAPTION_SHOW_TRANSLATION, 'false') === 'true'
   );
+
+  // Theme (mode × accent) — persisted locally, applied to <html> live.
+  const [theme, setThemeState] = useState(getTheme());
+  function changeTheme(patch) {
+    setThemeState(setTheme(patch));
+  }
+
+  const MODE_LABEL = { dark: '다크', light: '라이트' };
 
   // Save language settings when changed
   function handleAiChatLangChange(value) {
@@ -218,6 +234,67 @@ export default function Settings() {
             {message.text}
           </div>
         )}
+
+        {/* Theme — mode × accent */}
+        <section className="settings-section">
+          <div className="section-title">테마 (Theme)</div>
+          <div className="settings-card">
+            <div className="setting-row">
+              <label>모드 (Mode)</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {MODES.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => MODE_ENABLED[m] && changeTheme({ mode: m })}
+                    disabled={!MODE_ENABLED[m]}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-accent)',
+                      background: theme.mode === m ? 'var(--color-highlight)' : 'transparent',
+                      color: theme.mode === m ? '#fff' : 'var(--color-text-sub)',
+                      opacity: MODE_ENABLED[m] ? 1 : 0.45,
+                      cursor: MODE_ENABLED[m] ? 'pointer' : 'not-allowed',
+                      fontSize: 'var(--font-sm)',
+                      fontWeight: 'var(--font-weight-medium)',
+                    }}
+                  >
+                    {MODE_LABEL[m]}{!MODE_ENABLED[m] ? ' (곧)' : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-row">
+              <label>강조색 (Accent)</label>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                {ACCENTS.map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    title={`${ACCENT_META[a].label} · ${ACCENT_META[a].ref}`}
+                    aria-label={ACCENT_META[a].label}
+                    onClick={() => changeTheme({ accent: a })}
+                    style={{
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: '50%',
+                      padding: 0,
+                      background: ACCENT_META[a].swatch,
+                      border: theme.accent === a
+                        ? '2px solid var(--color-text)'
+                        : '2px solid transparent',
+                      boxShadow: theme.accent === a
+                        ? '0 0 0 2px var(--color-base-sub)'
+                        : 'inset 0 0 0 1px rgba(255,255,255,0.15)',
+                      cursor: 'pointer',
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* Language Settings */}
         <section className="settings-section">
