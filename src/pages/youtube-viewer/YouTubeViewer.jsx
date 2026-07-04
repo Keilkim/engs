@@ -47,10 +47,21 @@ export default function YouTubeViewer() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Resizable split (column layout only). The video keeps a stable 16:9 ratio
-  // and letterboxes inside this area (never crops/zooms). Clamped so the
-  // captions below always keep a usable amount of height.
+  // Script panel position: 'right' = video left + script right (drag a vertical
+  // divider to resize), 'bottom' = video top + script below (drag a horizontal
+  // divider). Toggled from the speed-control bar. Default to side-by-side on
+  // wide screens, stacked on narrow ones. In both cases the video keeps a
+  // stable 16:9 ratio and letterboxes (never crops/zooms).
+  const [layout, setLayout] = useState(
+    () => (typeof window !== 'undefined' && window.innerWidth >= 900 ? 'right' : 'bottom')
+  );
+
+  // Resizable split. `playerHeight` drives the bottom (stacked) layout, and
+  // `playerWidth` drives the right (side-by-side) layout — kept independent so
+  // switching layouts restores each split. Clamped so the script always keeps
+  // a usable amount of space.
   const [playerHeight, setPlayerHeight] = useState(55);
+  const [playerWidth, setPlayerWidth] = useState(62);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef(null);
 
@@ -64,12 +75,20 @@ export default function YouTubeViewer() {
 
     const handleMove = (e) => {
       if (!containerRef.current) return;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
       const containerRect = containerRef.current.getBoundingClientRect();
-      const mouseY = clientY - containerRect.top;
-      const newHeight = (mouseY / containerRect.height) * 100;
-      // Keep at least ~28% for the captions below.
-      setPlayerHeight(Math.min(Math.max(newHeight, 30), 72));
+      if (layout === 'right') {
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const mouseX = clientX - containerRect.left;
+        const newWidth = (mouseX / containerRect.width) * 100;
+        // Keep at least ~25% for the script on the right.
+        setPlayerWidth(Math.min(Math.max(newWidth, 35), 75));
+      } else {
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const mouseY = clientY - containerRect.top;
+        const newHeight = (mouseY / containerRect.height) * 100;
+        // Keep at least ~28% for the captions below.
+        setPlayerHeight(Math.min(Math.max(newHeight, 30), 72));
+      }
     };
 
     const handleEnd = () => setIsDragging(false);
@@ -85,7 +104,7 @@ export default function YouTubeViewer() {
       document.removeEventListener('touchmove', handleMove);
       document.removeEventListener('touchend', handleEnd);
     };
-  }, [isDragging]);
+  }, [isDragging, layout]);
 
   const {
     currentTime,
@@ -380,10 +399,10 @@ export default function YouTubeViewer() {
         <button className="delete-button" onClick={() => setShowDeleteConfirm(true)}>삭제</button>
       </header>
 
-      <div className="youtube-content" ref={containerRef}>
+      <div className={`youtube-content layout-${layout}`} ref={containerRef}>
         <div
           className="youtube-player-container"
-          style={{ '--player-height': `${playerHeight}%` }}
+          style={{ '--player-height': `${playerHeight}%`, '--player-width': `${playerWidth}%` }}
         >
           {videoId && (
             <YouTube
@@ -397,7 +416,8 @@ export default function YouTubeViewer() {
           )}
         </div>
 
-        {/* 세퍼레이트 컨트롤 라인: 드래그로 영상/자막 높이 조절 (좁은 화면에서만) */}
+        {/* 영상/자막 크기 조절 핸들. 오른쪽 배치=세로 구분선(좌우 드래그),
+            하단 배치=가로 구분선(위아래 드래그). */}
         <div
           className={`resize-handle ${isDragging ? 'dragging' : ''}`}
           onMouseDown={handleDragStart}
@@ -420,6 +440,26 @@ export default function YouTubeViewer() {
               </button>
             ))}
           </div>
+          <button
+            className="layout-toggle"
+            onClick={() => setLayout((l) => (l === 'right' ? 'bottom' : 'right'))}
+            title={layout === 'right' ? '자막을 하단으로' : '자막을 오른쪽으로'}
+            aria-label={layout === 'right' ? '자막을 하단으로 이동' : '자막을 오른쪽으로 이동'}
+          >
+            {layout === 'right' ? (
+              /* 현재: 오른쪽 배치 (영상 좌 · 자막 우) */
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="2" y="3.5" width="14" height="11" rx="1.5" />
+                <line x1="11" y1="3.5" x2="11" y2="14.5" />
+              </svg>
+            ) : (
+              /* 현재: 하단 배치 (영상 상 · 자막 하) */
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="2" y="3.5" width="14" height="11" rx="1.5" />
+                <line x1="2" y1="10" x2="16" y2="10" />
+              </svg>
+            )}
+          </button>
         </div>
 
         <div className="captions-container">

@@ -64,20 +64,28 @@
   color: white;
 }
 
-/* Resizable Content Area */
+/* Resizable Content Area. Flex direction is chosen by the layout- class:
+   .layout-bottom = video on top + script below (up/down resize);
+   .layout-right  = video left + script right (left/right resize). */
 .youtube-content {
   flex: 1;
   display: flex;
-  flex-direction: column;
   overflow: hidden;
   position: relative;
 }
 
-/* Video Player Container — resizable height; video keeps 16:9 and letterboxes
-   inside (never crops/zooms). */
+.youtube-content.layout-bottom {
+  flex-direction: column;
+}
+
+.youtube-content.layout-right {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+/* Video Player Container — resizable; the video always keeps 16:9 and
+   letterboxes inside this box (never crops/zooms), whatever the box shape. */
 .youtube-player-container {
-  width: 100%;
-  height: var(--player-height, 55%);
   background: #000;
   flex-shrink: 0;
   overflow: hidden;
@@ -85,12 +93,29 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  container-type: size;
 }
 
-/* react-youtube wrapper: 16:9, contained within the (resizable) area */
-.youtube-player-container .youtube-player {
+.layout-bottom .youtube-player-container {
   width: 100%;
+  height: var(--player-height, 55%);
+}
+
+.layout-right .youtube-player-container {
+  width: var(--player-width, 62%);
+  height: 100%;
+}
+
+/* react-youtube wrapper: a 16:9 box scaled to *contain* within the player
+   container regardless of the container's aspect ratio (letterbox on whichever
+   axis binds). The plain `width: 100%` line is a fallback for browsers without
+   container-query units. */
+.youtube-player-container .youtube-player {
   aspect-ratio: 16 / 9;
+  width: 100%;
+  width: min(100cqw, calc(100cqh * 16 / 9));
+  height: auto;
+  max-width: 100%;
   max-height: 100%;
 }
 
@@ -110,19 +135,29 @@
   cursor: row-resize;
 }
 
-/* Resize Handle */
+/* Resize Handle — orientation follows the layout: a horizontal bar for the
+   bottom (stacked) layout, a vertical bar for the right (side-by-side) one. */
 .resize-handle {
-  width: 100%;
-  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: row-resize;
   background: var(--bg-secondary, #1a1a1a);
   flex-shrink: 0;
   touch-action: none;
   user-select: none;
   z-index: 10;
+}
+
+.layout-bottom .resize-handle {
+  width: 100%;
+  height: 20px;
+  cursor: row-resize;
+}
+
+.layout-right .resize-handle {
+  width: 20px;
+  height: 100%;
+  cursor: col-resize;
 }
 
 .resize-handle:hover,
@@ -139,6 +174,11 @@
   transition: background 0.2s;
 }
 
+.layout-right .resize-handle-bar {
+  width: 4px;
+  height: 40px;
+}
+
 .resize-handle:hover .resize-handle-bar,
 .resize-handle:active .resize-handle-bar,
 .resize-handle.dragging .resize-handle-bar {
@@ -147,14 +187,44 @@
 
 /* Speed Control */
 .speed-control {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 8px 16px;
+  /* extra right padding reserves room for the absolutely-positioned toggle so
+     the centered speed buttons never collide with it on narrow screens */
+  padding: 8px 48px 8px 16px;
   background: var(--bg-secondary, #1a1a1a);
   border-bottom: 1px solid var(--border-color, #333);
   flex-shrink: 0;
+}
+
+/* Layout toggle — pinned to the right end of the speed-control bar so the
+   speed buttons stay centered. Switches the script between right and bottom. */
+.layout-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: var(--bg-tertiary, #2a2a2a);
+  border: 1px solid var(--border-color, #444);
+  border-radius: 6px;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.layout-toggle:hover {
+  background: var(--bg-hover, #333);
+  color: var(--text-primary, #fff);
+  border-color: var(--accent-color, #007AFF);
 }
 
 .speed-label {
@@ -207,29 +277,10 @@
   overflow: hidden;
 }
 
-/* 데스크탑: 영상 왼쪽 + 자막/속도 오른쪽. 세로 리사이즈 핸들은 숨김 */
-@media (min-width: 900px) {
-  .youtube-content {
-    flex-direction: row;
-    align-items: stretch;
-  }
-  .youtube-player-container {
-    height: auto;
-    width: 62%;
-    flex: 0 0 62%;
-    aspect-ratio: 16 / 9;
-    max-height: 100%;
-    align-self: flex-start;
-  }
-  .resize-handle {
-    display: none;
-  }
-  .youtube-side {
-    flex: 1;
-    min-width: 320px;
-    align-self: stretch;
-    border-left: 1px solid var(--border-color, #333);
-  }
+/* 오른쪽(가로) 배치일 때 자막 패널: 구분선 + 최소 너비 확보 */
+.layout-right .youtube-side {
+  min-width: 300px;
+  border-left: 1px solid var(--border-color, #333);
 }
 
 /* Caption Display */
