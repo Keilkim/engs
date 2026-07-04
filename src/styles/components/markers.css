@@ -2,6 +2,11 @@
  * ===========================================
  * Marker & Highlighter Styles
  * ===========================================
+ *
+ * Blue marker colors follow the signature accent: they read the
+ * --color-highlight token (via color-mix for the translucent variants)
+ * so switching the accent in Settings re-skins every marker. The yellow
+ * highlighter-pen colors are intentionally fixed (pen ink, not chrome).
  */
 
 /* Highlighter SVG overlay */
@@ -53,8 +58,8 @@
 
 /* Word highlight styles (OCR-based real-time selection) */
 .word-highlight {
-  fill: rgba(100, 200, 255, 0.4);
-  stroke: rgba(100, 200, 255, 0.8);
+  fill: color-mix(in srgb, var(--color-highlight-light) 40%, transparent);
+  stroke: color-mix(in srgb, var(--color-highlight-light) 80%, transparent);
   stroke-width: 0.3;
   pointer-events: none;
   vector-effect: non-scaling-stroke;
@@ -63,10 +68,10 @@
 
 @keyframes wordHighlightPulse {
   0% {
-    fill: rgba(100, 200, 255, 0.6);
+    fill: color-mix(in srgb, var(--color-highlight-light) 60%, transparent);
   }
   100% {
-    fill: rgba(100, 200, 255, 0.4);
+    fill: color-mix(in srgb, var(--color-highlight-light) 40%, transparent);
   }
 }
 
@@ -99,33 +104,33 @@
 .highlighter-rect.vocab {
   fill: transparent;
   stroke: none;
-  filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.6)) drop-shadow(0 0 8px rgba(59, 130, 246, 0.3));
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--color-highlight) 60%, transparent)) drop-shadow(0 0 8px color-mix(in srgb, var(--color-highlight) 30%, transparent));
 }
 
 .vocab-marker-bg {
-  fill: #2a6fd736;
+  fill: color-mix(in srgb, var(--color-highlight) 21%, transparent);
   stroke: none;
   cursor: pointer;
 }
 
 /* Highlighted vocab marker - blink animation (5s) */
 .vocab-marker-bg.highlighted {
-  fill: rgba(59, 130, 246, 0.6);
+  fill: color-mix(in srgb, var(--color-highlight) 60%, transparent);
   animation: vocabHighlightBlink 0.5s ease-in-out 10;
 }
 
 @keyframes vocabHighlightBlink {
   0%, 100% {
-    fill: rgba(59, 130, 246, 0.6);
+    fill: color-mix(in srgb, var(--color-highlight) 60%, transparent);
   }
   50% {
-    fill: rgba(59, 130, 246, 0.15);
+    fill: color-mix(in srgb, var(--color-highlight) 15%, transparent);
   }
 }
 
 /* Vocabulary underline marker (alternative clean style) */
 .vocab-underline {
-  stroke: rgba(59, 130, 246, 0.9);
+  stroke: color-mix(in srgb, var(--color-highlight) 90%, transparent);
   stroke-width: 3;
   stroke-linecap: round;
   cursor: pointer;
@@ -134,13 +139,13 @@
 }
 
 .vocab-underline:hover {
-  stroke: rgba(59, 130, 246, 1);
+  stroke: var(--color-highlight);
   stroke-width: 4;
 }
 
 /* Active selection highlight - pulse animation */
 .selection-highlight {
-  fill: rgba(59, 130, 246, 0.35);
+  fill: color-mix(in srgb, var(--color-highlight) 35%, transparent);
   mix-blend-mode: multiply;
   pointer-events: none;
   animation: svgSelectionPulse 1s ease-in-out infinite;
@@ -149,19 +154,19 @@
 @keyframes svgSelectionPulse {
   0%, 100% {
     opacity: 1;
-    fill: rgba(59, 130, 246, 0.35);
+    fill: color-mix(in srgb, var(--color-highlight) 35%, transparent);
   }
   50% {
     opacity: 0.4;
-    fill: rgba(59, 130, 246, 0.2);
+    fill: color-mix(in srgb, var(--color-highlight) 20%, transparent);
   }
 }
 
 /* Grammar marker - dotted underline (kept thin so it reads as an underline,
    not a heavy bar; non-scaling-stroke keeps it crisp at any zoom). */
 .grammar-underline {
-  stroke: rgba(59, 130, 246, 0.95);
-  stroke-width: 1.5px;
+  stroke: color-mix(in srgb, var(--color-highlight) 95%, transparent);
+  stroke-width: 1.2px;
   stroke-dasharray: 3 2;
   stroke-linecap: round;
   fill: none;
