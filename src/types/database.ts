@@ -35,18 +35,35 @@ export interface YouTubeData {
 }
 
 export interface CaptionSegment {
-  id: number;
+  id?: number;
   start: number;
   end: number;
   text: string;
   words?: Array<{ word: string; start: number; end: number }>;
   translation?: string;
+  // Whisper confidence signals (only on whisper-sourced segments) — used to
+  // reject hallucinated no-speech segments before pause-chunking.
+  no_speech_prob?: number;
+  avg_logprob?: number;
+}
+
+// Additive, non-destructive word-timing block attached by the "정밀 타이밍
+// 업그레이드" flow. The original `segments` array is never mutated, so legacy
+// annotations that index it by position stay valid.
+export interface WhisperTimings {
+  version: number;
+  createdAt: string;
+  model: string;
+  language: string;
+  duration: number | null;
+  segments: CaptionSegment[];
 }
 
 export interface CaptionsData {
   segments: CaptionSegment[];
   language: string;
   source: 'youtube' | 'whisper' | 'manual';
+  whisper?: WhisperTimings;
 }
 
 export interface Annotation {
@@ -114,14 +131,20 @@ export interface SelectionRect {
   lines?: BBox[];
   page?: number;
   // Pen stroke fields
-  type?: 'pen_stroke' | 'youtube_word';
+  type?: 'pen_stroke' | 'youtube_word' | 'youtube_grammar';
   points?: Array<{ x: number; y: number }>;
   color?: string;
   strokeWidth?: number;
-  // YouTube word fields
+  // YouTube word fields. `segmentIndex` always refers to the STORED
+  // captions_data.segments array (translated from any derived display row).
   segmentIndex?: number;
   wordIndex?: number;
   timestamp?: number;
+  // Authoritative scene bounds captured at save time (a pause-chunk row is a
+  // better scene than a raw cue). When present, scene playback uses these and
+  // skips the fragile index lookup entirely. Absent on legacy annotations.
+  sceneStart?: number;
+  sceneEnd?: number;
 }
 
 export interface VocabularyAnalysis {

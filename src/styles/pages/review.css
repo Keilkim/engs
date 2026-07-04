@@ -339,24 +339,6 @@
   border-color: var(--color-accent-light);
 }
 
-/* 자동넘김 카운트다운: 남은 시간을 줄어드는 막대로 시각화. 장면 재생 시 사라짐 */
-.auto-advance-bar {
-  height: 3px;
-  width: 100%;
-  margin-bottom: var(--spacing-sm);
-  border-radius: 999px;
-  background-color: var(--color-accent, rgba(255, 255, 255, 0.4));
-  transform-origin: left center;
-  animation-name: auto-advance-shrink;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
-}
-
-@keyframes auto-advance-shrink {
-  from { transform: scaleX(1); }
-  to { transform: scaleX(0); }
-}
-
 /*
  * ===========================================
  * Scene player — replay the original YouTube

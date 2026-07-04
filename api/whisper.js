@@ -143,7 +143,16 @@ function buildSegments(data, offset, dropBefore, dropAfter = Infinity) {
         return mid >= seg.start && mid < seg.end;
       })
       .map((w) => ({ word: w.word, start: w.start + offset, end: w.end + offset }));
-    out.push({ start: gStart, end: seg.end + offset, text: (seg.text || '').trim(), words: segWords });
+    // Keep Whisper's own confidence signals so the client can reject hallucinated
+    // segments (music/noise) before pause-chunking / gap-expanded playback.
+    out.push({
+      start: gStart,
+      end: seg.end + offset,
+      text: (seg.text || '').trim(),
+      words: segWords,
+      no_speech_prob: seg.no_speech_prob,
+      avg_logprob: seg.avg_logprob,
+    });
   }
   return out;
 }

@@ -12,6 +12,10 @@ export type {
   VocabularyAnalysis,
   GrammarAnalysis,
   GrammarPattern,
+  YouTubeData,
+  CaptionSegment,
+  CaptionsData,
+  WhisperTimings,
 } from './database';
 
 export type {

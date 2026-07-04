@@ -183,6 +183,38 @@ export function calculateWhisperCost(durationSeconds) {
 }
 
 /**
+ * Shared confirm copy for the paid Whisper transcription. Used by both the
+ * AddSourceModal (no-captions path) and the viewer's "정밀 타이밍 업그레이드"
+ * flow so the cost/consent wording never drifts between the two.
+ */
+export function buildWhisperConfirmText(durationSec) {
+  const cost = durationSec > 0 ? calculateWhisperCost(durationSec) : calculateWhisperCost(60);
+  const costLine = durationSec > 0
+    ? `비용: 이 영상(약 ${Math.round(durationSec / 60)}분) 약 $${cost.usd.toFixed(2)} (약 ${cost.krw.toLocaleString()}원)\n`
+    : `비용: 영상 1분당 약 $${cost.usd.toFixed(3)} (약 ${cost.krw}원)\n`;
+  return (
+    '음성 인식(Whisper)은 서버에서 유료 API를 사용합니다.\n\n' +
+    costLine +
+    '소요 시간: 영상 길이에 따라 수 분이 걸릴 수 있어요.\n\n계속하시겠어요?'
+  );
+}
+
+/**
+ * Map a Whisper transcription error to a user-facing Korean message. Shared so
+ * the 25MB/extraction/generic branches stay identical across call sites.
+ */
+export function mapWhisperError(err) {
+  const msg = (err?.message || '').toLowerCase();
+  if (msg.includes('413') || msg.includes('content size') || msg.includes('maximum') || msg.includes('too large')) {
+    return '영상이 너무 길어요 — 음성 파일이 25MB 한도를 넘었어요. 약 25분 이내의 짧은 영상을 쓰거나, 자막이 있는 영상을 이용해 주세요.';
+  }
+  if (msg.includes('extract') || msg.includes('audio') || msg.includes('추출')) {
+    return '이 영상의 음성을 가져오지 못했어요. 유튜브 제한이거나 오디오 추출 서버 문제일 수 있어요. 자막이 있는 다른 영상을 이용하거나 잠시 후 다시 시도해 주세요.';
+  }
+  return `음성 인식에 실패했어요: ${err?.message || err}`;
+}
+
+/**
  * Check if Whisper is available (server-side key, always true if API route exists)
  */
 export function isWhisperAvailable() {

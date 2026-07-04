@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Source, SourceListItem, OcrData, YouTubeData, CaptionsData } from '../types';
+import type { Source, SourceListItem, OcrData, YouTubeData, CaptionsData, CaptionSegment } from '../types';
 import { candidateId } from '../lib/discover-core/rank';
 
 const STORAGE_BUCKET = 'sources';
@@ -112,6 +112,35 @@ export async function getSourceCaptions(id: string | number): Promise<CaptionsDa
   const captions = (data?.captions_data ?? null) as CaptionsData | null;
   captionsCache.set(key, captions);
   return captions;
+}
+
+/**
+ * Attach Whisper word-level timings to a source NON-destructively: the original
+ * `captions_data.segments` array is left byte-identical (so legacy annotations
+ * that index it stay valid), and the word data lands in an additive `whisper`
+ * block. Also refreshes the session `captionsCache` so review scene-playback,
+ * which reads the stored column via getSourceCaptions(), stays coherent.
+ */
+export async function attachWhisperTimings(
+  id: string | number,
+  current: CaptionsData | null,
+  result: { segments: CaptionSegment[]; language: string; duration?: number }
+): Promise<Source> {
+  const base: CaptionsData = current || { segments: [], language: result.language, source: 'youtube' };
+  const merged: CaptionsData = {
+    ...base,
+    whisper: {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      model: 'whisper-1',
+      language: result.language,
+      duration: result.duration ?? null,
+      segments: result.segments,
+    },
+  };
+  const row = await updateSource(String(id), { captions_data: merged });
+  captionsCache.set(String(id), merged); // keep review ScenePlayer cache coherent
+  return row;
 }
 
 interface CreateSourceInput {

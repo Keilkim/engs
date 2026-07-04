@@ -13,6 +13,14 @@ export const SETTINGS_KEYS = {
   SHELF_INCLUDE_SHORTS: 'shelf_include_shorts', // 'true' | 'false' — show Shorts in the Home shelf
   DISCOVER_ENABLED: 'discover_enabled', // 'true' | 'false' — show the interest-discovery feed
   CAPTION_SHOW_TRANSLATION: 'caption_show_translation', // 'true' | 'false' — show inline translation under YouTube script lines
+  // Master gate for the "또박또박 느리게" feature (pause-chunk captions +
+  // virtual-slow gap-expanded playback). Default OFF → the app behaves exactly
+  // as before; only when ON do those surfaces appear. Promote to default-on once
+  // the audio engine is proven on-device.
+  VIRTUAL_SLOW_MODE: 'virtual_slow_mode', // 'true' | 'false'
+  // Sub-setting (only meaningful when VIRTUAL_SLOW_MODE is on): caption rows as
+  // pause-based chunks vs the original source cues.
+  CAPTION_ROW_MODE: 'caption_row_mode', // 'chunks' | 'cues'
 };
 
 // Default values
@@ -23,6 +31,8 @@ export const DEFAULTS = {
   [SETTINGS_KEYS.SHELF_INCLUDE_SHORTS]: 'false',
   [SETTINGS_KEYS.DISCOVER_ENABLED]: 'true',
   [SETTINGS_KEYS.CAPTION_SHOW_TRANSLATION]: 'false',
+  [SETTINGS_KEYS.VIRTUAL_SLOW_MODE]: 'false',
+  [SETTINGS_KEYS.CAPTION_ROW_MODE]: 'chunks',
 };
 
 // Language options

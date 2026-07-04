@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createSource, createYouTubeSource, uploadFile, captureWebpageScreenshot, captureScreenshot } from '../../services/source';
 import { convertPdfToImages } from '../../utils/pdfUtils';
 import { generateImageThumbnail, generateThumbnailFromPage, ocrAllPages } from './sourceHelpers';
-import { parseYouTubeUrl, getYouTubeMetadata, fetchYouTubeCaptions, transcribeYouTubeWithWhisper, calculateWhisperCost, isWhisperAvailable } from '../../services/ai/youtube';
+import { parseYouTubeUrl, getYouTubeMetadata, fetchYouTubeCaptions, transcribeYouTubeWithWhisper, calculateWhisperCost, isWhisperAvailable, buildWhisperConfirmText, mapWhisperError } from '../../services/ai/youtube';
 import { TranslatableText } from '../translatable';
 
 // Discovery-added PDFs ingest only an OVERVIEW (keeps the inline `pages` insert small;
@@ -387,15 +387,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
 
     // Cost/time confirmation before kicking off a paid, potentially long transcription.
     // Quote the actual total when the duration is known (captured at preview), else per-minute.
-    const cost = videoDuration > 0 ? calculateWhisperCost(videoDuration) : calculateWhisperCost(60);
-    const costLine = videoDuration > 0
-      ? `비용: 이 영상(약 ${Math.round(videoDuration / 60)}분) 약 $${cost.usd.toFixed(2)} (약 ${cost.krw.toLocaleString()}원)\n`
-      : `비용: 영상 1분당 약 $${cost.usd.toFixed(3)} (약 ${cost.krw}원)\n`;
-    const confirmed = window.confirm(
-      '음성 인식(Whisper)은 서버에서 유료 API를 사용합니다.\n\n' +
-      costLine +
-      '소요 시간: 영상 길이에 따라 수 분이 걸릴 수 있어요.\n\n계속하시겠어요?'
-    );
+    const confirmed = window.confirm(buildWhisperConfirmText(videoDuration));
     if (!confirmed) return;
 
     setLoading(true);
@@ -417,17 +409,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
         setError('Transcription returned no results');
       }
     } catch (err) {
-      const msg = (err?.message || '').toLowerCase();
-      if (msg.includes('413') || msg.includes('content size') || msg.includes('maximum') || msg.includes('too large')) {
-        // 추출은 됐지만 오디오가 25MB(≈128kbps 26분)를 넘어 Whisper가 거부한 경우
-        setError('영상이 너무 길어요 — 음성 파일이 25MB 한도를 넘었어요. 약 25분 이내의 짧은 영상을 쓰거나, 자막이 있는 영상을 이용해 주세요.');
-      } else if (msg.includes('extract') || msg.includes('audio') || msg.includes('추출')) {
-        // 외부 오디오 추출 서버가 유튜브 음성을 못 가져오는 경우
-        // (대개 유튜브 제한 또는 추출 서버(yt-dlp 등) 문제 — 앱이 아닌 서버 이슈)
-        setError('이 영상의 음성을 가져오지 못했어요. 유튜브 제한이거나 오디오 추출 서버 문제일 수 있어요. 자막이 있는 다른 영상을 이용하거나 잠시 후 다시 시도해 주세요.');
-      } else {
-        setError(`음성 인식에 실패했어요: ${err.message}`);
-      }
+      setError(mapWhisperError(err));
     } finally {
       setLoading(false);
       setLoadingStatus('');
