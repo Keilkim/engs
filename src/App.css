@@ -449,12 +449,16 @@
   position: absolute;
   left: 0;
   right: 0;
+  top: 0;
   background-color: rgba(255, 255, 255, 0.15);
   border: 2px solid var(--color-highlight);
   border-radius: var(--radius-sm);
   pointer-events: none;
   box-shadow: 0 0 10px rgba(255, 214, 10, 0.3);
-  transition: top 0.1s ease-out, height 0.1s ease-out;
+  /* No transition: top/height are written imperatively per animation frame on
+     scroll (useMinimap). A CSS transition here made the box ease toward each new
+     position over 0.1s, so during continuous scrolling it perpetually trailed
+     and only "caught up" once scrolling stopped. */
 }
 
 .minimap-pages {
@@ -717,9 +721,14 @@
   touch-action: pan-y pinch-zoom;
 }
 
-/* Multi-page (PDF): disable touch-action for custom swipe handling */
+/* Multi-page (PDF): allow the browser's native two-finger pinch-zoom (same as
+   the single-page/URL screenshot, which uses `pinch-zoom`). We intentionally do
+   NOT add pan-x/pan-y here, so single-finger gestures still reach the custom
+   handlers (vertical swipe = page navigation, drag = pan when zoomed). Previously
+   this was `touch-action: none`, which suppressed the native pinch and left PDFs
+   unable to zoom while screenshots could. */
 .screenshot-container.multi-page {
-  touch-action: none;
+  touch-action: pinch-zoom;
 }
 
 /* Allow pan when zoomed */

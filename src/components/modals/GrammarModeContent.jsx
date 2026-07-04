@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { createSentencePattern } from '../../services/annotation';
 
 export default function GrammarModeContent({
-  grammarData, checkedPatterns, loading, error,
+  grammarData, checkedPatterns, loading,
   existingAnnotation,
   onSave, onDelete, onClose, onRetry,
   onTogglePattern,
@@ -128,5 +128,19 @@ export default function GrammarModeContent({
     );
   }
 
-  return <div className="modal-error-state">{error || ko('wordMenu.analysisFailed')}</div>;
+  return (
+    <>
+      <div className="modal-error-state">{ko('wordMenu.grammarFailed')}</div>
+      <div className="word-menu-actions">
+        {onRetry && (
+          <button className="retry-btn" onClick={onRetry} disabled={loading}>
+            {ko('wordMenu.retry')}
+          </button>
+        )}
+        <button className="close-btn" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </>
+  );
 }

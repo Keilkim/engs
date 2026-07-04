@@ -1,6 +1,7 @@
 import nlp from 'compromise';
-import { GRAMMAR_COLORS, fetchGemini } from './config';
+import { GRAMMAR_COLORS, LANG_CODES, fetchGemini } from './config';
 import { parseGeminiJSON } from './gemini';
+import { googleTranslate } from './vocabulary';
 import { getSetting, SETTINGS_KEYS } from '../settings';
 import { logError } from '../../utils/errors';
 
@@ -229,37 +230,45 @@ Return ONLY valid JSON, no markdown:
   ]
 }`;
 
-  // Gemini gives translation + idioms + grammar structures.
-  // 실패하면 폴백(번역으로 때우기)하지 않고 그대로 실패로 반려한다 →
-  // 호출부가 '분석 실패'를 명확히 보여주고 다시 시도하게 한다.
-  let data;
+  // Gemini gives translation + idioms + grammar structures. If that call fails
+  // or comes back empty/unparseable, we DON'T hard-fail — long-press would then
+  // show a bare "분석 실패" with nothing to learn. Instead we degrade to a
+  // translation-only card (still a useful review card) flagged `degraded:true`
+  // so the UI shows a Retry affordance. Only if the reliable translate path
+  // ALSO fails do we surface a genuine "analysis failed" error (caller catches).
   try {
-    data = await fetchGemini({
+    const data = await fetchGemini({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.3 },
     });
-  } catch (err) {
-    logError('analyzeGrammarPatterns', err);
-    throw err;
-  }
 
-  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  let parsed = null;
-  try {
-    parsed = parseGeminiJSON(responseText);
-  } catch {
-    // Last resort: extract the first {...last } block.
-    const start = responseText.indexOf('{');
-    const end = responseText.lastIndexOf('}');
-    if (start !== -1 && end > start) {
-      try { parsed = JSON.parse(responseText.slice(start, end + 1)); } catch { parsed = null; }
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    let parsed = null;
+    try {
+      parsed = parseGeminiJSON(responseText);
+    } catch {
+      // Last resort: extract the first {...last } block.
+      const start = responseText.indexOf('{');
+      const end = responseText.lastIndexOf('}');
+      if (start !== -1 && end > start) {
+        try { parsed = JSON.parse(responseText.slice(start, end + 1)); } catch { parsed = null; }
+      }
     }
+
+    if (parsed && (parsed.translation || parsed.patterns?.length > 0)) {
+      return { translation: parsed.translation || '', patterns: parsed.patterns || [] };
+    }
+    // Response arrived but was empty/unusable → fall through to translate-only.
+  } catch (err) {
+    // Gemini unreachable (key/quota/region/network). Degrade, don't fail.
+    logError('analyzeGrammarPatterns.gemini', err);
   }
 
-  if (parsed && (parsed.translation || parsed.patterns?.length > 0)) {
-    return { translation: parsed.translation || '', patterns: parsed.patterns || [] };
-  }
-
-  // 응답은 왔지만 쓸 내용이 없음 → 빈 결과로 위장하지 않고 실패로 반려.
-  throw new Error(data?.error?.message || 'AI 문법 분석에 실패했어요');
+  // Fallback: at least translate the sentence so the card is still useful.
+  // Uses the same gtx path word lookup relies on. If this throws too, the
+  // caller (useGrammarAnalysis) shows a real "analysis failed" retry state.
+  const translationLang = getSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, 'Korean');
+  const langCode = LANG_CODES[translationLang] || 'ko';
+  const translation = await googleTranslate(text, langCode);
+  return { translation, patterns: [], degraded: true, reason: '' };
 }

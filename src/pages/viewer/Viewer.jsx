@@ -51,16 +51,15 @@ const zoomOrigin = { x: 0, y: 0 };
 
   // Minimap navigation (from custom hook)
   const {
-    viewportPosition,
-    setViewportPosition,
     minimapRef,
+    minimapViewportRef,
     handleMinimapMouseDown,
     handleMinimapMouseMove,
     handleMinimapMouseUp,
     handleMinimapTouchStart,
     handleMinimapTouchMove,
     handleMinimapTouchEnd,
-  } = useMinimap(scrollContainerRef);
+  } = useMinimap(scrollContainerRef, `${source?.id ?? ''}:${currentPage}`);
 
   // Panning state (for zoomed view navigation)
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
@@ -636,50 +635,10 @@ const zoomOrigin = { x: 0, y: 0 };
     setPanOffset({ x: 0, y: 0 });
   }, [currentPage]);
 
-  // Scroll tracking for minimap viewport indicator + minimap sync
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    const minimapContent = minimapRef.current?.querySelector('.minimap-content');
-    if (!container) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const totalScrollable = scrollHeight - clientHeight;
-
-      if (totalScrollable <= 0) {
-        setViewportPosition({ top: 0, height: 100 });
-        return;
-      }
-
-      const viewportHeightPercent = (clientHeight / scrollHeight) * 100;
-      const topPercent = (scrollTop / scrollHeight) * 100;
-
-      setViewportPosition({
-        top: topPercent,
-        height: viewportHeightPercent,
-      });
-
-      // Sync minimap scroll with main content
-      if (minimapContent) {
-        const minimapScrollable = minimapContent.scrollHeight - minimapContent.clientHeight;
-        if (minimapScrollable > 0) {
-          const scrollPercent = scrollTop / totalScrollable;
-          minimapContent.scrollTop = scrollPercent * minimapScrollable;
-        }
-      }
-    };
-
-    // Initial calculation
-    handleScroll();
-
-    container.addEventListener('scroll', handleScroll);
-    window.addEventListener('resize', handleScroll);
-
-    return () => {
-      container.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleScroll);
-    };
-  }, [source, currentPage]);
+  // Minimap viewport indicator + minimap-content sync now live entirely in
+  // useMinimap (rAF-throttled, written straight to the DOM). Keeping a second
+  // scroll listener here re-rendered the whole viewer per tick and made the box
+  // lag until scrolling stopped — so it was removed.
 
   // Touch state machine (from custom hook)
   useTouchStateMachine({
@@ -800,7 +759,7 @@ const zoomOrigin = { x: 0, y: 0 };
           getVocabularyAnnotations={getVocabularyAnnotations}
           getGrammarAnnotations={getGrammarAnnotations}
           highlightVocabularyWords={highlightAllContent}
-          viewportPosition={viewportPosition}
+          minimapViewportRef={minimapViewportRef}
           minimapRef={minimapRef}
           handleMinimapMouseDown={handleMinimapMouseDown}
           handleMinimapMouseMove={handleMinimapMouseMove}

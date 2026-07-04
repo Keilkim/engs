@@ -253,7 +253,7 @@ export default function ImageContentView({
   isVocabularyAnnotation, isGrammarAnnotation, getVocabularyAnnotations, getGrammarAnnotations,
   highlightVocabularyWords,
   // Minimap
-  viewportPosition, minimapRef,
+  minimapViewportRef, minimapRef,
   handleMinimapMouseDown, handleMinimapMouseMove, handleMinimapMouseUp,
   handleMinimapTouchStart, handleMinimapTouchMove, handleMinimapTouchEnd,
   // Pages
@@ -434,13 +434,11 @@ export default function ImageContentView({
           <div className="minimap-content">
             <div className="minimap-image-wrapper">
               <img src={displayImage} alt="Minimap" className="minimap-image" draggable={false} />
-              <div
-                className="minimap-viewport"
-                style={{
-                  top: `${viewportPosition.top}%`,
-                  height: `${viewportPosition.height}%`,
-                }}
-              />
+              {/* Position (top/height) is written imperatively via ref on scroll
+                  so the box tracks scrolling in real time without re-rendering
+                  this heavy tree. Do NOT bind top/height here (a re-render would
+                  reset the imperative value). */}
+              <div className="minimap-viewport" ref={minimapViewportRef} />
             </div>
           </div>
         </div>
