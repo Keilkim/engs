@@ -316,7 +316,7 @@
   overflow-wrap: anywhere;
 }
 
-/* FitBox: 내용을 카드에 꽉 맞게 동적 스케일(스크롤 없음, 항상 중앙) */
+/* FitBox: 내용이 카드를 꽉 채우도록 폰트 크기를 동적으로(--fit) 맞춤(스크롤 없음, 중앙) */
 .fit-box {
   flex: 1 1 auto;
   min-height: 0;
@@ -328,14 +328,12 @@
 }
 
 .fit-content {
-  display: inline-block;
-  max-width: 100%;
-  transform-origin: center center;
-  will-change: transform;
+  /* 폭을 꽉 채우고(양옆 여백 제거), 글자 크기를 --fit 배율로 동적 확대/축소 */
+  width: 100%;
 }
 
 .question-text {
-  font-size: var(--font-xl);
+  font-size: calc(var(--font-xl) * var(--fit, 1));
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
   line-height: var(--line-height-relaxed);
@@ -354,7 +352,7 @@
 /* 앞면: 단어 아래에 원문 문장을 작게 표시(해당 단어만 볼드) */
 .question-sentence-context {
   margin: var(--spacing-md) 0 0 0;
-  font-size: var(--font-sm);
+  font-size: calc(var(--font-sm) * var(--fit, 1));
   line-height: var(--line-height-relaxed);
   color: rgba(255, 255, 255, 0.7);
   max-width: 90%;
@@ -366,13 +364,13 @@
 }
 
 .answer-text {
-  font-size: var(--font-lg);
+  font-size: calc(var(--font-lg) * var(--fit, 1));
   color: var(--color-text);
   margin: 0;
 }
 
 .memo-text {
-  font-size: var(--font-sm);
+  font-size: calc(var(--font-sm) * var(--fit, 1));
   color: rgba(255, 255, 255, 0.8);
   margin-top: var(--spacing-md);
   font-style: italic;
@@ -384,20 +382,20 @@
 }
 
 .answer-word {
-  font-size: var(--font-xl, 1.5rem);
+  font-size: calc(var(--font-xl, 1.5rem) * var(--fit, 1));
   font-weight: 700;
   color: var(--color-text);
   margin: 0 0 var(--spacing-xs) 0;
 }
 
 .answer-phonetic {
-  font-size: var(--font-sm);
+  font-size: calc(var(--font-sm) * var(--fit, 1));
   color: rgba(255, 255, 255, 0.7);
   margin: 0 0 var(--spacing-md) 0;
 }
 
 .answer-definition {
-  font-size: var(--font-md, 1rem);
+  font-size: calc(var(--font-md, 1rem) * var(--fit, 1));
   color: var(--color-text);
   margin: 0;
   line-height: var(--line-height-relaxed);
@@ -405,7 +403,7 @@
 
 /* 번역/뜻은 라이트하게 (정답 패턴만 강조되도록) */
 .answer-translation {
-  font-size: var(--font-sm);
+  font-size: calc(var(--font-sm) * var(--fit, 1));
   font-weight: 300;
   color: var(--color-text);
   margin: 0 0 var(--spacing-md) 0;
@@ -429,13 +427,13 @@
 /* 정답 패턴(예: "set up ~ off")만 볼드로 강조 */
 .pattern-words {
   font-weight: 700;
-  font-size: var(--font-sm);
+  font-size: calc(var(--font-sm) * var(--fit, 1));
   color: var(--color-text);
   overflow-wrap: anywhere;
 }
 
 .pattern-explanation {
-  font-size: var(--font-sm);
+  font-size: calc(var(--font-sm) * var(--fit, 1));
   font-weight: 300;
   color: rgba(255, 255, 255, 0.8);
   overflow-wrap: anywhere;
