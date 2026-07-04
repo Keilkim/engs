@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // youtube-audio-server is a standalone Node (CommonJS) service deployed to
+  // Railway, not part of the Vite app — don't lint it with the browser/ESM config.
+  globalIgnores(['dist', 'youtube-audio-server']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
