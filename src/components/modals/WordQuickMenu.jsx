@@ -46,6 +46,7 @@ export default function WordQuickMenu({
   const modalRef = useRef(null);
   const backdropRef = useRef(null);
   const openTimeRef = useRef(0);
+  const lastTouchRef = useRef(0); // timestamp of the most recent touch (to reject synthetic mouse)
 
   // Track when menu opens (to ignore synthetic mouse events from the long-press touch)
   useEffect(() => {
@@ -70,6 +71,23 @@ export default function WordQuickMenu({
     el.addEventListener('touchstart', onBackdropTouchStart, { passive: false });
     return () => el.removeEventListener('touchstart', onBackdropTouchStart);
   }, [isOpen, onClose]);
+
+  // Record the most recent touch anywhere on the page so the backdrop's mouse
+  // handler can reject the synthetic mouse events that follow a touch. Without
+  // this, a long-press (which opens the menu while the finger is still down)
+  // fires a synthetic mousedown on the finger-lift that closes the menu it just
+  // opened ("손 떼면 사라진다"). Real touch taps close via the native touchstart
+  // listener above; real desktop clicks (no preceding touch) still close.
+  useEffect(() => {
+    if (!isOpen) return;
+    const mark = () => { lastTouchRef.current = Date.now(); };
+    window.addEventListener('touchstart', mark, { passive: true, capture: true });
+    window.addEventListener('touchend', mark, { passive: true, capture: true });
+    return () => {
+      window.removeEventListener('touchstart', mark, { capture: true });
+      window.removeEventListener('touchend', mark, { capture: true });
+    };
+  }, [isOpen]);
 
   const vocab = useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp, sentence: contextSentence });
   const grammar = useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp });
@@ -196,8 +214,12 @@ export default function WordQuickMenu({
       ref={backdropRef}
       className="word-quick-menu-backdrop"
       onMouseDown={(e) => {
-        // Ignore synthetic mouse events from the touch that triggered this menu
-        if (Date.now() - openTimeRef.current < 500) return;
+        // Reject synthetic mouse events that follow a touch (real touch taps are
+        // handled by the native touchstart listener above). This is what keeps a
+        // long-press's finger-lift from closing the menu it just opened.
+        if (Date.now() - lastTouchRef.current < 700) return;
+        // Also ignore the opening click's own synthetic tail on desktop.
+        if (Date.now() - openTimeRef.current < 300) return;
         e.preventDefault();
         e.stopPropagation();
         onClose();
