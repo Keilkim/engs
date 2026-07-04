@@ -44,12 +44,32 @@ export default function WordQuickMenu({
   const [positionReady, setPositionReady] = useState(false);
   const rafRef = useRef(null);
   const modalRef = useRef(null);
+  const backdropRef = useRef(null);
   const openTimeRef = useRef(0);
 
   // Track when menu opens (to ignore synthetic mouse events from the long-press touch)
   useEffect(() => {
     if (isOpen) openTimeRef.current = Date.now();
   }, [isOpen]);
+
+  // The backdrop must ABSORB the outside tap. A React onTouchStart cannot do it:
+  // React 19 attaches the delegated touchstart listener as passive, so
+  // e.preventDefault() there is a no-op — the browser still fires the compat
+  // mouse events which, after the backdrop unmounts on close, land on the now-
+  // uncovered image container and start a fresh word lookup (close + search).
+  // Attach a NON-passive native listener so preventDefault genuinely suppresses
+  // those synthetic mouse events; then tapping outside only closes.
+  useEffect(() => {
+    const el = backdropRef.current;
+    if (!isOpen || !el) return;
+    const onBackdropTouchStart = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    };
+    el.addEventListener('touchstart', onBackdropTouchStart, { passive: false });
+    return () => el.removeEventListener('touchstart', onBackdropTouchStart);
+  }, [isOpen, onClose]);
 
   const vocab = useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp, sentence: contextSentence });
   const grammar = useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp });
@@ -173,12 +193,8 @@ export default function WordQuickMenu({
   return (
     <>
     <div
+      ref={backdropRef}
       className="word-quick-menu-backdrop"
-      onTouchStart={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onClose();
-      }}
       onMouseDown={(e) => {
         // Ignore synthetic mouse events from the touch that triggered this menu
         if (Date.now() - openTimeRef.current < 500) return;

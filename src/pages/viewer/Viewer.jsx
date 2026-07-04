@@ -31,6 +31,18 @@ export default function Viewer() {
   const [deleting, setDeleting] = useState(false);
   const contentRef = useRef(null);
   const imageContainerRef = useRef(null);
+  // The .screenshot-container mounts only AFTER the source finishes loading (the
+  // loading state renders a spinner instead of ImageContentView). A plain ref
+  // wouldn't notify effects when it finally attaches, so the touch state machine
+  // — whose listener effect keyed on the stable ref object — never re-ran and
+  // left touch (long-press!) dead. This callback ref keeps imageContainerRef in
+  // sync for direct readers AND publishes the node as state so effects re-bind
+  // when it mounts or the layout swaps the container element.
+  const [containerNode, setContainerNode] = useState(null);
+  const setImageContainer = useCallback((node) => {
+    imageContainerRef.current = node;
+    setContainerNode(node);
+  }, []);
   const zoomWrapperRef = useRef(null); // For accurate coordinate calculation when zoomed
   const touchStartRef = useRef(null); // For swipe detection
   const [isShaking, setIsShaking] = useState(false); // Boundary shake effect
@@ -643,6 +655,7 @@ const zoomOrigin = { x: 0, y: 0 };
   // Touch state machine (from custom hook)
   useTouchStateMachine({
     imageContainerRef,
+    containerNode, // re-binds touch listeners when the container mounts / swaps
     zoomScale, setZoomScale,
     panOffset, setPanOffset,
     clampPanOffset,
@@ -734,6 +747,7 @@ const zoomOrigin = { x: 0, y: 0 };
           currentPage={currentPage}
           setCurrentPage={setCurrentPage}
           imageContainerRef={imageContainerRef}
+          setImageContainer={setImageContainer}
           zoomWrapperRef={zoomWrapperRef}
           scrollContainerRef={scrollContainerRef}
           contentRef={contentRef}

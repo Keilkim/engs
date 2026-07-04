@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react';
  */
 export function useTouchStateMachine({
   imageContainerRef,
+  containerNode, // published by Viewer's callback ref; changes when the container mounts/swaps
   zoomScale, setZoomScale,
   panOffset, setPanOffset,
   clampPanOffset,
@@ -287,6 +288,9 @@ export function useTouchStateMachine({
         clearTimeout(touchState.current.timer);
       }
     };
-    // Register once per container; all mutable inputs are read via propsRef.
-  }, [imageContainerRef]);
+    // Re-register when the container node mounts or the layout swaps it.
+    // (Keyed on containerNode, not the stable ref object, so listeners actually
+    // attach after the source finishes loading — otherwise long-press is dead.)
+    // All other mutable inputs are still read via propsRef.
+  }, [imageContainerRef, containerNode]);
 }
