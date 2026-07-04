@@ -198,6 +198,7 @@ export default function WordQuickMenu({
           onSave={grammar.handleSave}
           onDelete={onDeleted}
           onClose={onClose}
+          onRetry={grammar.handleAnalyze}
           onTogglePattern={grammar.togglePattern}
           ko={ko}
         />

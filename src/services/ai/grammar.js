@@ -231,6 +231,7 @@ Return ONLY valid JSON, no markdown:
 }`;
 
   // Primary: Gemini gives translation + idioms + grammar structures.
+  let geminiError = null;
   try {
     const data = await fetchGemini({
       contents: [{ parts: [{ text: prompt }] }],
@@ -254,11 +255,14 @@ Return ONLY valid JSON, no markdown:
     if (parsed && (parsed.translation || parsed.patterns?.length > 0)) {
       return { translation: parsed.translation || '', patterns: parsed.patterns || [] };
     }
-    // Empty/unusable response → fall through to the translation-only fallback.
+    // Got a response but it had no candidates/usable content (e.g. safety block
+    // or empty body) — treat as a degraded AI result, not a genuine "empty".
+    geminiError = new Error(data?.error?.message || 'AI가 빈 응답을 반환했어요');
   } catch (err) {
     // Gemini unavailable (key/quota/network/parse). Don't fail outright —
     // degrade to a translation-only card using the reliable translate path.
     logError('analyzeGrammarPatterns.gemini', err);
+    geminiError = err;
   }
 
   // Fallback: at least translate the sentence so the card is still useful.
@@ -267,5 +271,12 @@ Return ONLY valid JSON, no markdown:
   const translationLang = getSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, 'Korean');
   const langCode = LANG_CODES[translationLang] || 'ko';
   const translation = await googleTranslate(text, langCode);
-  return { translation, patterns: [] };
+  return {
+    translation,
+    patterns: [],
+    // Signals the UI that AI pattern analysis didn't run (so it can say
+    // "AI 연결 실패" instead of a misleading "no expressions"), plus the reason.
+    degraded: true,
+    reason: geminiError ? `${geminiError.status ? geminiError.status + ' ' : ''}${geminiError.message || ''}`.trim() : '',
+  };
 }

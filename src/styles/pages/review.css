@@ -20,17 +20,25 @@
   justify-content: center;
 }
 
-/* 출처: 카드 밖(카드 위)에 작게 표시 */
+/* 출처: 카드 밖(카드 아래)에 작게 표시 */
 .review-source-label {
   width: 100%;
   max-width: 400px;
-  margin: 0 0 var(--spacing-sm) 0;
+  margin: var(--spacing-md) 0 0 0;
   font-size: var(--font-xs);
   color: var(--color-text-muted, rgba(255, 255, 255, 0.55));
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* '탭하여 정답 보기' 안내: 위에 여백 */
+.reveal-hint {
+  margin-top: var(--spacing-xl);
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.5));
+  font-size: var(--font-sm);
+  text-align: center;
 }
 
 .flashcard-container {

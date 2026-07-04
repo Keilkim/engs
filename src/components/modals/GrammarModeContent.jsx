@@ -4,7 +4,7 @@ import { createSentencePattern } from '../../services/annotation';
 export default function GrammarModeContent({
   grammarData, checkedPatterns, loading, error,
   existingAnnotation,
-  onSave, onDelete, onClose,
+  onSave, onDelete, onClose, onRetry,
   onTogglePattern,
   ko,
 }) {
@@ -99,10 +99,20 @@ export default function GrammarModeContent({
           </div>
         ) : (
           <div className="empty-state">
-            {grammarData.translation ? ko('wordMenu.translationOnly') : ko('wordMenu.noPatterns')}
+            {grammarData.degraded
+              ? ko('wordMenu.aiUnavailable')
+              : (grammarData.translation ? ko('wordMenu.translationOnly') : ko('wordMenu.noPatterns'))}
+            {grammarData.degraded && grammarData.reason && (
+              <span className="empty-reason">{grammarData.reason}</span>
+            )}
           </div>
         )}
         <div className="word-menu-actions">
+          {grammarData.degraded && onRetry && (
+            <button className="retry-btn" onClick={onRetry} disabled={loading}>
+              {ko('wordMenu.retry')}
+            </button>
+          )}
           <button
             className="save-btn"
             onClick={onSave}

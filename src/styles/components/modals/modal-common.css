@@ -39,6 +39,15 @@
   font-size: var(--font-sm);
 }
 
+/* AI 연결 실패 시 원인(상태코드/메시지)을 작게 표시 */
+.empty-reason {
+  display: block;
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-xs);
+  color: var(--color-text-muted, rgba(0, 0, 0, 0.45));
+  word-break: break-word;
+}
+
 /* 로딩 상태 (인라인) */
 .loading-state {
   padding: var(--spacing-md);

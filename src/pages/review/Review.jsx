@@ -222,17 +222,18 @@ export default function Review() {
       </div>
 
       <main className="review-content">
+        <Flashcard
+          item={currentItem}
+          showAnswer={showAnswer}
+          onReveal={() => setShowAnswer(true)}
+        />
+
         {currentItem?.annotation?.source?.title && (
           <p className="review-source-label">
             <TranslatableText textKey="review.from">From</TranslatableText>
             {': '}{currentItem.annotation.source.title}
           </p>
         )}
-        <Flashcard
-          item={currentItem}
-          showAnswer={showAnswer}
-          onReveal={() => setShowAnswer(true)}
-        />
 
         {saveError && (
           <p className="review-save-error">

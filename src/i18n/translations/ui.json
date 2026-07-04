@@ -217,6 +217,8 @@
     "analyzing": { "en": "Analyzing...", "ko": "분석 중..." },
     "noPatterns": { "en": "No expressions found", "ko": "분석된 표현이 없습니다" },
     "translationOnly": { "en": "Translation ready. No extra expressions to highlight — you can still save it as a card.", "ko": "번역이 준비됐어요. 따로 강조할 표현은 없지만 카드로 저장할 수 있어요." },
+    "aiUnavailable": { "en": "Couldn't reach the AI analysis (showing translation only). Tap retry, or check the Gemini API key / quota.", "ko": "AI 문법 분석에 연결하지 못했어요 (번역만 표시). 다시 시도하거나 Gemini API 키/사용량을 확인해 주세요." },
+    "retry": { "en": "Retry", "ko": "다시 시도" },
     "analysisFailed": { "en": "Analysis failed", "ko": "분석 실패" },
     "lookingUp": { "en": "Looking up...", "ko": "조회 중..." }
   },

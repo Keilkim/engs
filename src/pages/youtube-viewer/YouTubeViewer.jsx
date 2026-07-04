@@ -31,6 +31,19 @@ export default function YouTubeViewer() {
   const [selectedWordIndex, setSelectedWordIndex] = useState(null);
   const [selectedTimestamp, setSelectedTimestamp] = useState(null);
   const [existingAnnotationForWord, setExistingAnnotationForWord] = useState(null);
+  const [menuPlacement, setMenuPlacement] = useState('below');
+
+  // 탭한 자막 행 기준으로 팝업 위치/방향 결정: 아래 공간이 부족하면 행 '위'로
+  // 뒤집어(화살표는 아래를 향함) 하단 자막에서도 어긋나지 않게 한다.
+  const computeMenuAnchor = useCallback((rect, estHeight) => {
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const above = spaceBelow < estHeight && rect.top > spaceBelow;
+    return {
+      x: rect.left + rect.width / 2,
+      y: above ? rect.top - 8 : rect.bottom + 8,
+      placement: above ? 'above' : 'below',
+    };
+  }, []);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -121,28 +134,32 @@ export default function YouTubeViewer() {
     if (!word) return;
     const existing = findExistingAnnotation(word);
 
+    const anchor = computeMenuAnchor(rect, 240);
     setSelectedWord(word);
     setIsGrammarMode(false);
-    setWordPosition({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
+    setWordPosition({ x: anchor.x, y: anchor.y });
+    setMenuPlacement(anchor.placement);
     setSelectedSegmentIndex(segmentIndex);
     setSelectedWordIndex(wordIdx);
     setSelectedTimestamp(timestamp);
     setExistingAnnotationForWord(existing || null);
-  }, [findExistingAnnotation]);
+  }, [findExistingAnnotation, computeMenuAnchor]);
 
   // Line long-press → grammar search
   const handleLineLongPress = useCallback((sentenceText, rect, segmentIndex, timestamp) => {
     if (!sentenceText) return;
 
+    const anchor = computeMenuAnchor(rect, 340);
     setSelectedWord(sentenceText);
     setIsGrammarMode(true);
     setSelectedSentenceText(sentenceText);
-    setWordPosition({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
+    setWordPosition({ x: anchor.x, y: anchor.y });
+    setMenuPlacement(anchor.placement);
     setSelectedSegmentIndex(segmentIndex);
     setSelectedWordIndex(null);
     setSelectedTimestamp(timestamp);
     setExistingAnnotationForWord(null);
-  }, []);
+  }, [computeMenuAnchor]);
 
   const closeWordModal = useCallback(() => {
     setSelectedWord(null);
@@ -374,7 +391,7 @@ export default function YouTubeViewer() {
       <WordQuickMenu
         isOpen={!!selectedWord}
         position={wordPosition}
-        placement="below"
+        placement={menuPlacement}
         word={selectedWord}
         isGrammarMode={isGrammarMode}
         sourceId={id}

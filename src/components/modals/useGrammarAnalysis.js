@@ -81,6 +81,8 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
         originalText: word,
         translation: result.translation || '',
         patterns: result.patterns || [],
+        degraded: result.degraded || false,
+        reason: result.reason || '',
       });
       setCheckedPatterns(result.patterns?.map((_, i) => i) || []);
     } catch {
