@@ -9,24 +9,23 @@ export default function StatsDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadStats();
-  }, []);
-
-  async function loadStats() {
-    setLoading(true);
-    try {
-      const [statsData, weeklyData] = await Promise.all([
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      // 두 요청을 독립적으로 처리한다. Promise.all로 묶으면 주간 통계(user_stats)
+      // 읽기가 한 번 실패하는 것만으로 Sources/Cards/Reviewed/Rate 카드까지 전부
+      // 0으로 사라진다(catch가 setStats 자체를 건너뜀). allSettled로 각각 반영.
+      const [statsRes, weeklyRes] = await Promise.allSettled([
         getUserStats(),
         getWeeklyStats(),
       ]);
-      setStats(statsData);
-      setWeeklyStats(weeklyData);
-    } catch {
-      // ignore
-    } finally {
+      if (cancelled) return;
+      if (statsRes.status === 'fulfilled') setStats(statsRes.value);
+      if (weeklyRes.status === 'fulfilled') setWeeklyStats(weeklyRes.value);
       setLoading(false);
-    }
-  }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   if (loading) {
     return (
@@ -52,7 +51,7 @@ export default function StatsDashboard() {
 
         <div className="stat-card">
           <div className="stat-info">
-            <span className="stat-value">{stats?.annotationCount || 0}</span>
+            <span className="stat-value">{stats?.cardCount || 0}</span>
             <span className="stat-label">Cards</span>
           </div>
         </div>
