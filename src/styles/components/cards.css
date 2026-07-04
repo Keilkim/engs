@@ -288,8 +288,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* safe center: 내용이 짧으면 가운데, 넘치면 위부터(스크롤 시 윗부분 잘림 방지) */
+  justify-content: safe center;
   text-align: center;
+  /* 긴 문법 카드가 카드 밖으로 넘치지 않도록: 안에서 스크롤 + 단어 줄바꿈 */
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
 }
 
 .question-text {
@@ -352,17 +358,21 @@
   line-height: var(--line-height-relaxed);
 }
 
+/* 번역/뜻은 라이트하게 (정답 패턴만 강조되도록) */
 .answer-translation {
-  font-size: var(--font-md, 1rem);
+  font-size: var(--font-sm);
+  font-weight: 300;
   color: var(--color-text);
   margin: 0 0 var(--spacing-md) 0;
   line-height: var(--line-height-relaxed);
+  overflow-wrap: anywhere;
 }
 
 .answer-patterns {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
+  width: 100%;
 }
 
 .pattern-item {
@@ -371,15 +381,19 @@
   gap: 2px;
 }
 
+/* 정답 패턴(예: "set up ~ off")만 볼드로 강조 */
 .pattern-words {
-  font-weight: 600;
+  font-weight: 700;
   font-size: var(--font-sm);
   color: var(--color-text);
+  overflow-wrap: anywhere;
 }
 
 .pattern-explanation {
   font-size: var(--font-sm);
+  font-weight: 300;
   color: rgba(255, 255, 255, 0.8);
+  overflow-wrap: anywhere;
 }
 
 .no-analysis {
