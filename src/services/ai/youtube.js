@@ -48,6 +48,7 @@ export async function getYouTubeMetadata(videoId) {
     return {
       title: data.title || 'Untitled Video',
       author: data.author_name || 'Unknown',
+      author_url: data.author_url || null, // channel URL — backfill material for channel_id
       thumbnail_url: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
       thumbnail_url_hq: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
     };
@@ -56,6 +57,7 @@ export async function getYouTubeMetadata(videoId) {
     return {
       title: 'YouTube Video',
       author: 'Unknown',
+      author_url: null,
       thumbnail_url: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
       thumbnail_url_hq: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
     };
@@ -93,6 +95,7 @@ export async function fetchYouTubeCaptions(videoId, lang = 'en') {
     language: data.language || lang,
     source: data.source || 'youtube',
     durationSec: data.durationSec || 0,
+    channelId: data.channelId || null,
   };
 }
 

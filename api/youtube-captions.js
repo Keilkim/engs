@@ -23,15 +23,19 @@ export default async function handler(req, res) {
     const player = await getPlayer(videoId);
     const tracks = player?.captions?.playerCaptionsTracklistRenderer?.captionTracks || null;
     const durationSec = Number(player?.videoDetails?.lengthSeconds) || 0;
+    // channelId is a clean field on the same player response — captured here so the
+    // add flow can store it (youtube_data.channel is only a display name), sparing
+    // the shelf a later resolve round-trip.
+    const channelId = player?.videoDetails?.channelId || null;
 
     if (!tracks || tracks.length === 0) {
       // Genuinely no caption tracks for this video.
-      return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false, durationSec });
+      return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false, durationSec, channelId });
     }
 
     const track = pickTrack(tracks, lang);
     if (!track?.baseUrl) {
-      return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false, durationSec });
+      return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false, durationSec, channelId });
     }
 
     // Force json3 (strip any format the track URL already carries).
@@ -41,8 +45,8 @@ export default async function handler(req, res) {
 
     const body = await r.text();
     const parsed = parseCaption(body, track.languageCode || lang);
-    if (!parsed) return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false, durationSec });
-    return res.status(200).json({ ...parsed, hasCaptions: true, durationSec });
+    if (!parsed) return res.status(200).json({ segments: [], source: 'youtube', hasCaptions: false, durationSec, channelId });
+    return res.status(200).json({ ...parsed, hasCaptions: true, durationSec, channelId });
   } catch (err) {
     // Network/parse failure — NOT a confirmed absence of captions.
     return res.status(502).json({ error: err.message || 'Caption fetch failed' });
