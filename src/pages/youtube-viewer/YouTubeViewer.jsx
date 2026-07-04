@@ -7,6 +7,8 @@ import useYouTubePlayer, { PLAYBACK_SPEEDS } from '../../hooks/useYouTubePlayer'
 import useCaptionSync from '../../hooks/useCaptionSync';
 import { formatTime } from '../../services/ai/youtube';
 import { useChat } from '../../hooks';
+import { getSetting, SETTINGS_KEYS } from '../../services/settings';
+import { LANG_CODES } from '../../services/ai';
 import CaptionDisplay from '../../components/youtube/CaptionDisplay';
 import WordQuickMenu from '../../components/modals/WordQuickMenu';
 import ChatPanel from '../../components/ChatPanel';
@@ -15,6 +17,17 @@ import '../../styles/pages/youtube-viewer.css';
 export default function YouTubeViewer() {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  // Caption-translation preference — read once at mount (settings only change on
+  // the Settings page, which remounts this view on return). Persisted in
+  // localStorage via the settings service.
+  const [showCaptionTranslation] = useState(
+    () => getSetting(SETTINGS_KEYS.CAPTION_SHOW_TRANSLATION, 'false') === 'true'
+  );
+  const [translationLangCode] = useState(() => {
+    const lang = getSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, 'Korean');
+    return LANG_CODES[lang] || 'ko';
+  });
 
   const [source, setSource] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -464,6 +477,8 @@ export default function YouTubeViewer() {
 
         <div className="captions-container">
           <CaptionDisplay
+            // Remount on source change so caption-translation state starts clean.
+            key={id}
             segments={segments}
             currentTime={currentTime}
             isPlaying={isPlaying}
@@ -473,6 +488,8 @@ export default function YouTubeViewer() {
             onPressStart={handlePressStart}
             onPressEndNoMenu={handlePressEndNoMenu}
             savedWords={savedWordsSet}
+            showTranslation={showCaptionTranslation}
+            translationLang={translationLangCode}
           />
         </div>
         </div>

@@ -11,6 +11,7 @@ export const SETTINGS_KEYS = {
   TRANSLATION_LANGUAGE: 'translation_language',
   ENGLISH_LEVEL: 'english_level',
   SHELF_INCLUDE_SHORTS: 'shelf_include_shorts', // 'true' | 'false' — show Shorts in the Home shelf
+  CAPTION_SHOW_TRANSLATION: 'caption_show_translation', // 'true' | 'false' — show inline translation under YouTube script lines
 };
 
 // Default values
@@ -19,6 +20,7 @@ export const DEFAULTS = {
   [SETTINGS_KEYS.TRANSLATION_LANGUAGE]: 'Korean',
   [SETTINGS_KEYS.ENGLISH_LEVEL]: 'intermediate',
   [SETTINGS_KEYS.SHELF_INCLUDE_SHORTS]: 'false',
+  [SETTINGS_KEYS.CAPTION_SHOW_TRANSLATION]: 'false',
 };
 
 // Language options

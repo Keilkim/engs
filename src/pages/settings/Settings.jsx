@@ -43,6 +43,9 @@ export default function Settings() {
   const [includeShorts, setIncludeShorts] = useState(
     getSetting(SETTINGS_KEYS.SHELF_INCLUDE_SHORTS, 'false') === 'true'
   );
+  const [showCaptionTranslation, setShowCaptionTranslation] = useState(
+    getSetting(SETTINGS_KEYS.CAPTION_SHOW_TRANSLATION, 'false') === 'true'
+  );
 
   // Save language settings when changed
   function handleAiChatLangChange(value) {
@@ -70,6 +73,13 @@ export default function Settings() {
     setIncludeShorts(value);
     setSetting(SETTINGS_KEYS.SHELF_INCLUDE_SHORTS, value ? 'true' : 'false');
     setMessage({ type: 'success', text: 'Shorts setting updated' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 2000);
+  }
+
+  function handleCaptionTranslationToggle(value) {
+    setShowCaptionTranslation(value);
+    setSetting(SETTINGS_KEYS.CAPTION_SHOW_TRANSLATION, value ? 'true' : 'false');
+    setMessage({ type: 'success', text: 'Caption translation setting updated' });
     setTimeout(() => setMessage({ type: '', text: '' }), 2000);
   }
 
@@ -251,6 +261,15 @@ export default function Settings() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="setting-row">
+              <label htmlFor="caption-translation">자막 번역 표시 (Show script translation)</label>
+              <input
+                id="caption-translation"
+                type="checkbox"
+                checked={showCaptionTranslation}
+                onChange={(e) => handleCaptionTranslationToggle(e.target.checked)}
+              />
             </div>
           </div>
         </section>

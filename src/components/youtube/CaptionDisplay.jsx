@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import CaptionLine from './CaptionLine';
 import useCaptionSync from '../../hooks/useCaptionSync';
+import useCaptionTranslations from '../../hooks/useCaptionTranslations';
 
 export default function CaptionDisplay({
   segments,
@@ -12,9 +13,16 @@ export default function CaptionDisplay({
   onPressStart,
   onPressEndNoMenu,
   savedWords,
+  showTranslation = false,
+  translationLang = 'ko',
 }) {
   const scrollContainerRef = useRef(null);
   const { currentSegmentIndex, isActiveIndex } = useCaptionSync(segments, currentTime);
+  const { translations, requestTranslation } = useCaptionTranslations({
+    segments,
+    enabled: showTranslation,
+    targetLang: translationLang,
+  });
 
   // Auto-scroll to active segment
   useEffect(() => {
@@ -32,6 +40,35 @@ export default function CaptionDisplay({
       container.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
     }
   }, [currentSegmentIndex]);
+
+  // Translate the currently-playing line first so it's ready as it scrolls in.
+  useEffect(() => {
+    if (showTranslation && currentSegmentIndex >= 0) {
+      requestTranslation(currentSegmentIndex, true);
+    }
+  }, [showTranslation, currentSegmentIndex, requestTranslation]);
+
+  // Translate lines as they scroll into view (covers free scrolling + playback)
+  // so we never burst-translate the whole transcript at once.
+  useEffect(() => {
+    if (!showTranslation) return;
+    const container = scrollContainerRef.current;
+    if (!container || typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const idx = Number(entry.target.dataset.segmentIndex);
+          if (!Number.isNaN(idx)) requestTranslation(idx);
+        }
+      },
+      { root: container, rootMargin: '200px 0px' }
+    );
+
+    container.querySelectorAll('.caption-line').forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [showTranslation, segments, requestTranslation]);
 
   if (!segments || segments.length === 0) {
     return (
@@ -61,6 +98,7 @@ export default function CaptionDisplay({
           onPressStart={onPressStart}
           onPressEndNoMenu={onPressEndNoMenu}
           savedWords={savedWords}
+          translation={showTranslation ? translations[index] : undefined}
         />
         );
       })}

@@ -27,6 +27,7 @@ function CaptionLine({
   onPressStart,
   onPressEndNoMenu,
   savedWords,
+  translation,
 }) {
   const touchStateRef = useRef(null);
   const timerRef = useRef(null);
@@ -256,6 +257,7 @@ function CaptionLine({
       <span className="caption-time">{formatTime(segment.start)}</span>
       <div className="caption-text">
         <div className="caption-original">{renderWords(segment.text)}</div>
+        {translation && <div className="caption-translation">{translation}</div>}
       </div>
     </div>
   );

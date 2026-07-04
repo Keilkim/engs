@@ -336,6 +336,14 @@
   color: var(--text-primary, #fff);
 }
 
+/* Small, muted translation shown under the original caption line (opt-in). */
+.caption-translation {
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary, #8a8a8a);
+}
+
 /* Word-level styling */
 .caption-word {
   cursor: pointer;

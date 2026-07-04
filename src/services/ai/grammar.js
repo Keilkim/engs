@@ -239,7 +239,17 @@ Return ONLY valid JSON, no markdown:
   try {
     const data = await fetchGemini({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.3 },
+      generationConfig: {
+        temperature: 0.3,
+        // Gemini 2.5 Flash "thinks" (internal chain-of-thought) before answering
+        // by default, which adds several seconds of latency to every long-press.
+        // This grammar card is a straightforward extraction, so disable thinking
+        // for a much snappier response. (thinkingBudget: 0 = no thinking.)
+        thinkingConfig: { thinkingBudget: 0 },
+        // We ask for pure JSON below — enforce it so parsing is reliable and we
+        // don't waste tokens/latency on markdown fences.
+        responseMimeType: 'application/json',
+      },
     });
 
     const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
