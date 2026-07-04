@@ -248,6 +248,27 @@
   border-color: var(--color-accent-light);
 }
 
+/* 카드 전환: 새 카드는 오른쪽에서 등장, 평가 후엔 왼쪽으로 슬라이드 아웃
+   (뒤집기 원복 = 역회전이 어색해서 슬라이드 방식으로 교체) */
+@keyframes cardEnter {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes cardExitLeft {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-45%); }
+}
+
+.flashcard {
+  animation: cardEnter 0.26s ease;
+}
+
+.flashcard.card-exit {
+  animation: cardExitLeft 0.26s ease forwards;
+  pointer-events: none;
+}
+
 .flashcard-inner {
   position: relative;
   width: 100%;
@@ -306,6 +327,15 @@
   margin: 0;
 }
 
+/* 문법 문장 앞면: 기본은 라이트, 패턴 표현만 볼드 */
+.question-grammar {
+  font-weight: 300;
+}
+
+.question-grammar .pattern-hl {
+  font-weight: 700;
+}
+
 /* 앞면: 단어 아래에 원문 문장을 작게 표시(해당 단어만 볼드) */
 .question-sentence-context {
   margin: var(--spacing-md) 0 0 0;
@@ -334,7 +364,7 @@
 }
 
 .analysis-content {
-  text-align: left;
+  text-align: center;
   width: 100%;
 }
 

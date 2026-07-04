@@ -47,9 +47,45 @@ export default function YouTubeViewer() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Video is a fixed full-width 16:9 block (CSS aspect-ratio); captions fill the
-  // rest. (Height-resizing the player made the video scale/zoom with the panel
-  // height, so it was removed in favor of a stable, width-based aspect ratio.)
+  // Resizable split (column layout only). The video keeps a stable 16:9 ratio
+  // and letterboxes inside this area (never crops/zooms). Clamped so the
+  // captions below always keep a usable amount of height.
+  const [playerHeight, setPlayerHeight] = useState(55);
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef(null);
+
+  const handleDragStart = useCallback((e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMove = (e) => {
+      if (!containerRef.current) return;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const mouseY = clientY - containerRect.top;
+      const newHeight = (mouseY / containerRect.height) * 100;
+      // Keep at least ~28% for the captions below.
+      setPlayerHeight(Math.min(Math.max(newHeight, 30), 72));
+    };
+
+    const handleEnd = () => setIsDragging(false);
+
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
+      document.removeEventListener('touchmove', handleMove);
+      document.removeEventListener('touchend', handleEnd);
+    };
+  }, [isDragging]);
 
   const {
     currentTime,
@@ -344,8 +380,11 @@ export default function YouTubeViewer() {
         <button className="delete-button" onClick={() => setShowDeleteConfirm(true)}>삭제</button>
       </header>
 
-      <div className="youtube-content">
-        <div className="youtube-player-container">
+      <div className="youtube-content" ref={containerRef}>
+        <div
+          className="youtube-player-container"
+          style={{ '--player-height': `${playerHeight}%` }}
+        >
           {videoId && (
             <YouTube
               videoId={videoId}
@@ -358,6 +397,16 @@ export default function YouTubeViewer() {
           )}
         </div>
 
+        {/* 세퍼레이트 컨트롤 라인: 드래그로 영상/자막 높이 조절 (좁은 화면에서만) */}
+        <div
+          className={`resize-handle ${isDragging ? 'dragging' : ''}`}
+          onMouseDown={handleDragStart}
+          onTouchStart={handleDragStart}
+        >
+          <div className="resize-handle-bar" />
+        </div>
+
+        <div className="youtube-side">
         <div className="speed-control">
           <span className="speed-label">속도</span>
           <div className="speed-buttons">
@@ -385,6 +434,7 @@ export default function YouTubeViewer() {
             onPressEndNoMenu={handlePressEndNoMenu}
             savedWords={savedWordsSet}
           />
+        </div>
         </div>
       </div>
 

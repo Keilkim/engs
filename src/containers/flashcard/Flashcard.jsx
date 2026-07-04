@@ -15,13 +15,39 @@ function renderSentenceWithHighlight(sentence, word) {
   );
 }
 
-export default function Flashcard({ item, showAnswer, onReveal }) {
+// 문법 카드 앞면: 문장에서 '패턴 표현'만 볼드, 나머지는 라이트.
+// 플레이스홀더(A/B/C, ~, ..., V/Ving/Ved)는 제외하고 실제 표현 조각만 강조.
+function renderSentenceWithPatterns(sentence, patterns) {
+  const fragments = [];
+  for (const p of patterns || []) {
+    for (const w of p?.words || []) {
+      if (typeof w !== 'string') continue;
+      w.split(/\b[A-C]\b|~|\.{2,}|\bV(?:ing|ed)?\b/g).forEach((frag) => {
+        const f = frag.trim().replace(/^[^\p{L}]+|[^\p{L}]+$/gu, '');
+        if (f.length >= 2) fragments.push(f);
+      });
+    }
+  }
+  if (fragments.length === 0) return sentence;
+  fragments.sort((a, b) => b.length - a.length);
+  const escaped = fragments.map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = new RegExp(`(${escaped.join('|')})`, 'gi');
+  const lowSet = new Set(fragments.map((f) => f.toLowerCase()));
+  return sentence.split(re).map((part, i) =>
+    part && lowSet.has(part.toLowerCase())
+      ? <strong key={i} className="pattern-hl">{part}</strong>
+      : <span key={i}>{part}</span>
+  );
+}
+
+export default function Flashcard({ item, showAnswer, exiting, onReveal }) {
   const annotation = item?.annotation;
   // 손상된 ai_analysis_json이 복습 화면 전체를 크래시시키지 않도록 안전 파싱 후 null 폴백
   const analysisData = safeJsonParse(annotation?.ai_analysis_json, null);
   const selectedText = annotation?.selected_text || '';
   // 하위호환: 저장 시 sentence가 포함되면 원문 문장을 맥락으로 표시(단어 강조)
   const sentence = analysisData?.sentence;
+  const isGrammar = analysisData?.type === 'grammar';
 
   function handleClick() {
     if (!showAnswer) {
@@ -31,7 +57,7 @@ export default function Flashcard({ item, showAnswer, onReveal }) {
 
   return (
     <div
-      className={`flashcard ${showAnswer ? 'flipped' : ''}`}
+      className={`flashcard ${showAnswer ? 'flipped' : ''} ${exiting ? 'card-exit' : ''}`}
       onClick={handleClick}
     >
       <div className="flashcard-inner">
@@ -40,11 +66,20 @@ export default function Flashcard({ item, showAnswer, onReveal }) {
             <TranslatableText textKey="flashcard.tapToReveal">Tap to reveal answer</TranslatableText>
           </div>
           <div className="card-content">
-            <p className="question-text">{selectedText}</p>
-            {sentence && sentence !== selectedText && (
-              <p className="question-sentence-context">
-                {renderSentenceWithHighlight(sentence, selectedText)}
+            {isGrammar ? (
+              // 문법 문장: 패턴만 볼드, 나머지는 라이트
+              <p className="question-text question-grammar">
+                {renderSentenceWithPatterns(selectedText, analysisData.patterns)}
               </p>
+            ) : (
+              <>
+                <p className="question-text">{selectedText}</p>
+                {sentence && sentence !== selectedText && (
+                  <p className="question-sentence-context">
+                    {renderSentenceWithHighlight(sentence, selectedText)}
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>

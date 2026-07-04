@@ -73,18 +73,28 @@
   position: relative;
 }
 
-/* Video Player Container — fixed full-width 16:9 (ratio kept by width, no zoom) */
+/* Video Player Container — resizable height; video keeps 16:9 and letterboxes
+   inside (never crops/zooms). */
 .youtube-player-container {
   width: 100%;
-  aspect-ratio: 16 / 9;
+  height: var(--player-height, 55%);
   background: #000;
   flex-shrink: 0;
   overflow: hidden;
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.youtube-player-container iframe,
+/* react-youtube wrapper: 16:9, contained within the (resizable) area */
 .youtube-player-container .youtube-player {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 100%;
+}
+
+.youtube-player-container iframe {
   width: 100%;
   height: 100%;
   display: block;
@@ -186,6 +196,40 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+/* speed-control + captions 를 묶는 패널 (좁은 화면=아래, 데스크탑=오른쪽) */
+.youtube-side {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 데스크탑: 영상 왼쪽 + 자막/속도 오른쪽. 세로 리사이즈 핸들은 숨김 */
+@media (min-width: 900px) {
+  .youtube-content {
+    flex-direction: row;
+    align-items: stretch;
+  }
+  .youtube-player-container {
+    height: auto;
+    width: 62%;
+    flex: 0 0 62%;
+    aspect-ratio: 16 / 9;
+    max-height: 100%;
+    align-self: flex-start;
+  }
+  .resize-handle {
+    display: none;
+  }
+  .youtube-side {
+    flex: 1;
+    min-width: 320px;
+    align-self: stretch;
+    border-left: 1px solid var(--border-color, #333);
+  }
 }
 
 /* Caption Display */

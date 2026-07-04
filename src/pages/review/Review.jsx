@@ -16,6 +16,7 @@ export default function Review() {
   const [totalItems, setTotalItems] = useState(0);
   const [processing, setProcessing] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const [exiting, setExiting] = useState(false);
   const processingRef = useRef(false);
 
   useEffect(() => {
@@ -68,13 +69,19 @@ export default function Review() {
         incorrect: prev.incorrect + (isCorrect ? 0 : 1),
       }));
 
-      // 다음 카드로 이동 (마지막이면 currentIndex === items.length → 완료 화면)
-      setCurrentIndex((prev) => prev + 1);
-      setShowAnswer(false);
+      // 다음 카드로: 역방향 회전(뒤집기 원복)은 어색하므로, 카드를 왼쪽으로
+      // 슬라이드시켜 내보낸 뒤 새 카드로 교체(key 변경 → 앞면부터 새로 등장).
+      setExiting(true);
+      setTimeout(() => {
+        setCurrentIndex((prev) => prev + 1); // 마지막이면 == length → 완료 화면
+        setShowAnswer(false);
+        setExiting(false);
+        processingRef.current = false;
+        setProcessing(false);
+      }, 260);
     } catch {
       // 저장 실패 시 피드백을 주고 같은 카드에서 재시도 가능하게 유지
       setSaveError(true);
-    } finally {
       processingRef.current = false;
       setProcessing(false);
     }
@@ -223,8 +230,10 @@ export default function Review() {
 
       <main className="review-content">
         <Flashcard
+          key={currentIndex}
           item={currentItem}
           showAnswer={showAnswer}
+          exiting={exiting}
           onReveal={() => setShowAnswer(true)}
         />
 

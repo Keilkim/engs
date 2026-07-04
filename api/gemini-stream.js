@@ -1,4 +1,5 @@
 // Vercel Serverless Function - Gemini API Streaming Proxy
+/* global process */
 
 export const config = {
   supportsResponseStreaming: true,
