@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 
 // Get coordinates from mouse or touch event
 function getEventCoords(e) {
@@ -34,6 +34,22 @@ export function useDesktopGestures({
 }) {
   const mouseClickStart = useRef(null);
   const mouseTimer = useRef(null);
+
+  // Timestamp of the most recent touch anywhere. Used to reject the synthetic
+  // mouse events the browser emits after a touch (tap/long-press). Real touch is
+  // handled by useTouchStateMachine; real desktop mouse never sets this. Without
+  // it, a tap that closes the word menu would leak a synthetic mousedown into the
+  // container and start a fresh lookup (the "tap-outside also searches" bug).
+  const lastTouchRef = useRef(0);
+  useEffect(() => {
+    const mark = () => { lastTouchRef.current = Date.now(); };
+    window.addEventListener('touchstart', mark, { passive: true, capture: true });
+    window.addEventListener('touchend', mark, { passive: true, capture: true });
+    return () => {
+      window.removeEventListener('touchstart', mark, { capture: true });
+      window.removeEventListener('touchend', mark, { capture: true });
+    };
+  }, []);
 
   // Clamp pan offset so the zoomed image fills the visible viewport.
   // Accounts for container being centered within screenshot-main.
@@ -141,6 +157,10 @@ export function useDesktopGestures({
 
     // Left mouse button - start click/long-press detection
     if (e.button === 0 && !e.touches) {
+      // Ignore synthetic mouse events that follow a touch (tap / long-press
+      // finger-lift). Real touch is handled by the touch state machine; a real
+      // desktop click has no recent touch so it proceeds normally.
+      if (Date.now() - lastTouchRef.current < 700) return;
       const { clientX, clientY } = getEventCoords(e);
       mouseClickStart.current = {
         x: clientX,
