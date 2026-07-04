@@ -18,7 +18,7 @@ const FALLBACK_WINDOW = 7;
  * don't trigger the card's tap-to-reveal. The iframe is mounted lazily on first
  * tap so flipping past cards you don't listen to costs nothing.
  */
-export default function ScenePlayer({ videoId, sourceId, segmentIndex, fallbackStart }) {
+export default function ScenePlayer({ videoId, sourceId, segmentIndex, fallbackStart, onInteract }) {
   const [mounted, setMounted] = useState(false);
   const { start, end } = useSceneBounds({ sourceId, segmentIndex, fallbackStart });
 
@@ -54,13 +54,17 @@ export default function ScenePlayer({ videoId, sourceId, segmentIndex, fallbackS
   }, [onReady, seekTo, playVideo, seekStart]);
 
   const replay = useCallback(() => {
+    onInteract?.();
     seekTo(seekStart);
     playVideo();
-  }, [seekTo, playVideo, seekStart]);
+  }, [onInteract, seekTo, playVideo, seekStart]);
 
   if (!mounted) {
     return (
-      <button className="scene-play-button" onClick={() => setMounted(true)}>
+      <button
+        className="scene-play-button"
+        onClick={() => { onInteract?.(); setMounted(true); }}
+      >
         <span className="scene-play-icon" aria-hidden="true">▶</span>
         <TranslatableText textKey="review.listenScene">Listen to this scene</TranslatableText>
       </button>

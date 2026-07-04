@@ -7,6 +7,10 @@ import ScenePlayer from '../../containers/flashcard/ScenePlayer';
 import { TranslatableText } from '../../components/translatable';
 import { safeJsonParse } from '../../utils/errors';
 
+// 답을 열었다(=몰랐다) 뒤, 답/원본 장면을 잠깐 보고 자동으로 다음 카드(오답)로.
+// 장면 재생을 시작하면 이 타이머는 취소되고 수동 '다음'으로 전환된다.
+const AUTO_ADVANCE_MS = 3500;
+
 export default function Review() {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
@@ -19,11 +23,41 @@ export default function Review() {
   const [processing, setProcessing] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [exiting, setExiting] = useState(false);
+  const [autoAdvancing, setAutoAdvancing] = useState(false);
   const processingRef = useRef(false);
+  const autoTimerRef = useRef(null);
 
   useEffect(() => {
     loadItems();
   }, []);
+
+  // 언마운트/재로드 시 자동넘김 타이머 정리
+  useEffect(() => () => clearAutoTimer(), []);
+
+  function clearAutoTimer() {
+    if (autoTimerRef.current) {
+      clearTimeout(autoTimerRef.current);
+      autoTimerRef.current = null;
+    }
+  }
+
+  // 카드 탭 = "몰라요": 답을 펼치고, 잠깐 본 뒤 자동으로 오답 처리하며 다음으로.
+  function handleReveal() {
+    if (showAnswer || processingRef.current) return;
+    setShowAnswer(true);
+    setAutoAdvancing(true);
+    clearAutoTimer();
+    autoTimerRef.current = setTimeout(() => {
+      autoTimerRef.current = null;
+      handleEvaluation(false);
+    }, AUTO_ADVANCE_MS);
+  }
+
+  // 원본 장면을 다시 들으려는 경우: 자동넘김을 멈추고 수동 '다음'으로 전환.
+  function cancelAutoAdvance() {
+    clearAutoTimer();
+    setAutoAdvancing(false);
+  }
 
   async function loadItems() {
     setLoading(true);
@@ -54,6 +88,8 @@ export default function Review() {
     processingRef.current = true;
     setProcessing(true);
     setSaveError(false);
+    clearAutoTimer();
+    setAutoAdvancing(false);
 
     try {
       await updateReviewResult(currentItem.id, isCorrect);
@@ -247,7 +283,7 @@ export default function Review() {
           item={currentItem}
           showAnswer={showAnswer}
           exiting={exiting}
-          onReveal={() => setShowAnswer(true)}
+          onReveal={handleReveal}
         />
 
         {canPlayScene && (
@@ -257,6 +293,7 @@ export default function Review() {
             sourceId={annotation.source.id}
             segmentIndex={sceneRect.segmentIndex}
             fallbackStart={sceneStart}
+            onInteract={cancelAutoAdvance}
           />
         )}
 
@@ -273,27 +310,40 @@ export default function Review() {
           </p>
         )}
 
-        {/* 능동 회상 강제: 답을 공개한 뒤에만 평가 버튼 노출 */}
+        {/*
+          인출 정직성: 답을 여는 행위 자체가 "몰라요"(오답)다. 사후확신 편향으로
+          "알았는데"를 누르는 걸 막고, 아는 카드는 답을 안 보고 바로 넘긴다.
+          - 앞면: 카드 탭 = 답 공개(=몰라요), '알아요' 버튼 = 정답 후 즉시 다음
+          - 뒷면: 잠깐 본 뒤 자동으로 다음(오답). 장면을 들으면 자동넘김 취소 → 수동 '다음'
+        */}
         {showAnswer ? (
-          <div className="evaluation-buttons">
+          <div className="advance-row">
+            {autoAdvancing && (
+              <div
+                className="auto-advance-bar"
+                style={{ animationDuration: `${AUTO_ADVANCE_MS}ms` }}
+              />
+            )}
             <button
-              className="eval-button incorrect"
+              className="eval-button next"
               onClick={() => handleEvaluation(false)}
               disabled={processing}
             >
-              <TranslatableText textKey="review.dontKnow">I don't know</TranslatableText>
+              <TranslatableText textKey="review.next">Next</TranslatableText>
             </button>
+          </div>
+        ) : (
+          <div className="front-actions">
+            <p className="reveal-hint">
+              <TranslatableText textKey="review.tapIfUnsure">Don't know it? Tap the card to see the answer.</TranslatableText>
+            </p>
             <button
-              className="eval-button correct"
+              className="eval-button correct know-button"
               onClick={() => handleEvaluation(true)}
               disabled={processing}
             >
               <TranslatableText textKey="review.iKnow">I know</TranslatableText>
             </button>
-          </div>
-        ) : (
-          <div className="reveal-hint">
-            <TranslatableText textKey="review.tapToReveal">Tap the card to reveal the answer</TranslatableText>
           </div>
         )}
       </main>

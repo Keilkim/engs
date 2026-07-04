@@ -299,6 +299,64 @@
   background-color: #34D860;
 }
 
+/* 앞면 액션: '알아요'(정답, 답 안 봄). 카드 탭은 '몰라요'(=답 공개)로 예약 */
+.front-actions {
+  width: 100%;
+  max-width: 400px;
+  margin-top: var(--spacing-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--spacing-md);
+}
+
+.front-actions .reveal-hint {
+  margin-top: 0;
+}
+
+.know-button {
+  width: 100%;
+}
+
+/* 뒷면: 답을 봤다(=몰라요). 잠깐 본 뒤 자동으로 다음 카드로 넘어간다. */
+.advance-row {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  margin-top: var(--spacing-xl);
+  display: flex;
+  flex-direction: column;
+}
+
+.eval-button.next {
+  width: 100%;
+  background-color: var(--color-base-sub);
+  color: var(--color-text);
+  border: 1px solid var(--color-accent);
+}
+
+.eval-button.next:hover {
+  border-color: var(--color-accent-light);
+}
+
+/* 자동넘김 카운트다운: 남은 시간을 줄어드는 막대로 시각화. 장면 재생 시 사라짐 */
+.auto-advance-bar {
+  height: 3px;
+  width: 100%;
+  margin-bottom: var(--spacing-sm);
+  border-radius: 999px;
+  background-color: var(--color-accent, rgba(255, 255, 255, 0.4));
+  transform-origin: left center;
+  animation-name: auto-advance-shrink;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes auto-advance-shrink {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
 /*
  * ===========================================
  * Scene player — replay the original YouTube
