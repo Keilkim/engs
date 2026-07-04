@@ -167,6 +167,43 @@ app.post('/api/extract-audio', async (req, res) => {
   }
 });
 
+// Fast metadata: just the video duration (no download). The Whisper caller uses
+// this to chunk long videos even when InnerTube can't report duration (bot-gated).
+app.post('/api/info', async (req, res) => {
+  const { videoId } = req.body;
+  if (!videoId) return res.status(400).json({ error: 'videoId is required' });
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const clients = ['android_vr', 'tv', 'default', 'android', 'ios'];
+
+  for (const client of clients) {
+    try {
+      const out = await new Promise((resolve, reject) => {
+        const args = [
+          '--skip-download', '--no-warnings', '--no-playlist',
+          '--print', '%(duration)s',
+          '--force-ipv4',
+          '--extractor-args', `youtube:player_client=${client}`,
+        ];
+        if (fs.existsSync(COOKIES_PATH)) args.push('--cookies', COOKIES_PATH);
+        args.push(url);
+
+        const p = spawn('yt-dlp', args);
+        let stdout = '', stderr = '';
+        p.stdout.on('data', (d) => { stdout += d.toString(); });
+        p.stderr.on('data', (d) => { stderr += d.toString(); });
+        const timer = setTimeout(() => { p.kill('SIGKILL'); reject(new Error('timeout')); }, 30000);
+        p.on('close', (code) => { clearTimeout(timer); code === 0 ? resolve(stdout.trim()) : reject(new Error(stderr.trim() || `code ${code}`)); });
+        p.on('error', (e) => { clearTimeout(timer); reject(e); });
+      });
+      const dur = Math.round(parseFloat(out));
+      if (dur > 0) return res.json({ duration: dur });
+    } catch {
+      // try next client
+    }
+  }
+  res.status(502).json({ error: 'Could not determine duration' });
+});
+
 // Clean up old temp files periodically
 setInterval(() => {
   try {
