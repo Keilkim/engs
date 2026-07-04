@@ -53,6 +53,17 @@
   --color-error: #FF453A;
   --color-info: #0A84FF;
 
+  /* Semantic dark (pressed / active) variants */
+  --color-success-dark: #28C950;
+  --color-error-dark: #E53935;
+
+  /* Translucent UI surfaces (neutral overlay + palette-aware tint) */
+  --color-bg-hover: rgba(255, 255, 255, 0.08);                          /* subtle hover overlay, works on any palette */
+  --color-highlight-subtle: color-mix(in srgb, var(--color-highlight) 14%, transparent); /* active/selected tint — follows the palette */
+
+  /* Feature accents */
+  --color-ai: #7C3AED;  /* Whisper / AI transcription */
+
 
   /* ========== Typography ========== */
 
@@ -60,6 +71,7 @@
 
   --font-xs: 0.75rem;    /* 12px */
   --font-sm: 0.875rem;   /* 14px */
+  --font-md: 0.9375rem;  /* 15px */
   --font-base: 1rem;     /* 16px */
   --font-lg: 1.125rem;   /* 18px */
   --font-xl: 1.5rem;     /* 24px */
@@ -146,4 +158,29 @@
   --z-modal: 300;
   --z-popup: 400;
   --z-tooltip: 500;
+
+
+  /* ========== Legacy aliases (backward-compat shim) ========== */
+  /* Older code referenced these names that were never defined, relying on
+     hex fallbacks (effectively hardcoded, palette-blind). Defining them as
+     aliases to canonical tokens re-skins that code from one place and makes
+     it palette-aware. Long-term: fold usages onto the canonical names and
+     delete this block. */
+
+  /* Bug fixes — these were used with NO fallback, so color/text silently failed */
+  --color-danger: var(--color-error);
+  --color-text-muted: var(--color-text-light);
+  --color-text-secondary: var(--color-text-sub);
+
+  /* Phantom-variable aliases (were hex-fallback-only in the wild) */
+  --bg-primary: var(--color-base-dark);
+  --bg-secondary: var(--color-base-sub);
+  --bg-tertiary: var(--color-base-sub-light);
+  --bg-hover: var(--color-bg-hover);         /* translucent — do NOT map to an opaque color */
+  --bg-active: var(--color-highlight-subtle);
+  --border-color: var(--color-accent);
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-text-sub);
+  --accent-color: var(--color-highlight);
+  --error-color: var(--color-error);
 }

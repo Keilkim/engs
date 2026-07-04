@@ -93,11 +93,11 @@
 }
 
 .btn-danger:hover {
-  background-color: #FF6961;
+  background-color: color-mix(in srgb, var(--color-error) 82%, white);
 }
 
 .btn-danger:active {
-  background-color: #E53935;
+  background-color: var(--color-error-dark);
 }
 
 /* Success button */
@@ -108,11 +108,11 @@
 }
 
 .btn-success:hover {
-  background-color: #34D860;
+  background-color: color-mix(in srgb, var(--color-success) 85%, white);
 }
 
 .btn-success:active {
-  background-color: #28C950;
+  background-color: var(--color-success-dark);
 }
 
 /* Titanium button - signature style */

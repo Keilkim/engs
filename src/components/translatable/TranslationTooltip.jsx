@@ -66,8 +66,8 @@ export default function TranslationTooltip() {
         top: position.top,
         left: position.left,
         zIndex: 'var(--z-tooltip, 500)',
-        backgroundColor: 'var(--color-signature, #1B365D)',
-        color: 'var(--color-text-inverse, #FFFFFF)',
+        backgroundColor: 'var(--color-signature)',
+        color: 'var(--color-text-inverse)',
         padding: '12px 16px',
         borderRadius: 'var(--radius-lg, 8px)',
         boxShadow: 'var(--shadow-lg)',
@@ -75,7 +75,7 @@ export default function TranslationTooltip() {
         maxWidth: '200px',
         textAlign: 'center',
         animation: 'tooltipFadeIn 0.2s ease',
-        fontFamily: 'var(--font-family-sans)'
+        fontFamily: 'var(--font-family)'
       }}
     >
       <div
@@ -98,7 +98,7 @@ export default function TranslationTooltip() {
           height: 0,
           borderLeft: '6px solid transparent',
           borderRight: '6px solid transparent',
-          borderBottom: '6px solid var(--color-signature, #1B365D)'
+          borderBottom: '6px solid var(--color-signature)'
         }}
       />
 

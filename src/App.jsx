@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TranslationProvider } from './i18n';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
+import PaletteSwitcher from './components/dev/PaletteSwitcher'; // TEMPORARY: palette exploration (dev only)
 
 // Lazy-loaded pages
 const Login = lazy(() => import('./pages/login/Login'));
@@ -111,6 +112,7 @@ function App() {
           </BrowserRouter>
         </AuthProvider>
       </TranslationProvider>
+      {import.meta.env.DEV && <PaletteSwitcher />}
     </ErrorBoundary>
   );
 }

@@ -1,9 +1,22 @@
 import { useState, useRef, useEffect } from 'react';
-import { createSource, createYouTubeSource, uploadFile, captureWebpageScreenshot } from '../../services/source';
+import { createSource, createYouTubeSource, uploadFile, captureWebpageScreenshot, captureScreenshot } from '../../services/source';
 import { convertPdfToImages } from '../../utils/pdfUtils';
 import { generateImageThumbnail, generateThumbnailFromPage, ocrAllPages } from './sourceHelpers';
 import { parseYouTubeUrl, getYouTubeMetadata, fetchYouTubeCaptions, transcribeYouTubeWithWhisper, calculateWhisperCost, isWhisperAvailable } from '../../services/ai/youtube';
 import { TranslatableText } from '../translatable';
+
+// Discovery-added PDFs ingest only an OVERVIEW (keeps the inline `pages` insert small;
+// interest-matching needs only the top pages). Manual uploads still ingest every page.
+const OVERVIEW_PAGES = 3;
+
+// A remote URL is a PDF if its path ends in .pdf (query string tolerated).
+function isPdfUrl(u) {
+  try {
+    return /\.pdf$/i.test(new URL(u).pathname);
+  } catch {
+    return false;
+  }
+}
 
 // 준비 단계 상태 문자열 → 한국어 라벨 + 진행률(% — "x/y"가 있으면 계산).
 function formatStep(status) {
@@ -24,7 +37,7 @@ function formatStep(status) {
   return { label, percent };
 }
 
-export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl = null, fromShelf = false }) {
+export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl = null, initialKind = null, initialTitle = null, fromShelf = false }) {
   const [activeTab, setActiveTab] = useState('file'); // 'file' | 'link'
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -41,14 +54,21 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
   const [warning, setWarning] = useState('');
   const [titleTouched, setTitleTouched] = useState(false); // user typed the title manually
   const linkSeqRef = useRef(0); // guards against out-of-order link responses
+  // A discovery card passes an explicit kind + real title; these refs let those hints
+  // win over URL sniffing and survive handleLinkChange's title-clear (which reads a
+  // stale titleTouched closure). Cleared the moment the user edits the URL manually.
+  const kindOverrideRef = useRef(null);
+  const forcedTitleRef = useRef(null);
 
-  // Prefill from the Home "next to decode" shelf: when opened with a URL, switch to
-  // the link tab and run the same preview/caption flow as a manual paste. This must
-  // stay above the early return so hook order is stable; the modal has no other
-  // lifecycle, so it's the single prefill entry point. Fires once per open.
+  // Prefill from a shelf (decode or discovery): switch to the link tab and run the
+  // same preview flow as a manual paste. Must stay above the early return so hook
+  // order is stable; fires once per open.
   useEffect(() => {
     if (isOpen && initialUrl) {
       setActiveTab('link');
+      kindOverrideRef.current = initialKind;
+      forcedTitleRef.current = initialTitle || null;
+      if (initialTitle) setTitle(initialTitle);
       handleLinkChange(initialUrl);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -56,10 +76,13 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
 
   if (!isOpen) return null;
 
-  // The single source of truth for "is this link a YouTube video?" — used to
-  // route both the live preview and the submit action, so a YouTube link can
-  // never be saved as a web screenshot (and vice-versa).
-  const isYoutube = !!parseYouTubeUrl(url);
+  // 3-way link kind: an explicit shelf hint wins; otherwise sniff youtube → .pdf → web.
+  // Routes both the live preview and the submit action so a link can never be saved as
+  // the wrong type (a pasted .pdf no longer becomes an APIFlash screenshot).
+  const linkKind =
+    kindOverrideRef.current ||
+    (parseYouTubeUrl(url) ? 'youtube' : isPdfUrl(url) ? 'pdf' : 'web');
+  const isYoutube = linkKind === 'youtube';
 
   async function handleFileUpload(e) {
     const input = e.target;
@@ -142,7 +165,8 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
     setCaptionStatus('');
     setVideoDuration(0);
     // Clear any previously auto-filled title so a new URL doesn't keep the old title.
-    if (!titleTouched) setTitle('');
+    // A discovery-forced title (forcedTitleRef) is kept — it's the real content title.
+    if (!titleTouched && !forcedTitleRef.current) setTitle('');
 
     const parsed = parseYouTubeUrl(inputUrl);
     if (!parsed) return; // plain web URL → nothing to preload; handled on capture
@@ -160,7 +184,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
         channelId: null, // filled from the captions/InnerTube response below
         duration: 0,
       });
-      if (!titleTouched) setTitle(metadata.title);
+      if (!titleTouched && !forcedTitleRef.current) setTitle(metadata.title);
 
       try {
         const captions = await fetchYouTubeCaptions(parsed.video_id);
@@ -243,11 +267,95 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
         pages: JSON.stringify(pages),
         screenshot: thumbnail,
         ocr_data: ocrData,
+        to_read: fromShelf,
       });
       onSuccess();
       handleClose();
     } catch (err) {
       setError(err?.message || 'Failed to capture screenshot');
+    } finally {
+      setLoading(false);
+      setLoadingStatus('');
+    }
+  }
+
+  // Remote PDF (e.g. a discovery card) → saved as a real type:'pdf' source. The bytes
+  // are proxied (arbitrary hosts send no CORS header), turned into a File, then rendered
+  // + OCR'd IN THE BROWSER (so the ~10s function budget doesn't apply). Only an OVERVIEW
+  // is ingested. On any failure we fall back to the screenshot path so the add still lands.
+  async function savePdfFromUrl() {
+    setLoading(true);
+    setError('');
+    setWarning('');
+    try {
+      setLoadingStatus('Fetching PDF...');
+      const res = await fetch('/api/pdf-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) throw new Error(`pdf proxy ${res.status}`);
+      const blob = await res.blob();
+      const file = new File([blob], `${title || 'document'}.pdf`, { type: 'application/pdf' });
+
+      const pages = await convertPdfToImages(file, setLoadingStatus, OVERVIEW_PAGES);
+      let screenshot = null;
+      if (pages.length > 0) {
+        setLoadingStatus('Generating thumbnail...');
+        screenshot = await generateThumbnailFromPage(pages[0]);
+      }
+      const ocrData = await ocrAllPages(pages, setLoadingStatus);
+
+      setLoadingStatus('Saving source...');
+      await createSource({
+        title: title || 'PDF',
+        type: 'pdf',
+        file_path: url, // store the remote URL (matches how url/screenshot/youtube keep external links)
+        screenshot,
+        pages: pages.length ? JSON.stringify(pages) : null,
+        ocr_data: ocrData,
+        to_read: fromShelf,
+      });
+      onSuccess();
+      handleClose();
+    } catch (err) {
+      // Fallback: screenshot the PDF-hosting page so the discovery add still succeeds.
+      console.warn('PDF-by-URL ingest failed, falling back to screenshot:', err);
+      await captureWeb();
+    } finally {
+      setLoading(false);
+      setLoadingStatus('');
+    }
+  }
+
+  // Web article (e.g. a discovery card) → saved as type:'url' with Readability content,
+  // lighting up the existing article renderer. The edge fn fetches server-side (no client
+  // CORS). If there's no extractable article body, fall back to a full-page screenshot.
+  async function saveArticle() {
+    setLoading(true);
+    setError('');
+    setWarning('');
+    try {
+      setLoadingStatus('Capturing...');
+      const { screenshot, title: pageTitle, content } = await captureScreenshot(url);
+      if (content) {
+        setLoadingStatus('Saving source...');
+        await createSource({
+          title: title || pageTitle || url,
+          type: 'url',
+          file_path: url,
+          content,
+          screenshot,
+          to_read: fromShelf,
+        });
+        onSuccess();
+        handleClose();
+      } else {
+        await captureWeb(); // no article body → screenshot fallback
+      }
+    } catch (err) {
+      console.warn('Article ingest failed, falling back to screenshot:', err);
+      await captureWeb();
     } finally {
       setLoading(false);
       setLoadingStatus('');
@@ -261,14 +369,16 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
       setError('링크를 입력해 주세요');
       return;
     }
-    if (isYoutube) {
+    if (linkKind === 'youtube') {
       if (!youtubePreview) {
         setError('유튜브 정보를 불러오는 중이거나 유효하지 않은 링크예요. 잠시 후 다시 시도해 주세요.');
         return;
       }
       await saveYoutube();
+    } else if (linkKind === 'pdf') {
+      await savePdfFromUrl();
     } else {
-      await captureWeb();
+      await saveArticle();
     }
   }
 
@@ -335,6 +445,8 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
     setCaptionStatus('');
     setVideoDuration(0);
     setActiveTab('file');
+    kindOverrideRef.current = null;
+    forcedTitleRef.current = null;
     onClose();
   }
 
@@ -377,7 +489,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
 
         {error && <div className="error-message">{error}</div>}
         {warning && (
-          <div className="file-hint" style={{ color: '#fb923c', padding: '0 4px' }}>{warning}</div>
+          <div className="file-hint" style={{ color: 'var(--color-warning)', padding: '0 4px' }}>{warning}</div>
         )}
 
         <div className="modal-body">
@@ -442,24 +554,31 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
                   id="link-url"
                   type="url"
                   value={url}
-                  onChange={(e) => handleLinkChange(e.target.value)}
+                  onChange={(e) => {
+                    // Manual edit drops the discovery hints so sniffing takes over.
+                    kindOverrideRef.current = null;
+                    forcedTitleRef.current = null;
+                    handleLinkChange(e.target.value);
+                  }}
                   placeholder="YouTube 또는 웹페이지 주소 붙여넣기"
                   required
                 />
               </div>
 
               {/* 링크 종류 자동 안내 */}
-              <p className="file-hint" style={{ color: isYoutube ? '#4ade80' : 'var(--text-secondary, #888)' }}>
+              <p className="file-hint" style={{ color: isYoutube ? 'var(--color-success)' : 'var(--color-text-sub)' }}>
                 {url.trim()
-                  ? (isYoutube
+                  ? (linkKind === 'youtube'
                     ? '유튜브 영상으로 인식했어요 — 자막과 함께 저장돼요.'
-                    : '웹페이지로 인식했어요 — 본문을 이미지로 캡처해 저장돼요.')
-                  : '유튜브 영상이면 자막 학습, 웹페이지면 화면 캡처로 저장돼요.'}
+                    : linkKind === 'pdf'
+                      ? 'PDF 자료로 인식했어요 — 문서로 저장돼요.'
+                      : '웹 아티클로 인식했어요 — 본문을 읽어 저장돼요.')
+                  : '유튜브·PDF·웹 링크를 붙여넣으면 종류에 맞게 저장돼요.'}
               </p>
 
               {/* YouTube 링크: 미리보기 + 자막 상태 */}
               {isYoutube && youtubePreview && (
-                <div className="youtube-preview" style={{ display: 'flex', gap: '12px', margin: '12px 0', padding: '12px', background: 'var(--bg-tertiary, #2a2a2a)', borderRadius: '8px' }}>
+                <div className="youtube-preview" style={{ display: 'flex', gap: '12px', margin: '12px 0', padding: '12px', background: 'var(--color-base-sub-light)', borderRadius: '8px' }}>
                   <img
                     src={youtubePreview.thumbnail}
                     alt=""
@@ -470,21 +589,21 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
                     <div style={{ fontSize: '14px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {youtubePreview.title}
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary, #888)', marginTop: '4px' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-sub)', marginTop: '4px' }}>
                       {youtubePreview.author}
                     </div>
                     <div style={{ fontSize: '12px', marginTop: '4px' }}>
-                      {captionStatus === 'loading' && <span style={{ color: 'var(--text-secondary)' }}>캡션 확인 중...</span>}
-                      {captionStatus === 'found' && <span style={{ color: '#4ade80' }}>캡션 {youtubeCaptions?.segments?.length}개 발견</span>}
-                      {captionStatus === 'not_found' && <span style={{ color: '#fb923c' }}>캡션 없음</span>}
-                      {captionStatus === 'error' && <span style={{ color: '#f87171' }}>자막 불러오기 실패</span>}
+                      {captionStatus === 'loading' && <span style={{ color: 'var(--color-text-sub)' }}>캡션 확인 중...</span>}
+                      {captionStatus === 'found' && <span style={{ color: 'var(--color-success)' }}>캡션 {youtubeCaptions?.segments?.length}개 발견</span>}
+                      {captionStatus === 'not_found' && <span style={{ color: 'var(--color-warning)' }}>캡션 없음</span>}
+                      {captionStatus === 'error' && <span style={{ color: 'var(--color-error)' }}>자막 불러오기 실패</span>}
                     </div>
                   </div>
                 </div>
               )}
 
               {isYoutube && captionStatus === 'not_found' && (
-                <p className="file-hint" style={{ color: '#fb923c', margin: '4px 0 16px', lineHeight: 1.5 }}>
+                <p className="file-hint" style={{ color: 'var(--color-warning)', margin: '4px 0 16px', lineHeight: 1.5 }}>
                   이 영상에는 사용할 수 있는 자막이 없어요. 음성 인식으로 자막을 만들거나, 자막 없이 먼저 저장할 수 있어요.
                 </p>
               )}
@@ -501,7 +620,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
                         className="submit-button"
                         onClick={() => handleLinkChange(url)}
                         disabled={loading}
-                        style={{ background: 'transparent', border: '1px solid var(--border-color, #444)', marginBottom: '8px' }}
+                        style={{ background: 'transparent', border: '1px solid var(--color-accent)', marginBottom: '8px' }}
                       >
                         자막 다시 불러오기
                       </button>
@@ -509,7 +628,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
                     {(captionStatus === 'not_found' || captionStatus === 'error') && isWhisperAvailable() && (
                       <>
                         {videoDuration > 25 * 60 && (
-                          <p className="file-hint" style={{ color: 'var(--text-secondary, #888)', margin: '4px 0 8px', lineHeight: 1.5 }}>
+                          <p className="file-hint" style={{ color: 'var(--color-text-sub)', margin: '4px 0 8px', lineHeight: 1.5 }}>
                             긴 영상({Math.round(videoDuration / 60)}분)은 여러 조각으로 나눠 전사돼요 — 시간이 좀 걸릴 수 있어요.
                           </p>
                         )}
@@ -518,7 +637,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
                           className="submit-button"
                           onClick={handleWhisperTranscribe}
                           disabled={loading}
-                          style={{ background: '#7c3aed', marginBottom: '8px' }}
+                          style={{ background: 'var(--color-ai)', marginBottom: '8px' }}
                         >
                           {loading ? (loadingStatus || 'Transcribing...') : '음성 인식으로 자막 만들기 (Whisper)'}
                         </button>
@@ -541,7 +660,11 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
                   className="submit-button"
                   disabled={loading || !url.trim()}
                 >
-                  {loading ? (loadingStatus || 'Capturing...') : <TranslatableText textKey="addSource.capture">Capture</TranslatableText>}
+                  {loading
+                    ? (loadingStatus || 'Saving...')
+                    : (linkKind === 'pdf'
+                      ? 'PDF 저장'
+                      : <TranslatableText textKey="addSource.capture">Capture</TranslatableText>)}
                 </button>
               )}
             </form>
