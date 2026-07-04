@@ -53,55 +53,23 @@ export default function WordQuickMenu({
     if (isOpen) openTimeRef.current = Date.now();
   }, [isOpen]);
 
-  // The backdrop absorbs OUTSIDE taps to close the menu — but it must NOT eat a
-  // two-finger pinch. Native pinch-zoom magnifies the whole visual viewport and
-  // the position:fixed menu rides along with its word, so the user should be able
-  // to zoom while the menu stays open. So we close ONLY on a genuine single-finger
-  // TAP (decided on touchend) and let anything multi-touch pass straight through
-  // to the browser's native zoom. We deliberately do NOT preventDefault on
-  // touchstart/move (that would block the native pinch). The synthetic mouse
-  // events a closing tap emits are rejected by the container's touch-recency guard
-  // (useDesktopGestures) so they can't start a fresh lookup after the backdrop
-  // unmounts. (React 19 registers the delegated touch listener as passive, which
-  // is why this is a native listener rather than a React onTouchStart.)
+  // The backdrop closes the menu on ANY outside touch — a single tap, or the
+  // first finger of a pinch (the user wants the tooltip to disappear when they
+  // zoom, not ride along and land in a weird spot). We do NOT preventDefault, so
+  // if the gesture is a two-finger pinch the browser's native zoom still runs
+  // after the menu closes. The synthetic mouse a closing tap emits is rejected by
+  // the container's touch-recency guard (useDesktopGestures), so it can't start a
+  // fresh lookup once the backdrop unmounts. (React 19 registers the delegated
+  // touch listener as passive, hence a native listener here.)
   useEffect(() => {
     const el = backdropRef.current;
     if (!isOpen || !el) return;
-
-    let startX = 0, startY = 0, startT = 0, maxTouches = 0, moved = false;
-
     const onTouchStart = (e) => {
-      if (e.touches.length === 1) {
-        const t = e.touches[0];
-        startX = t.clientX; startY = t.clientY; startT = Date.now();
-        moved = false; maxTouches = 1;
-      } else {
-        maxTouches = Math.max(maxTouches, e.touches.length);
-      }
+      e.stopPropagation();
+      onClose();
     };
-    const onTouchMove = (e) => {
-      maxTouches = Math.max(maxTouches, e.touches.length);
-      const t = e.touches[0];
-      if (t && (Math.abs(t.clientX - startX) > 10 || Math.abs(t.clientY - startY) > 10)) moved = true;
-    };
-    const onTouchEnd = (e) => {
-      const isTap = maxTouches < 2 && !moved && (Date.now() - startT) < 300;
-      if (isTap) {
-        e.preventDefault();
-        e.stopPropagation();
-        onClose();
-      }
-      // Multi-touch (pinch) or drag/hold: leave the menu open (native zoom runs).
-    };
-
     el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: true });
-    el.addEventListener('touchend', onTouchEnd, { passive: false });
-    return () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
-      el.removeEventListener('touchend', onTouchEnd);
-    };
+    return () => el.removeEventListener('touchstart', onTouchStart);
   }, [isOpen, onClose]);
 
   // Record the most recent touch anywhere on the page so the backdrop's mouse
