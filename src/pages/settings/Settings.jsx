@@ -55,6 +55,9 @@ export default function Settings() {
   const [showCaptionTranslation, setShowCaptionTranslation] = useState(
     getSetting(SETTINGS_KEYS.CAPTION_SHOW_TRANSLATION, 'false') === 'true'
   );
+  const [virtualSlowMode, setVirtualSlowMode] = useState(
+    getSetting(SETTINGS_KEYS.VIRTUAL_SLOW_MODE, 'false') === 'true'
+  );
 
   // Theme (mode × accent) — persisted locally, applied to <html> live.
   const [theme, setThemeState] = useState(getTheme());
@@ -97,6 +100,13 @@ export default function Settings() {
     setShowCaptionTranslation(value);
     setSetting(SETTINGS_KEYS.CAPTION_SHOW_TRANSLATION, value ? 'true' : 'false');
     setMessage({ type: 'success', text: 'Caption translation setting updated' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 2000);
+  }
+
+  function handleVirtualSlowToggle(value) {
+    setVirtualSlowMode(value);
+    setSetting(SETTINGS_KEYS.VIRTUAL_SLOW_MODE, value ? 'true' : 'false');
+    setMessage({ type: 'success', text: '또박또박 느리게 모드 설정이 변경되었어요' });
     setTimeout(() => setMessage({ type: '', text: '' }), 2000);
   }
 
@@ -369,6 +379,18 @@ export default function Settings() {
                 onChange={(e) => handleCaptionTranslationToggle(e.target.checked)}
               />
             </div>
+            <div className="setting-row">
+              <label htmlFor="virtual-slow-mode">
+                또박또박 느리게 모드 (실험)
+                <span className="setting-hint">호흡 단위 자막 · 원속 유지 감속 재생. 켜면 영상별 정밀 타이밍 업그레이드가 필요해요.</span>
+              </label>
+              <input
+                id="virtual-slow-mode"
+                type="checkbox"
+                checked={virtualSlowMode}
+                onChange={(e) => handleVirtualSlowToggle(e.target.checked)}
+              />
+            </div>
           </div>
         </section>
 
@@ -488,19 +510,6 @@ export default function Settings() {
           </div>
         </section>
 
-        {/* Logout */}
-        <section className="settings-section">
-          <div className="settings-card">
-            <button
-              className="logout-button"
-              onClick={handleLogout}
-              disabled={loading}
-            >
-              Logout
-            </button>
-          </div>
-        </section>
-
         {/* App Info */}
         <section className="settings-section">
           <div className="settings-card">
@@ -525,6 +534,19 @@ export default function Settings() {
                 </a>
               </div>
             )}
+          </div>
+        </section>
+
+        {/* Logout */}
+        <section className="settings-section">
+          <div className="settings-card">
+            <button
+              className="logout-button"
+              onClick={handleLogout}
+              disabled={loading}
+            >
+              Logout
+            </button>
           </div>
         </section>
 

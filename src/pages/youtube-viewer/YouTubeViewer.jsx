@@ -12,6 +12,9 @@ import { LANG_CODES } from '../../services/ai';
 import CaptionDisplay from '../../components/youtube/CaptionDisplay';
 import WordQuickMenu from '../../components/modals/WordQuickMenu';
 import ChatPanel from '../../components/ChatPanel';
+import WhisperUpgradeBanner from '../../components/youtube/WhisperUpgradeBanner';
+import useWhisperUpgrade from '../../hooks/useWhisperUpgrade';
+import { getWordTimeline } from '../../utils/captionWords';
 import '../../styles/pages/youtube-viewer.css';
 
 export default function YouTubeViewer() {
@@ -28,6 +31,14 @@ export default function YouTubeViewer() {
     const lang = getSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, 'Korean');
     return LANG_CODES[lang] || 'ko';
   });
+
+  // Master gate for the "또박또박 느리게" feature (pause-chunk captions +
+  // virtual-slow playback). Read once at mount; OFF (default) → the viewer
+  // behaves exactly as before, and none of the new surfaces render.
+  const [featureOn] = useState(
+    () => getSetting(SETTINGS_KEYS.VIRTUAL_SLOW_MODE, 'false') === 'true'
+  );
+  const [upgradeDismissed, setUpgradeDismissed] = useState(false);
 
   const [source, setSource] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -327,6 +338,15 @@ export default function YouTubeViewer() {
   const videoId = source?.youtube_data?.video_id;
   const segments = useMemo(() => source?.captions_data?.segments || [], [source]);
 
+  // Word-level timing (Whisper) availability — gates the pause-chunk display and
+  // the virtual-slow buttons. null for plain YouTube-caption sources.
+  const wordTimeline = useMemo(() => getWordTimeline(source?.captions_data), [source]);
+  const hasWordTimeline = !!wordTimeline;
+  const upgrade = useWhisperUpgrade({
+    source,
+    onUpgraded: (row) => setSource(row),
+  });
+
   const { currentSegmentIndex } = useCaptionSync(segments, currentTime);
 
   // Chat integration.
@@ -474,6 +494,14 @@ export default function YouTubeViewer() {
             )}
           </button>
         </div>
+
+        {featureOn && source.type === 'youtube' && !hasWordTimeline && !upgradeDismissed && (
+          <WhisperUpgradeBanner
+            upgrade={upgrade}
+            durationSec={source.youtube_data?.duration || 0}
+            onDismiss={() => setUpgradeDismissed(true)}
+          />
+        )}
 
         <div className="captions-container">
           <CaptionDisplay

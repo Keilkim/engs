@@ -35,6 +35,39 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'youtube-audio-server' });
 });
 
+// Lightweight in-memory per-IP rate limit for the (public, unauthenticated)
+// extraction endpoint. The virtual-slow player fetches roughly one ~2-min audio
+// window per couple minutes of playback, so a generous window covers legitimate
+// use while capping a runaway client that would otherwise hammer yt-dlp.
+const RATE_WINDOW_MS = 60 * 1000;
+const RATE_MAX = Number(process.env.EXTRACT_RATE_MAX || 20); // per IP per window
+const rateHits = new Map(); // ip -> timestamps[]
+
+function rateLimitExtract(req, res, next) {
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown')
+    .toString().split(',')[0].trim();
+  const now = Date.now();
+  const hits = (rateHits.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS);
+  if (hits.length >= RATE_MAX) {
+    res.setHeader('Retry-After', Math.ceil(RATE_WINDOW_MS / 1000));
+    return res.status(429).json({ error: 'Too many requests — 잠시 후 다시 시도해 주세요.' });
+  }
+  hits.push(now);
+  rateHits.set(ip, hits);
+  next();
+}
+
+// Evict stale IP buckets so the map can't grow unbounded.
+const rateCleanup = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, hits] of rateHits) {
+    const fresh = hits.filter((t) => now - t < RATE_WINDOW_MS);
+    if (fresh.length) rateHits.set(ip, fresh);
+    else rateHits.delete(ip);
+  }
+}, RATE_WINDOW_MS);
+if (rateCleanup.unref) rateCleanup.unref();
+
 /**
  * Run yt-dlp once with a given YouTube player client.
  * Rotating the client (default -> android -> web_safari -> ios) is the most
@@ -97,7 +130,7 @@ function runYtDlp(youtubeUrl, outputPath, playerClient, section) {
 }
 
 // Extract audio from a YouTube video (optionally only a time section).
-app.post('/api/extract-audio', async (req, res) => {
+app.post('/api/extract-audio', rateLimitExtract, async (req, res) => {
   const { videoId, startSec, durationSec } = req.body;
   if (!videoId) {
     return res.status(400).json({ error: 'videoId is required' });
