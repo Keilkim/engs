@@ -308,15 +308,30 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  /* safe center: 내용이 짧으면 가운데, 넘치면 위부터(스크롤 시 윗부분 잘림 방지) */
-  justify-content: safe center;
-  text-align: center;
-  /* 긴 문법 카드가 카드 밖으로 넘치지 않도록: 안에서 스크롤 + 단어 줄바꿈 */
-  width: 100%;
   min-height: 0;
-  overflow-y: auto;
+  width: 100%;
+  text-align: center;
+  /* 스크롤 대신 FitBox가 비율 유지 축소/확대로 항상 맞춤 → 넘침 자체를 숨김 */
+  overflow: hidden;
   overflow-wrap: anywhere;
+}
+
+/* FitBox: 내용을 카드에 꽉 맞게 동적 스케일(스크롤 없음, 항상 중앙) */
+.fit-box {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.fit-content {
+  display: inline-block;
+  max-width: 100%;
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .question-text {
