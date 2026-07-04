@@ -213,20 +213,27 @@ Produce two things:
 2. "patterns": the most useful things to learn from this sentence. This includes BOTH:
    - Expressions worth memorizing: idioms, phrasal verbs, collocations (use A, B, C for variable parts).
    - Notable grammar structures: relative clauses, participial phrases, conditionals, passive voice, key verb tenses/modals, comparatives, "to-infinitive"/gerund usage, etc.
-   For each, put a short form in "words" and a concise Korean explanation.
+   For each, put a short form in "words", a concise Korean explanation, and "spans".
+   "spans": copy the EXACT word(s) FROM THE SENTENCE ABOVE that this pattern actually occupies,
+   verbatim — preserving the sentence's original spelling, conjugation, and capitalization.
+   Do NOT use placeholders (A/B/C, ~, V/Ving/Ved) in "spans"; those belong only in "words".
+   If the pattern is split across the sentence (e.g. "not A but B"), return each contiguous
+   piece as its own array element (e.g. ["not", "but"]). Every string in "spans" MUST appear
+   character-for-character somewhere in the sentence.
 
 RULES:
 - ALWAYS fill "translation".
 - Give 1-4 patterns, prioritizing what a learner at the level above would find genuinely useful or tricky.
 - For a grammar structure, "words" can hold the pattern form (e.g. ["who + 동사"], ["as long as"], ["have been Ving"], ["not A but B"]).
+- Only include a pattern if you can fill "spans" with real substrings copied verbatim from the sentence.
 - Only return an empty "patterns" list if the text is NOT a real sentence (e.g. a lone interjection). A normal sentence must yield at least one pattern.
 
 Return ONLY valid JSON, no markdown:
 {
   "translation": "문장 전체의 자연스러운 한국어 번역",
   "patterns": [
-    { "words": ["regardless of A"], "explanation": "A에 상관없이 (전치사구)" },
-    { "words": ["who + 동사"], "explanation": "관계대명사 who: 앞의 사람 명사를 꾸며주는 절을 이끔" }
+    { "words": ["regardless of A"], "spans": ["regardless of"], "explanation": "A에 상관없이 (전치사구)" },
+    { "words": ["who + 동사"], "spans": ["who runs"], "explanation": "관계대명사 who: 앞의 사람 명사를 꾸며주는 절을 이끔" }
   ]
 }`;
 

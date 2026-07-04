@@ -10,7 +10,18 @@ import type { Annotation, SelectionRect, BBox } from '../types';
 function hasReviewableAnalysis(aiAnalysisJson: string | null | undefined): boolean {
   if (!aiAnalysisJson) return false;
   const json = safeJsonParse<Record<string, unknown>>(aiAnalysisJson, {});
-  return json.isVocabulary === true || json.type === 'grammar';
+  if (json.isVocabulary === true) return true;
+  if (json.type === 'grammar') {
+    // Grammar cards are only reviewable when there's a real, bold-able target:
+    // at least one pattern with a validated span. Degraded (patterns: []) or
+    // span-less grammar (Gemini unavailable at save time) is saved as a note
+    // but does NOT enter the review queue.
+    const patterns = Array.isArray(json.patterns) ? json.patterns : [];
+    return patterns.some(
+      (p) => Array.isArray((p as { spans?: unknown })?.spans) && (p as { spans: unknown[] }).spans.length > 0
+    );
+  }
+  return false;
 }
 
 export async function getAnnotations(sourceId: string): Promise<Annotation[]> {
