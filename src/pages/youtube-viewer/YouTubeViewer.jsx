@@ -34,42 +34,9 @@ export default function YouTubeViewer() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Resizable panel (default 70% video)
-  const [playerHeight, setPlayerHeight] = useState(70);
-  const [isDragging, setIsDragging] = useState(false);
-  const containerRef = useRef(null);
-
-  const handleDragStart = useCallback((e) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handleMove = (e) => {
-      if (!containerRef.current) return;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const mouseY = clientY - containerRect.top;
-      const newHeight = (mouseY / containerRect.height) * 100;
-      setPlayerHeight(Math.min(Math.max(newHeight, 20), 80));
-    };
-
-    const handleEnd = () => setIsDragging(false);
-
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleEnd);
-    document.addEventListener('touchmove', handleMove, { passive: false });
-    document.addEventListener('touchend', handleEnd);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleEnd);
-      document.removeEventListener('touchmove', handleMove);
-      document.removeEventListener('touchend', handleEnd);
-    };
-  }, [isDragging]);
+  // Video is a fixed full-width 16:9 block (CSS aspect-ratio); captions fill the
+  // rest. (Height-resizing the player made the video scale/zoom with the panel
+  // height, so it was removed in favor of a stable, width-based aspect ratio.)
 
   const {
     currentTime,
@@ -360,8 +327,8 @@ export default function YouTubeViewer() {
         <button className="delete-button" onClick={() => setShowDeleteConfirm(true)}>삭제</button>
       </header>
 
-      <div className="youtube-content" ref={containerRef}>
-        <div className="youtube-player-container" style={{ height: `${playerHeight}%` }}>
+      <div className="youtube-content">
+        <div className="youtube-player-container">
           {videoId && (
             <YouTube
               videoId={videoId}
@@ -372,15 +339,6 @@ export default function YouTubeViewer() {
               className="youtube-player"
             />
           )}
-          {isDragging && <div className="drag-overlay" />}
-        </div>
-
-        <div
-          className={`resize-handle ${isDragging ? 'dragging' : ''}`}
-          onMouseDown={handleDragStart}
-          onTouchStart={handleDragStart}
-        >
-          <div className="resize-handle-bar" />
         </div>
 
         <div className="speed-control">

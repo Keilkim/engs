@@ -1,6 +1,7 @@
 import nlp from 'compromise';
-import { GRAMMAR_COLORS, fetchGemini } from './config';
+import { GRAMMAR_COLORS, fetchGemini, LANG_CODES } from './config';
 import { parseGeminiJSON } from './gemini';
+import { googleTranslate } from './vocabulary';
 import { getSetting, SETTINGS_KEYS } from '../settings';
 import { logError } from '../../utils/errors';
 
@@ -229,34 +230,42 @@ Return ONLY valid JSON, no markdown:
   ]
 }`;
 
-  const data = await fetchGemini({
-    contents: [{
-      parts: [{ text: prompt }],
-    }],
-    generationConfig: {
-      temperature: 0.3,
-    },
-  });
-
-  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
+  // Primary: Gemini gives translation + idioms + grammar structures.
   try {
-    return parseGeminiJSON(responseText);
-  } catch (parseErr) {
-    // Fallback: extract the first {...last } block before giving up.
-    const start = responseText.indexOf('{');
-    const end = responseText.lastIndexOf('}');
-    if (start !== -1 && end > start) {
-      try {
-        return JSON.parse(responseText.slice(start, end + 1));
-      } catch {
-        // fall through to rethrow below
+    const data = await fetchGemini({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.3 },
+    });
+
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    let parsed = null;
+    try {
+      parsed = parseGeminiJSON(responseText);
+    } catch {
+      // Fallback: extract the first {...last } block.
+      const start = responseText.indexOf('{');
+      const end = responseText.lastIndexOf('}');
+      if (start !== -1 && end > start) {
+        parsed = JSON.parse(responseText.slice(start, end + 1));
       }
     }
-    logError('analyzeGrammarPatterns', parseErr);
-    // Rethrow so the caller can show a real "analysis failed, retry" state
-    // instead of a misleading "no patterns found" message. (An empty
-    // `{ "patterns": [] }` from a successful call still returns normally.)
-    throw parseErr;
+
+    if (parsed && (parsed.translation || parsed.patterns?.length > 0)) {
+      return { translation: parsed.translation || '', patterns: parsed.patterns || [] };
+    }
+    // Empty/unusable response → fall through to the translation-only fallback.
+  } catch (err) {
+    // Gemini unavailable (key/quota/network/parse). Don't fail outright —
+    // degrade to a translation-only card using the reliable translate path.
+    logError('analyzeGrammarPatterns.gemini', err);
   }
+
+  // Fallback: at least translate the sentence so the card is still useful.
+  // (Uses the same gtx path that word lookup relies on.) If this also fails,
+  // it throws → the caller shows a real "analysis failed" state.
+  const translationLang = getSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, 'Korean');
+  const langCode = LANG_CODES[translationLang] || 'ko';
+  const translation = await googleTranslate(text, langCode);
+  return { translation, patterns: [] };
 }

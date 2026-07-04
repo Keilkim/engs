@@ -5,7 +5,7 @@ import { logError } from '../../utils/errors';
 /**
  * Google Translate unofficial API (fast)
  */
-async function googleTranslate(text, targetLang = 'ko') {
+export async function googleTranslate(text, targetLang = 'ko') {
   const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
   const response = await fetch(url);
   if (!response.ok) throw new Error('Translation failed');

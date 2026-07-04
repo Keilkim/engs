@@ -68,9 +68,10 @@
   position: relative;
 }
 
-/* Video Player Container */
+/* Video Player Container — fixed full-width 16:9 (ratio kept by width, no zoom) */
 .youtube-player-container {
   width: 100%;
+  aspect-ratio: 16 / 9;
   background: #000;
   flex-shrink: 0;
   overflow: hidden;
@@ -81,6 +82,7 @@
 .youtube-player-container .youtube-player {
   width: 100%;
   height: 100%;
+  display: block;
 }
 
 .drag-overlay {
