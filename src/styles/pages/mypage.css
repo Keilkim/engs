@@ -88,7 +88,7 @@
 }
 
 /* Stats expanded content */
-.stats-section.expanded .stats-dashboard-content {
+.stats-section.expanded .stats-dashboard {
   padding: 0 var(--spacing-lg) var(--spacing-lg);
 }
 
@@ -115,6 +115,62 @@
 .stat-label {
   font-size: var(--font-sm);
   color: var(--color-text-sub);
+}
+
+/* Weekly review bar chart */
+.weekly-chart {
+  margin-top: var(--spacing-lg);
+}
+
+.weekly-chart h3 {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-sub);
+  margin: 0 0 var(--spacing-md);
+}
+
+.chart-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-sm);
+  height: 140px;
+}
+
+.chart-bar-container {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.chart-bar {
+  position: relative;
+  width: 60%;
+  max-width: 24px;
+  min-height: 4px;
+  /* 라벨(약 22px)이 컨테이너 하단을 차지하므로 그만큼 빼서 최대 막대가 넘치지 않게 */
+  max-height: calc(100% - 22px);
+  background: linear-gradient(180deg, var(--color-signature) 0%, var(--color-signature-dark) 100%);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition: height var(--transition-normal);
+}
+
+.bar-value {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: var(--font-xs);
+  color: var(--color-text-sub);
+  white-space: nowrap;
+}
+
+.bar-label {
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-xs);
+  color: var(--color-text-light);
 }
 
 /* Menu section */
