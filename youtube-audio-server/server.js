@@ -4,6 +4,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { extractionFailure } = require('./extractionErrors');
 
 const app = express();
 // Every API route requires a Supabase bearer token, so CORS is not the security
@@ -241,6 +242,7 @@ app.post('/api/extract-audio', requireUser, rateLimitPerUser, async (req, res) =
   // captions), so try them first.
   const clients = ['android_vr', 'tv', 'default', 'android', 'web_safari', 'ios'];
   let lastError = null;
+  const failures = [];
 
   try {
     for (const client of clients) {
@@ -253,6 +255,7 @@ app.post('/api/extract-audio', requireUser, rateLimitPerUser, async (req, res) =
         lastError = new Error('yt-dlp reported success but no file was produced');
       } catch (err) {
         lastError = err;
+        failures.push(err);
         console.log(`[Server] client="${client}" failed: ${err.message.split('\n').pop()}`);
         if (fs.existsSync(outputPath)) {
           try { fs.unlinkSync(outputPath); } catch { /* ignore */ }
@@ -282,7 +285,8 @@ app.post('/api/extract-audio', requireUser, rateLimitPerUser, async (req, res) =
       try { fs.unlinkSync(outputPath); } catch { /* ignore */ }
     }
     // yt-dlp stderr stays in the server log; it can carry paths and cookie details.
-    res.status(500).json({ error: 'Failed to extract audio' });
+    const failure = extractionFailure([...failures, error]);
+    res.status(failure.status).json({ error: failure.error, code: failure.code });
   } finally {
     releaseSlot();
   }

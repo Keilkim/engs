@@ -56,9 +56,7 @@ export default async function handler(req, res) {
       return res.status(413).json({ error: `영상이 너무 길어요 (최대 ${Math.floor(MAX_DURATION_SEC / 60)}분)` });
     }
 
-    // Charge the audio length we're about to send to Whisper.
     const billedSec = duration > 0 ? duration : UNKNOWN_DURATION_SEC;
-    if (!(await consumeQuota(res, user, 'whisper_sec', billedSec, QUOTAS.whisper_sec))) return;
 
     let segments;
     if (duration <= CHUNK_SEC + OVERLAP_SEC) {
@@ -67,6 +65,9 @@ export default async function handler(req, res) {
       // videos, while the sectioned (ffmpeg range) path works reliably.
       const dur = duration > 0 ? duration + 2 : UNKNOWN_DURATION_SEC;
       const buf = await extractSection(RAILWAY, videoId, 0, dur, auth);
+      // Extraction failures spend no Whisper credit and must not consume the
+      // user's daily transcription allowance. Still check before the paid API.
+      if (!(await consumeQuota(res, user, 'whisper_sec', billedSec, QUOTAS.whisper_sec))) return;
       const data = await transcribe(buf, language, OPENAI_API_KEY);
       segments = buildSegments(data, 0, 0, Infinity);
     } else {
@@ -80,13 +81,17 @@ export default async function handler(req, res) {
         chunks.push({ i, start, dur: end - start, nominal });
       }
 
-      const results = await Promise.all(
-        chunks.map(async (c) => {
-          const buf = await extractSection(RAILWAY, videoId, c.start, c.dur, auth);
-          const data = await transcribe(buf, language, OPENAI_API_KEY);
-          return { c, data };
-        })
-      );
+      // Prepare every chunk before charging quota or starting a paid call:
+      // one blocked section must not leave a partly billed transcription.
+      const audioChunks = await Promise.all(chunks.map(async (c) => ({
+        c,
+        buf: await extractSection(RAILWAY, videoId, c.start, c.dur, auth),
+      })));
+      if (!(await consumeQuota(res, user, 'whisper_sec', billedSec, QUOTAS.whisper_sec))) return;
+      const results = await Promise.all(audioChunks.map(async ({ c, buf }) => ({
+        c,
+        data: await transcribe(buf, language, OPENAI_API_KEY),
+      })));
       results.sort((a, b) => a.c.i - b.c.i);
 
       segments = [];
@@ -103,7 +108,7 @@ export default async function handler(req, res) {
     segments.forEach((s, i) => { s.id = i; });
     res.status(200).json({ segments, language, source: 'whisper', duration });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message, code: err.code });
   }
 }
 
@@ -116,7 +121,15 @@ async function extractSection(railway, videoId, startSec, durationSec, auth) {
   });
   if (!r.ok) {
     const e = await r.json().catch(() => ({}));
-    throw new Error(e.error || 'Audio extraction failed');
+    // Older Railway deployments only return a generic error + raw details.
+    // Recognize the observed bot gate without forwarding stderr to the client.
+    const botBlocked = /confirm.*not a bot/i.test(e.details || '');
+    throw Object.assign(new Error(botBlocked
+      ? 'YouTube blocked audio extraction'
+      : e.error || 'Audio extraction failed'), {
+      status: r.status,
+      code: botBlocked ? 'YOUTUBE_BOT_BLOCKED' : e.code || 'AUDIO_EXTRACTION_FAILED',
+    });
   }
   const d = await r.json();
   if (!d.audioBase64) throw new Error('No audio data returned');

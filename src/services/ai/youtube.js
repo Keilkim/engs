@@ -1,6 +1,7 @@
 // YouTube Service - URL parsing, metadata, captions, Whisper transcription
 
 import { apiFetch } from '../apiFetch';
+export { mapWhisperError } from './whisperErrors.js';
 
 /**
  * Parse YouTube URL and extract video ID
@@ -117,7 +118,10 @@ export async function transcribeYouTubeWithWhisper(videoId, language = 'en', onP
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Whisper transcription failed');
+    throw Object.assign(new Error(error.error || 'Whisper transcription failed'), {
+      code: error.code,
+      status: response.status,
+    });
   }
 
   return await response.json();
@@ -199,21 +203,6 @@ export function buildWhisperConfirmText(durationSec) {
     costLine +
     '소요 시간: 영상 길이에 따라 수 분이 걸릴 수 있어요.\n\n계속하시겠어요?'
   );
-}
-
-/**
- * Map a Whisper transcription error to a user-facing Korean message. Shared so
- * the 25MB/extraction/generic branches stay identical across call sites.
- */
-export function mapWhisperError(err) {
-  const msg = (err?.message || '').toLowerCase();
-  if (msg.includes('413') || msg.includes('content size') || msg.includes('maximum') || msg.includes('too large')) {
-    return '영상이 너무 길어요 — 음성 파일이 25MB 한도를 넘었어요. 약 25분 이내의 짧은 영상을 쓰거나, 자막이 있는 영상을 이용해 주세요.';
-  }
-  if (msg.includes('extract') || msg.includes('audio') || msg.includes('추출')) {
-    return '이 영상의 음성을 가져오지 못했어요. 유튜브 제한이거나 오디오 추출 서버 문제일 수 있어요. 자막이 있는 다른 영상을 이용하거나 잠시 후 다시 시도해 주세요.';
-  }
-  return `음성 인식에 실패했어요: ${err?.message || err}`;
 }
 
 /**

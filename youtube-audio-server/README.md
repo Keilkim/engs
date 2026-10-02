@@ -13,7 +13,13 @@ YouTube 오디오 추출 서버 (Railway 배포용). LangBuddy 앱의 `/api/whis
   `ALLOWED_ORIGINS`(쉼표 구분)를 주면 CORS도 그 출처로 제한.
 - **봇 차단 우회**: player_client 순회(android_vr, tv, …). 필요 시 쿠키를
   환경변수 `YTDLP_COOKIES_TXT`(Netscape cookies.txt 전체 내용)로 주입.
-- **자동 최신화**: 컨테이너 부팅 시 yt-dlp를 최신으로 업데이트(Dockerfile CMD).
+- **자동 최신화**: 컨테이너 부팅 시 `yt-dlp[default]`를 최신으로 업데이트(Dockerfile CMD).
+  Deno와 함께 `yt-dlp-ejs`도 설치/업데이트해야 유튜브 JavaScript challenge를 처리할 수 있다.
+  참고: [yt-dlp EJS 설치 안내](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
+- **오류 구분**: 봇 차단은 `YOUTUBE_BOT_BLOCKED`(502), 추출 시간 초과는
+  `AUDIO_EXTRACTION_TIMEOUT`(504), 그 외 추출 실패는 `AUDIO_EXTRACTION_FAILED`(502).
+  stderr/쿠키 내용은 응답에 포함하지 않는다. 인증·쿠키가 필요한 봇 차단은
+  코드 업데이트만으로 해소됐다고 판단하지 말고 실제 영상 추출로 확인해야 한다.
 
 ## Railway 배포
 - Root Directory: `youtube-audio-server`
