@@ -5,20 +5,24 @@
 // GOOGLE_CSE_CX are set it uses the Google Programmable Search JSON API instead (richer:
 // thumbnails + publish dates; free 100/day). Returns normalized-but-idless candidates.
 
+import { handleCors, requireUser } from './_lib/security.js';
+
 const CSE_URL = 'https://www.googleapis.com/customsearch/v1';
+const MAX_QUERY_LEN = 200;
 const DDG_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (handleCors(req, res, 'POST')) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const user = await requireUser(req, res);
+  if (!user) return;
 
   const { q, num = 10 } = req.body || {};
   if (!q || !String(q).trim()) return res.status(400).json({ error: 'q required' });
+  if (String(q).length > MAX_QUERY_LEN) return res.status(400).json({ error: 'q too long' });
 
   try {
     const key = process.env.GOOGLE_CSE_KEY;
@@ -28,7 +32,8 @@ export default async function handler(req, res) {
       : await ddgSearch(String(q), { df: 'w', num, kind: 'web' });
     return res.status(200).json({ items, configured: true });
   } catch (err) {
-    return res.status(502).json({ error: err.message || 'web discovery failed' });
+    console.error('[discover-web]', err.message);
+    return res.status(502).json({ error: 'web discovery failed' });
   }
 }
 

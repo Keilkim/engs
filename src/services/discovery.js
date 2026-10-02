@@ -6,6 +6,7 @@
 // Phase-2 cron can reuse it unchanged. Candidates come from external SEARCH
 // (api/discover-*), NOT the channel-RSS decode shelf — the two shelves are independent.
 import { getSources, getSavedExternalKeys } from './source';
+import { apiFetch } from './apiFetch';
 import { getVocabulary } from './annotation';
 import { getSetting, SETTINGS_KEYS } from './settings';
 import { buildInterestProfile } from '../lib/discover-core/keywords';
@@ -171,7 +172,7 @@ const ROUTE = { youtube: '/api/discover-youtube', web: '/api/discover-web', pdf:
 async function fetchPoolRaw(kind, q) {
   const cached = readRawForQuery(kind, q);
   if (cached) return cached;
-  const res = await fetch(ROUTE[kind], {
+  const res = await apiFetch(ROUTE[kind], {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ q }),

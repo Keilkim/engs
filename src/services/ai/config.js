@@ -1,5 +1,7 @@
 // API Configuration - keys are now server-side only
 
+import { apiFetch } from '../apiFetch';
+
 // Language name mapping for prompts
 export const LANGUAGE_NAMES = {
   Korean: 'Korean (한국어)',
@@ -63,7 +65,7 @@ async function buildGeminiError(response, fallbackLabel) {
 export async function fetchGemini(body) {
   let lastError;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const response = await fetch('/api/gemini', {
+    const response = await apiFetch('/api/gemini', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -87,7 +89,7 @@ export async function fetchGemini(body) {
 export async function fetchGeminiStream(body) {
   let lastError;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const response = await fetch('/api/gemini-stream', {
+    const response = await apiFetch('/api/gemini-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

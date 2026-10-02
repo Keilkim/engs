@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { Source, SourceListItem, OcrData, YouTubeData, CaptionsData, CaptionSegment } from '../types';
 import { candidateId } from '../lib/discover-core/rank';
+import { apiFetch } from './apiFetch';
 
 const STORAGE_BUCKET = 'sources';
 
@@ -359,7 +360,7 @@ function blobToBase64(blob: Blob): Promise<string> {
 
 export async function captureWebpageScreenshot(url: string) {
   // Call server-side API route (keeps APIFlash key secure)
-  const response = await fetch('/api/screenshot', {
+  const response = await apiFetch('/api/screenshot', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),

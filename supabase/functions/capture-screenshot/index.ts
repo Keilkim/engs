@@ -7,6 +7,111 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const MAX_HTML_BYTES = 3 * 1024 * 1024;
+const FETCH_TIMEOUT_MS = 10000;
+const MAX_REDIRECTS = 3;
+
+// Gateway JWT verification also accepts the public anon key, so check that the
+// caller is an actual signed-in user.
+async function isSignedInUser(req: Request): Promise<boolean> {
+  const authorization = req.headers.get("Authorization");
+  if (!authorization?.startsWith("Bearer ")) return false;
+  try {
+    const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/auth/v1/user`, {
+      headers: { apikey: Deno.env.get("SUPABASE_ANON_KEY") ?? "", Authorization: authorization },
+    });
+    if (!r.ok) return false;
+    const user = await r.json();
+    return Boolean(user?.id) && !user.is_anonymous;
+  } catch {
+    return false;
+  }
+}
+
+function isPrivateHost(hostname: string): boolean {
+  const h = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (h === "localhost" || /\.(localhost|local|internal)$/.test(h)) return true;
+  const v4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (v4) {
+    const a = Number(v4[1]);
+    const b = Number(v4[2]);
+    return a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+  }
+  if (h.includes(":")) {
+    return h === "::" || h === "::1" || h.startsWith("::ffff:") ||
+      h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80");
+  }
+  return false;
+}
+
+// Only public http(s) URLs on default ports. (The URL parser normalizes numeric
+// hosts like 2130706433 to dotted IPv4 before this check.)
+function parsePublicUrl(raw: unknown): URL | null {
+  let u: URL;
+  try {
+    u = new URL(String(raw));
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  if (u.username || u.password) return null;
+  if (u.port && u.port !== "80" && u.port !== "443") return null;
+  if (isPrivateHost(u.hostname)) return null;
+  return u;
+}
+
+// Follows redirects by hand so every hop is re-validated.
+async function fetchPublicHtml(start: URL): Promise<Response | null> {
+  let url = start;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+      },
+      redirect: "manual",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    const location = response.headers.get("location");
+    if (response.status >= 300 && response.status < 400 && location) {
+      const next = parsePublicUrl(new URL(location, url).href);
+      if (!next) return null;
+      url = next;
+      continue;
+    }
+    return response;
+  }
+  return null;
+}
+
+async function readTextCapped(response: Response, maxBytes: number): Promise<string | null> {
+  const declared = Number(response.headers.get("content-length") || 0);
+  if (declared > maxBytes || !response.body) return null;
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(size);
+  let offset = 0;
+  for (const c of chunks) {
+    all.set(c, offset);
+    offset += c.length;
+  }
+  return new TextDecoder().decode(all);
+}
+
 // 상대 URL을 절대 URL로 변환
 function toAbsoluteUrl(src: string, baseUrl: string): string {
   if (!src) return "";
@@ -55,12 +160,27 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  if (!(await isSignedInUser(req))) {
+    return new Response(
+      JSON.stringify({ error: "Sign-in required" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   try {
     const { url, type } = await req.json();
 
     if (!url) {
       return new Response(
         JSON.stringify({ error: "URL is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const target = parsePublicUrl(url);
+    if (!target) {
+      return new Response(
+        JSON.stringify({ error: "A public http(s) URL is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -77,18 +197,11 @@ serve(async (req) => {
     let content: string | null = null;
 
     try {
-      // URL의 HTML 가져오기
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.5",
-        },
-        redirect: "follow",
-      });
+      // URL의 HTML 가져오기 (리다이렉트마다 공개 주소인지 재검증, 크기 제한)
+      const response = await fetchPublicHtml(target);
+      const html = response?.ok ? await readTextCapped(response, MAX_HTML_BYTES) : null;
 
-      if (response.ok) {
-        const html = await response.text();
+      if (html !== null) {
 
         // OG Image 추출
         const imageUrl = extractMetaContent(html, [
@@ -162,7 +275,7 @@ serve(async (req) => {
         screenshot: null,
         title: null,
         content: null,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: "Request failed",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

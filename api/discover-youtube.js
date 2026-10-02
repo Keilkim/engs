@@ -6,6 +6,10 @@
 // YOUTUBE_API_KEY is set it uses the official Data API instead (more robust; free 100
 // searches/day). Either way returns normalized-but-idless candidates; the client ranks.
 
+import { handleCors, requireUser } from './_lib/security.js';
+
+const MAX_QUERY_LEN = 200;
+
 const FEED_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
@@ -14,14 +18,15 @@ const SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search';
 const VIDEOS_URL = 'https://www.googleapis.com/youtube/v3/videos';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (handleCors(req, res, 'POST')) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const user = await requireUser(req, res);
+  if (!user) return;
 
   const { q, publishedAfter, maxResults = 15 } = req.body || {};
   if (!q || !String(q).trim()) return res.status(400).json({ error: 'q required' });
+  if (String(q).length > MAX_QUERY_LEN) return res.status(400).json({ error: 'q too long' });
 
   try {
     const key = process.env.YOUTUBE_API_KEY;
@@ -30,7 +35,8 @@ export default async function handler(req, res) {
       : await searchViaScrape(String(q), maxResults);
     return res.status(200).json({ items, configured: true });
   } catch (err) {
-    return res.status(502).json({ error: err.message || 'youtube discovery failed' });
+    console.error('[discover-youtube]', err.message);
+    return res.status(502).json({ error: 'youtube discovery failed' });
   }
 }
 
@@ -52,7 +58,7 @@ async function searchViaScrape(q, maxResults) {
   const vids = [];
   const seen = new Set();
   collectVideos(data, vids, seen);
-  return vids.slice(0, maxResults).map((v) => ({
+  return vids.slice(0, Math.min(25, Math.max(1, Number(maxResults) || 15))).map((v) => ({
     kind: 'youtube',
     videoId: v.videoId,
     url: `https://www.youtube.com/watch?v=${v.videoId}`,

@@ -4,6 +4,7 @@ import { convertPdfToImages } from '../../utils/pdfUtils';
 import { generateImageThumbnail, generateThumbnailFromPage, ocrAllPages } from './sourceHelpers';
 import { parseYouTubeUrl, getYouTubeMetadata, fetchYouTubeCaptions, transcribeYouTubeWithWhisper, calculateWhisperCost, isWhisperAvailable, buildWhisperConfirmText, mapWhisperError } from '../../services/ai/youtube';
 import { TranslatableText } from '../translatable';
+import { apiFetch } from '../../services/apiFetch';
 
 // Discovery-added PDFs ingest only an OVERVIEW (keeps the inline `pages` insert small;
 // interest-matching needs only the top pages). Manual uploads still ingest every page.
@@ -289,7 +290,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
     setWarning('');
     try {
       setLoadingStatus('Fetching PDF...');
-      const res = await fetch('/api/pdf-proxy', {
+      const res = await apiFetch('/api/pdf-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),

@@ -9,6 +9,7 @@
 
 import { getYouTubeSourceMeta, backfillYoutubeChannelId } from './source';
 import { getSetting, SETTINGS_KEYS } from './settings';
+import { apiFetch } from './apiFetch';
 
 const CACHE_KEY = 'decode_shelf_cache_v1';
 const DISMISSED_KEY = 'decode_shelf_dismissed_v1';
@@ -83,7 +84,7 @@ export function dismissShelfItem(videoId) {
 
 // --- feed / resolve API ---
 async function fetchFeeds(channelIds) {
-  const res = await fetch('/api/youtube-feed', {
+  const res = await apiFetch('/api/youtube-feed', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ channelIds }),
@@ -93,7 +94,7 @@ async function fetchFeeds(channelIds) {
   return data.channels || {};
 }
 async function resolveVideoMeta(videoId) {
-  const res = await fetch('/api/youtube-feed', {
+  const res = await apiFetch('/api/youtube-feed', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ resolveVideoId: videoId }),

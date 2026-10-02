@@ -1,33 +1,31 @@
 // Vercel Serverless Function - Gemini API Proxy (non-streaming)
 /* global process */
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+import { handleCors, requireUser, consumeQuota, QUOTAS } from './_lib/security.js';
+import { buildGeminiRequest } from './_lib/gemini.js';
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+export default async function handler(req, res) {
+  if (handleCors(req, res, 'POST')) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
-  if (!GOOGLE_API_KEY) {
+  if (!process.env.GOOGLE_API_KEY) {
     return res.status(500).json({ error: 'Google API key not configured' });
   }
 
-  // Override in Vercel env (GEMINI_MODEL) without a code change if needed.
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GOOGLE_API_KEY}`;
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const request = buildGeminiRequest(req.body, 'generateContent');
+  if (!request) return res.status(400).json({ error: 'contents required' });
+
+  if (!(await consumeQuota(res, user, 'gemini', 1, QUOTAS.gemini))) return;
 
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req.body),
-    });
-
+    const response = await fetch(request.url, request.init);
     const data = await response.json();
     res.status(response.status).json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[gemini]', err.message);
+    res.status(502).json({ error: 'Gemini request failed' });
   }
 }
