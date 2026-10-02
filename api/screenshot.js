@@ -1,11 +1,10 @@
 // Vercel Serverless Function - APIFlash Screenshot Proxy
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+import { handleCors, requireUser, consumeQuota, QUOTAS } from './_lib/security.js';
+import { parsePublicUrl } from './_lib/safeFetch.js';
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+export default async function handler(req, res) {
+  if (handleCors(req, res, 'POST')) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const APIFLASH_KEY = process.env.APIFLASH_KEY;
@@ -13,15 +12,20 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'APIFlash key not configured' });
   }
 
-  const { url } = req.body;
-  if (!url) {
-    return res.status(400).json({ error: 'url is required' });
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const target = parsePublicUrl(req.body?.url);
+  if (!target) {
+    return res.status(400).json({ error: 'A public http(s) url is required' });
   }
+
+  if (!(await consumeQuota(res, user, 'screenshot', 1, QUOTAS.screenshot))) return;
 
   try {
     const params = new URLSearchParams({
       access_key: APIFLASH_KEY,
-      url,
+      url: target.href,
       full_page: 'true',
       width: '430',
       height: '932',
@@ -44,6 +48,7 @@ export default async function handler(req, res) {
 
     res.status(200).json({ imageUrl: data.url });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[screenshot]', err.message);
+    res.status(502).json({ error: 'Screenshot capture failed' });
   }
 }

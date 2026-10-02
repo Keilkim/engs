@@ -10,6 +10,10 @@
 //    the UC... channel id the add flow never stored (youtube_data.channel is only a
 //    display name), so each legacy video is resolved at most once.
 
+import { handleCors, requireUser, VIDEO_ID_RE } from './_lib/security.js';
+
+const CHANNEL_ID_RE = /^UC[A-Za-z0-9_-]{22}$/;
+
 const VR_UA =
   'com.google.android.apps.youtube.vr.oculus/1.60.19 ' +
   '(Linux; U; Android 12L; en_US; Quest 3 Build/SQ3A.220605.009.A1) gzip';
@@ -22,25 +26,30 @@ const FEED_UA =
 const MAX_CHANNELS = 10;
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (handleCors(req, res, 'POST')) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const user = await requireUser(req, res);
+  if (!user) return;
 
   const { channelIds, resolveVideoId } = req.body || {};
 
   try {
     if (resolveVideoId) {
+      if (typeof resolveVideoId !== 'string' || !VIDEO_ID_RE.test(resolveVideoId)) {
+        return res.status(400).json({ error: 'invalid resolveVideoId' });
+      }
       return res.status(200).json(await resolveVideo(resolveVideoId));
     }
     if (Array.isArray(channelIds) && channelIds.length > 0) {
-      const channels = await fetchChannels(channelIds.slice(0, MAX_CHANNELS));
+      const valid = channelIds.filter((id) => typeof id === 'string' && CHANNEL_ID_RE.test(id));
+      const channels = await fetchChannels(valid.slice(0, MAX_CHANNELS));
       return res.status(200).json({ channels });
     }
     return res.status(400).json({ error: 'channelIds or resolveVideoId required' });
   } catch (err) {
-    return res.status(502).json({ error: err.message || 'shelf feed failed' });
+    console.error('[youtube-feed]', err.message);
+    return res.status(502).json({ error: 'shelf feed failed' });
   }
 }
 

@@ -5,19 +5,24 @@
 // server without CORS proxies (now dead) or a scraped watch page (which YouTube
 // serves without caption data to blocked IPs).
 
+import { handleCors, requireUser, VIDEO_ID_RE, LANG_RE } from './_lib/security.js';
+
 const VR_UA =
   'com.google.android.apps.youtube.vr.oculus/1.60.19 ' +
   '(Linux; U; Android 12L; en_US; Quest 3 Build/SQ3A.220605.009.A1) gzip';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (handleCors(req, res, 'POST')) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  const user = await requireUser(req, res);
+  if (!user) return;
+
   const { videoId, lang = 'en' } = req.body || {};
-  if (!videoId) return res.status(400).json({ error: 'videoId is required' });
+  if (typeof videoId !== 'string' || !VIDEO_ID_RE.test(videoId)) {
+    return res.status(400).json({ error: 'valid videoId is required' });
+  }
+  if (typeof lang !== 'string' || !LANG_RE.test(lang)) return res.status(400).json({ error: 'invalid lang' });
 
   try {
     const player = await getPlayer(videoId);
@@ -49,7 +54,8 @@ export default async function handler(req, res) {
     return res.status(200).json({ ...parsed, hasCaptions: true, durationSec, channelId });
   } catch (err) {
     // Network/parse failure — NOT a confirmed absence of captions.
-    return res.status(502).json({ error: err.message || 'Caption fetch failed' });
+    console.error('[youtube-captions]', err.message);
+    return res.status(502).json({ error: 'Caption fetch failed' });
   }
 }
 

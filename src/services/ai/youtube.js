@@ -1,5 +1,7 @@
 // YouTube Service - URL parsing, metadata, captions, Whisper transcription
 
+import { apiFetch } from '../apiFetch';
+
 /**
  * Parse YouTube URL and extract video ID
  * Supports: youtube.com/watch?v=, youtu.be/, youtube.com/shorts/
@@ -76,7 +78,7 @@ export async function getYouTubeMetadata(videoId) {
  *    the user toward paid Whisper).
  */
 export async function fetchYouTubeCaptions(videoId, lang = 'en') {
-  const res = await fetch('/api/youtube-captions', {
+  const res = await apiFetch('/api/youtube-captions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ videoId, lang }),
@@ -106,7 +108,7 @@ export async function fetchYouTubeCaptions(videoId, lang = 'en') {
 export async function transcribeYouTubeWithWhisper(videoId, language = 'en', onProgress, durationSec = 0) {
   onProgress?.(durationSec > 1200 ? '긴 영상을 나눠 음성 인식 중... (시간이 좀 걸려요)' : '오디오 추출 + 음성 인식 중...');
 
-  const response = await fetch('/api/whisper', {
+  const response = await apiFetch('/api/whisper', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     // durationSec lets the server chunk long videos under Whisper's 25MB limit.

@@ -1,11 +1,14 @@
 // Windowed audio fetch + decode cache for the gap-expanded engine.
 //
-// The Railway audio server (youtube-audio-server) enables CORS for all origins,
-// so the browser calls it directly (no Vercel proxy: that would add a 4.5MB body
+// The Railway audio server (youtube-audio-server) allows cross-origin calls that
+// carry the user's Supabase session token (apiFetch), so the browser calls it
+// directly (no Vercel proxy: that would add a 4.5MB body
 // cap and a second 60s timeout for zero benefit). We fetch the video's audio in
 // ~2-minute windows on demand, decode to PCM, downmix to MONO (halves memory),
 // and keep at most a couple of decoded windows plus a small compressed LRU so
 // backward seeks don't re-hit yt-dlp.
+
+import { apiFetch } from '../apiFetch';
 
 const RAILWAY_URL =
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_RAILWAY_AUDIO_URL) ||
@@ -79,7 +82,7 @@ export class AudioWindowCache {
     const rawDur = this.opts.windowSec + this.opts.marginSec * 2;
     const durationSec = Math.min(rawDur, Math.max(1, this.videoDuration - startSec));
 
-    const res = await fetch(`${RAILWAY_URL}/api/extract-audio`, {
+    const res = await apiFetch(`${RAILWAY_URL}/api/extract-audio`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ videoId: this.videoId, startSec, durationSec }),

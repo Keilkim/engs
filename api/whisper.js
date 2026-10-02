@@ -6,45 +6,67 @@
 // dedup), so the result is seamless regardless of length.
 /* global process, Buffer */
 
+import { handleCors, requireUser, consumeQuota, QUOTAS, VIDEO_ID_RE, LANG_RE } from './_lib/security.js';
+
 export const config = {
   maxDuration: 300, // best-effort; Hobby plans cap at 60s (see notes to user)
 };
 
 const CHUNK_SEC = 1200;  // 20 min per chunk (~19MB at 128kbps < 25MB limit)
 const OVERLAP_SEC = 8;   // small overlap so a word isn't cut at a boundary
+const UNKNOWN_DURATION_SEC = 5400; // unknown length → cover up to ~90min in one section
+// Longest video we'll transcribe. Bounds the parallel chunk fan-out (and spend)
+// no matter what durationSec a caller claims.
+const MAX_DURATION_SEC = Number(process.env.WHISPER_MAX_DURATION_SEC) || 3 * 3600;
 const VR_UA =
   'com.google.android.apps.youtube.vr.oculus/1.60.19 ' +
   '(Linux; U; Android 12L; en_US; Quest 3 Build/SQ3A.220605.009.A1) gzip';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (handleCors(req, res, 'POST')) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
   if (!OPENAI_API_KEY) return res.status(500).json({ error: 'OpenAI API key not configured' });
 
+  const user = await requireUser(req, res);
+  if (!user) return;
+
   const { videoId, language = 'en', durationSec } = req.body || {};
-  if (!videoId) return res.status(400).json({ error: 'videoId is required' });
+  if (typeof videoId !== 'string' || !VIDEO_ID_RE.test(videoId)) {
+    return res.status(400).json({ error: 'valid videoId is required' });
+  }
+  if (typeof language !== 'string' || !LANG_RE.test(language)) {
+    return res.status(400).json({ error: 'invalid language' });
+  }
 
   const RAILWAY = process.env.RAILWAY_AUDIO_URL || 'https://youtube-audio-server-production-711c.up.railway.app';
+  // Railway verifies the same Supabase session, so forward the caller's token.
+  const auth = `Bearer ${user.token}`;
 
   try {
     // Duration source, most reliable first: caller → Railway (yt-dlp, works even
     // on bot-gated videos where InnerTube returns nothing) → InnerTube.
-    const duration = Number(durationSec)
-      || (await getRailwayDuration(RAILWAY, videoId).catch(() => 0))
+    const claimed = Number(durationSec);
+    const duration = (Number.isFinite(claimed) && claimed > 0 ? claimed : 0)
+      || (await getRailwayDuration(RAILWAY, videoId, auth).catch(() => 0))
       || (await getDuration(videoId).catch(() => 0));
+
+    if (duration > MAX_DURATION_SEC) {
+      return res.status(413).json({ error: `영상이 너무 길어요 (최대 ${Math.floor(MAX_DURATION_SEC / 60)}분)` });
+    }
+
+    // Charge the audio length we're about to send to Whisper.
+    const billedSec = duration > 0 ? duration : UNKNOWN_DURATION_SEC;
+    if (!(await consumeQuota(res, user, 'whisper_sec', billedSec, QUOTAS.whisper_sec))) return;
 
     let segments;
     if (duration <= CHUNK_SEC + OVERLAP_SEC) {
       // Single pass — but ALWAYS via a [0, dur] section, never a whole-stream
       // download: the direct audio stream 403s / exceeds --max-filesize on many
       // videos, while the sectioned (ffmpeg range) path works reliably.
-      const dur = duration > 0 ? duration + 2 : 5400; // unknown → cover up to ~90min
-      const buf = await extractSection(RAILWAY, videoId, 0, dur);
+      const dur = duration > 0 ? duration + 2 : UNKNOWN_DURATION_SEC;
+      const buf = await extractSection(RAILWAY, videoId, 0, dur, auth);
       const data = await transcribe(buf, language, OPENAI_API_KEY);
       segments = buildSegments(data, 0, 0, Infinity);
     } else {
@@ -60,7 +82,7 @@ export default async function handler(req, res) {
 
       const results = await Promise.all(
         chunks.map(async (c) => {
-          const buf = await extractSection(RAILWAY, videoId, c.start, c.dur);
+          const buf = await extractSection(RAILWAY, videoId, c.start, c.dur, auth);
           const data = await transcribe(buf, language, OPENAI_API_KEY);
           return { c, data };
         })
@@ -85,15 +107,12 @@ export default async function handler(req, res) {
   }
 }
 
-// Fetch just the audio for a video (whole, or a [startSec, +durationSec] slice).
-async function extractSection(railway, videoId, startSec, durationSec) {
-  const body = startSec != null && durationSec != null
-    ? { videoId, startSec, durationSec }
-    : { videoId };
+// Fetch the audio for a [startSec, +durationSec] slice of a video.
+async function extractSection(railway, videoId, startSec, durationSec, auth) {
   const r = await fetch(`${railway}/api/extract-audio`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json', Authorization: auth },
+    body: JSON.stringify({ videoId, startSec, durationSec }),
   });
   if (!r.ok) {
     const e = await r.json().catch(() => ({}));
@@ -159,10 +178,10 @@ function buildSegments(data, offset, dropBefore, dropAfter = Infinity) {
 
 // Video length via the Railway server (yt-dlp knows the duration even when
 // InnerTube is bot-gated). Cheap: no download.
-async function getRailwayDuration(railway, videoId) {
+async function getRailwayDuration(railway, videoId, auth) {
   const r = await fetch(`${railway}/api/info`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: auth },
     body: JSON.stringify({ videoId }),
   });
   if (!r.ok) return 0;

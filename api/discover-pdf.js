@@ -7,7 +7,11 @@
 // body is NEVER downloaded here; matching is on title+snippet (the "개요"). Full download
 // happens only at add time (api/pdf-proxy).
 
+import { handleCors, requireUser } from './_lib/security.js';
+import { safeFetch } from './_lib/safeFetch.js';
+
 const CSE_URL = 'https://www.googleapis.com/customsearch/v1';
+const MAX_QUERY_LEN = 200;
 const DDG_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
@@ -15,14 +19,15 @@ const HEAD_TIMEOUT_MS = 3000;
 const MAX_PROBES = 8;
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (handleCors(req, res, 'POST')) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const user = await requireUser(req, res);
+  if (!user) return;
 
   const { q, num = 10 } = req.body || {};
   if (!q || !String(q).trim()) return res.status(400).json({ error: 'q required' });
+  if (String(q).length > MAX_QUERY_LEN) return res.status(400).json({ error: 'q too long' });
 
   try {
     const key = process.env.GOOGLE_CSE_KEY;
@@ -41,7 +46,8 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ items, configured: true });
   } catch (err) {
-    return res.status(502).json({ error: err.message || 'pdf discovery failed' });
+    console.error('[discover-pdf]', err.message);
+    return res.status(502).json({ error: 'pdf discovery failed' });
   }
 }
 
@@ -100,17 +106,14 @@ async function csePdf(key, cx, q, num) {
     .filter((it) => it.url && it.title);
 }
 
+// Result URLs come from a search page, so probe them through the SSRF guard too.
 async function probeSize(url) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), HEAD_TIMEOUT_MS);
   try {
-    const r = await fetch(url, { method: 'HEAD', redirect: 'follow', signal: ctrl.signal });
-    const len = r.headers.get('content-length');
+    const r = await safeFetch(url, { method: 'HEAD', timeoutMs: HEAD_TIMEOUT_MS });
+    const len = r.headers['content-length'];
     return len ? Number(len) : 0;
   } catch {
     return 0;
-  } finally {
-    clearTimeout(t);
   }
 }
 

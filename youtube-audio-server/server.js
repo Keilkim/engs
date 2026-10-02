@@ -6,12 +6,22 @@ const path = require('path');
 const crypto = require('crypto');
 
 const app = express();
-app.use(cors());
+// Every API route requires a Supabase bearer token, so CORS is not the security
+// boundary; ALLOWED_ORIGINS (comma-separated) narrows it further when set.
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+app.use(cors(ALLOWED_ORIGINS.length ? { origin: ALLOWED_ORIGINS } : {}));
 app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
 const TEMP_DIR = '/tmp/audio';
 const COOKIES_PATH = process.env.YTDLP_COOKIES_PATH || '/tmp/cookies.txt';
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
+const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+const MAX_START_SEC = 6 * 3600;
+// Whisper's unknown-duration fallback asks for one 5400s section; nothing larger.
+const MAX_SECTION_SEC = 5400;
 
 // Ensure temp directory exists
 if (!fs.existsSync(TEMP_DIR)) {
@@ -35,38 +45,109 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'youtube-audio-server' });
 });
 
-// Lightweight in-memory per-IP rate limit for the (public, unauthenticated)
-// extraction endpoint. The virtual-slow player fetches roughly one ~2-min audio
-// window per couple minutes of playback, so a generous window covers legitimate
-// use while capping a runaway client that would otherwise hammer yt-dlp.
-const RATE_WINDOW_MS = 60 * 1000;
-const RATE_MAX = Number(process.env.EXTRACT_RATE_MAX || 20); // per IP per window
-const rateHits = new Map(); // ip -> timestamps[]
+// Verified tokens are cached briefly so audio-window fetches don't each hit
+// Supabase Auth.
+const USER_CACHE_MS = 60 * 1000;
+const userCache = new Map(); // access token -> { id, exp }
 
-function rateLimitExtract(req, res, next) {
-  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown')
-    .toString().split(',')[0].trim();
+// Requires a valid (non-anonymous) Supabase session: the browser sends its own
+// token, and the Vercel Whisper route forwards the caller's. Fails closed when
+// SUPABASE_URL / SUPABASE_ANON_KEY aren't configured.
+async function requireUser(req, res, next) {
+  const match = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization || '');
+  if (!match) return res.status(401).json({ error: '로그인이 필요해요' });
+  const token = match[1];
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.error('[Auth] SUPABASE_URL / SUPABASE_ANON_KEY not configured');
+    return res.status(500).json({ error: 'Auth not configured' });
+  }
+
   const now = Date.now();
-  const hits = (rateHits.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS);
+  const cached = userCache.get(token);
+  if (cached && cached.exp > now) {
+    req.userId = cached.id;
+    return next();
+  }
+
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+    });
+    const user = r.ok ? await r.json() : null;
+    if (!user || !user.id || user.is_anonymous) {
+      return res.status(401).json({ error: '로그인이 필요해요' });
+    }
+    if (userCache.size >= 1000) userCache.clear();
+    userCache.set(token, { id: user.id, exp: now + USER_CACHE_MS });
+    req.userId = user.id;
+    next();
+  } catch (err) {
+    console.error('[Auth] verification failed:', err.message);
+    res.status(503).json({ error: 'Auth service unavailable' });
+  }
+}
+
+// In-memory per-user rate limit (runs after requireUser, so the key can't be
+// spoofed the way a client-supplied X-Forwarded-For can). The virtual-slow
+// player fetches roughly one ~2-min audio window per couple minutes of
+// playback, and a long Whisper job sends ~10 calls, so a generous window covers
+// legitimate use while capping a runaway client that would hammer yt-dlp.
+const RATE_WINDOW_MS = 60 * 1000;
+const RATE_MAX = Number(process.env.EXTRACT_RATE_MAX || 20); // per user per window
+const rateHits = new Map(); // userId -> timestamps[]
+
+function rateLimitPerUser(req, res, next) {
+  const now = Date.now();
+  const hits = (rateHits.get(req.userId) || []).filter((t) => now - t < RATE_WINDOW_MS);
   if (hits.length >= RATE_MAX) {
     res.setHeader('Retry-After', Math.ceil(RATE_WINDOW_MS / 1000));
     return res.status(429).json({ error: 'Too many requests — 잠시 후 다시 시도해 주세요.' });
   }
   hits.push(now);
-  rateHits.set(ip, hits);
+  rateHits.set(req.userId, hits);
   next();
 }
 
-// Evict stale IP buckets so the map can't grow unbounded.
+// Evict stale buckets so the maps can't grow unbounded.
 const rateCleanup = setInterval(() => {
   const now = Date.now();
-  for (const [ip, hits] of rateHits) {
+  for (const [key, hits] of rateHits) {
     const fresh = hits.filter((t) => now - t < RATE_WINDOW_MS);
-    if (fresh.length) rateHits.set(ip, fresh);
-    else rateHits.delete(ip);
+    if (fresh.length) rateHits.set(key, fresh);
+    else rateHits.delete(key);
+  }
+  for (const [token, entry] of userCache) {
+    if (entry.exp <= now) userCache.delete(token);
   }
 }, RATE_WINDOW_MS);
 if (rateCleanup.unref) rateCleanup.unref();
+
+// Global cap on concurrent yt-dlp work across all users. Requests beyond the
+// queue limit get 503 instead of piling up processes until the box falls over.
+const MAX_CONCURRENT = Number(process.env.YTDLP_MAX_CONCURRENT || 6);
+const MAX_QUEUE = Number(process.env.YTDLP_MAX_QUEUE || 16);
+let activeJobs = 0;
+const waiting = [];
+
+function acquireSlot() {
+  if (activeJobs < MAX_CONCURRENT) {
+    activeJobs++;
+    return Promise.resolve(true);
+  }
+  if (waiting.length >= MAX_QUEUE) return Promise.resolve(false);
+  return new Promise((resolve) => waiting.push(() => resolve(true)));
+}
+
+function releaseSlot() {
+  const next = waiting.shift();
+  if (next) next(); // hand the slot straight to the next waiter
+  else activeJobs--;
+}
+
+function validVideoId(videoId) {
+  return typeof videoId === 'string' && VIDEO_ID_RE.test(videoId);
+}
 
 /**
  * Run yt-dlp once with a given YouTube player client.
@@ -129,24 +210,31 @@ function runYtDlp(youtubeUrl, outputPath, playerClient, section) {
   });
 }
 
-// Extract audio from a YouTube video (optionally only a time section).
-app.post('/api/extract-audio', rateLimitExtract, async (req, res) => {
-  const { videoId, startSec, durationSec } = req.body;
-  if (!videoId) {
-    return res.status(400).json({ error: 'videoId is required' });
+// Extract audio for a time section of a YouTube video. Both callers (Whisper
+// chunking, virtual-slow audio windows) always send a section; whole-video
+// downloads aren't offered.
+app.post('/api/extract-audio', requireUser, rateLimitPerUser, async (req, res) => {
+  const { videoId, startSec, durationSec } = req.body || {};
+  if (!validVideoId(videoId)) {
+    return res.status(400).json({ error: 'valid videoId is required' });
   }
-
-  // When startSec/durationSec are given, only that slice is extracted — this is
-  // how the Whisper caller chunks long videos to stay under the 25MB API limit.
-  const section = (typeof startSec === 'number' && typeof durationSec === 'number' && durationSec > 0)
-    ? { startSec: Math.max(0, startSec), durationSec }
-    : null;
+  if (
+    !Number.isFinite(startSec) || startSec < 0 || startSec > MAX_START_SEC ||
+    !Number.isFinite(durationSec) || durationSec <= 0 || durationSec > MAX_SECTION_SEC
+  ) {
+    return res.status(400).json({ error: 'valid startSec/durationSec are required' });
+  }
+  const section = { startSec, durationSec };
 
   const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
   const outputId = crypto.randomBytes(8).toString('hex');
   const outputPath = path.join(TEMP_DIR, `${outputId}.mp3`);
 
-  console.log(`[Server] Extracting audio for: ${videoId}${section ? ` [${section.startSec}s +${section.durationSec}s]` : ''}`);
+  if (!(await acquireSlot())) {
+    return res.status(503).json({ error: '서버가 바빠요. 잠시 후 다시 시도해 주세요.' });
+  }
+
+  console.log(`[Server] Extracting audio for: ${videoId} [${section.startSec}s +${section.durationSec}s] user=${req.userId}`);
 
   // Try several player clients in order; YouTube gates formats differently per
   // client. android_vr / tv are the least bot-gated (same trick used for
@@ -193,21 +281,34 @@ app.post('/api/extract-audio', rateLimitExtract, async (req, res) => {
     if (fs.existsSync(outputPath)) {
       try { fs.unlinkSync(outputPath); } catch { /* ignore */ }
     }
-    res.status(500).json({
-      error: 'Failed to extract audio',
-      details: error.message,
-    });
+    // yt-dlp stderr stays in the server log; it can carry paths and cookie details.
+    res.status(500).json({ error: 'Failed to extract audio' });
+  } finally {
+    releaseSlot();
   }
 });
 
 // Fast metadata: just the video duration (no download). The Whisper caller uses
 // this to chunk long videos even when InnerTube can't report duration (bot-gated).
-app.post('/api/info', async (req, res) => {
-  const { videoId } = req.body;
-  if (!videoId) return res.status(400).json({ error: 'videoId is required' });
+app.post('/api/info', requireUser, rateLimitPerUser, async (req, res) => {
+  const { videoId } = req.body || {};
+  if (!validVideoId(videoId)) return res.status(400).json({ error: 'valid videoId is required' });
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const clients = ['android_vr', 'tv', 'default', 'android', 'ios'];
 
+  if (!(await acquireSlot())) {
+    return res.status(503).json({ error: '서버가 바빠요. 잠시 후 다시 시도해 주세요.' });
+  }
+  try {
+    const duration = await probeDuration(url, clients);
+    if (duration > 0) return res.json({ duration });
+    res.status(502).json({ error: 'Could not determine duration' });
+  } finally {
+    releaseSlot();
+  }
+});
+
+async function probeDuration(url, clients) {
   for (const client of clients) {
     try {
       const out = await new Promise((resolve, reject) => {
@@ -229,13 +330,13 @@ app.post('/api/info', async (req, res) => {
         p.on('error', (e) => { clearTimeout(timer); reject(e); });
       });
       const dur = Math.round(parseFloat(out));
-      if (dur > 0) return res.json({ duration: dur });
+      if (dur > 0) return dur;
     } catch {
       // try next client
     }
   }
-  res.status(502).json({ error: 'Could not determine duration' });
-});
+  return 0;
+}
 
 // Clean up old temp files periodically
 setInterval(() => {

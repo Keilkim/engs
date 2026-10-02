@@ -225,10 +225,20 @@ CREATE POLICY "Users can delete own sources" ON sources
 -- annotations 정책
 CREATE POLICY "Users can view own annotations" ON annotations
   FOR SELECT USING (auth.uid() = user_id);
+-- 남의 source_id 를 참조하는 행은 만들 수 없게 함
 CREATE POLICY "Users can insert own annotations" ON annotations
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id
+    AND (annotations.source_id IS NULL OR EXISTS (
+      SELECT 1 FROM sources s WHERE s.id = annotations.source_id AND s.user_id = auth.uid()))
+  );
 CREATE POLICY "Users can update own annotations" ON annotations
-  FOR UPDATE USING (auth.uid() = user_id);
+  FOR UPDATE USING (auth.uid() = user_id)
+  WITH CHECK (
+    auth.uid() = user_id
+    AND (annotations.source_id IS NULL OR EXISTS (
+      SELECT 1 FROM sources s WHERE s.id = annotations.source_id AND s.user_id = auth.uid()))
+  );
 CREATE POLICY "Users can delete own annotations" ON annotations
   FOR DELETE USING (auth.uid() = user_id);
 
@@ -236,9 +246,18 @@ CREATE POLICY "Users can delete own annotations" ON annotations
 CREATE POLICY "Users can view own review_items" ON review_items
   FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own review_items" ON review_items
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id
+    AND EXISTS (SELECT 1 FROM annotations a
+                WHERE a.id = review_items.annotation_id AND a.user_id = auth.uid())
+  );
 CREATE POLICY "Users can update own review_items" ON review_items
-  FOR UPDATE USING (auth.uid() = user_id);
+  FOR UPDATE USING (auth.uid() = user_id)
+  WITH CHECK (
+    auth.uid() = user_id
+    AND EXISTS (SELECT 1 FROM annotations a
+                WHERE a.id = review_items.annotation_id AND a.user_id = auth.uid())
+  );
 CREATE POLICY "Users can delete own review_items" ON review_items
   FOR DELETE USING (auth.uid() = user_id);
 
@@ -246,9 +265,18 @@ CREATE POLICY "Users can delete own review_items" ON review_items
 CREATE POLICY "Users can view own chat_logs" ON chat_logs
   FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own chat_logs" ON chat_logs
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id
+    AND (chat_logs.source_id IS NULL OR EXISTS (
+      SELECT 1 FROM sources s WHERE s.id = chat_logs.source_id AND s.user_id = auth.uid()))
+  );
 CREATE POLICY "Users can update own chat_logs" ON chat_logs
-  FOR UPDATE USING (auth.uid() = user_id);
+  FOR UPDATE USING (auth.uid() = user_id)
+  WITH CHECK (
+    auth.uid() = user_id
+    AND (chat_logs.source_id IS NULL OR EXISTS (
+      SELECT 1 FROM sources s WHERE s.id = chat_logs.source_id AND s.user_id = auth.uid()))
+  );
 CREATE POLICY "Users can delete own chat_logs" ON chat_logs
   FOR DELETE USING (auth.uid() = user_id);
 
@@ -289,20 +317,59 @@ CREATE POLICY "Users can delete own push_tokens" ON push_tokens
 -- INSERT INTO storage.buckets (id, name, public)
 -- VALUES ('sources', 'sources', true);
 
--- 업로드 허용
-CREATE POLICY "Allow authenticated uploads"
+-- 업로드/조회/삭제 모두 본인 폴더({user_id}/...)로 제한.
+-- 버킷이 public 이면 getPublicUrl 링크는 RLS 없이 열리므로, 별도의 public SELECT
+-- 정책은 두지 않습니다(두면 anon 키로 전체 파일 목록을 list 할 수 있음).
+-- remove()는 SELECT+DELETE 가 모두 필요합니다.
+CREATE POLICY "Users upload to own folder"
 ON storage.objects FOR INSERT
 TO authenticated
-WITH CHECK (bucket_id = 'sources');
+WITH CHECK (bucket_id = 'sources' AND (storage.foldername(name))[1] = auth.uid()::text);
 
--- 읽기 허용
-CREATE POLICY "Allow public read"
+CREATE POLICY "Users read own folder"
 ON storage.objects FOR SELECT
-TO public
-USING (bucket_id = 'sources');
+TO authenticated
+USING (bucket_id = 'sources' AND (storage.foldername(name))[1] = auth.uid()::text);
 
--- 삭제 허용 (소스/프로젝트 초기화 시 클라이언트에서 실제 파일 삭제가 가능하도록)
-CREATE POLICY "Allow authenticated deletes"
+CREATE POLICY "Users delete own folder"
 ON storage.objects FOR DELETE
 TO authenticated
-USING (bucket_id = 'sources');
+USING (bucket_id = 'sources' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+-- ============================================
+-- 유료 API 사용량 한도 (Vercel /api 의 consumeQuota 가 RPC 로 호출)
+-- 정책이 없으므로 클라이언트는 직접 읽기/쓰기 불가, 아래 함수만 본인 행을 증가시킴.
+-- ============================================
+CREATE TABLE IF NOT EXISTS api_usage (
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  day DATE NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('gemini', 'whisper_sec', 'screenshot', 'pdf_proxy')),
+  used BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, day, kind)
+);
+ALTER TABLE api_usage ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON api_usage FROM anon, authenticated;
+
+CREATE OR REPLACE FUNCTION consume_api_quota(p_kind TEXT, p_amount INTEGER, p_limit INTEGER)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_uid UUID := auth.uid();
+BEGIN
+  -- p_amount > 0: a caller can only ever add to its own usage, never reduce it.
+  IF v_uid IS NULL OR p_amount IS NULL OR p_amount <= 0 OR p_limit IS NULL OR p_amount > p_limit THEN
+    RETURN FALSE;
+  END IF;
+  INSERT INTO api_usage AS u (user_id, day, kind, used)
+  VALUES (v_uid, CURRENT_DATE, p_kind, p_amount)
+  ON CONFLICT (user_id, day, kind)
+  DO UPDATE SET used = u.used + EXCLUDED.used
+  WHERE u.used + EXCLUDED.used <= p_limit;
+  RETURN FOUND;
+END;
+$$;
+REVOKE ALL ON FUNCTION consume_api_quota(TEXT, INTEGER, INTEGER) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION consume_api_quota(TEXT, INTEGER, INTEGER) TO authenticated;
