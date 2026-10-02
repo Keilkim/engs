@@ -5,14 +5,19 @@ YouTube 오디오 추출 서버 (Railway 배포용). LangBuddy 앱의 `/api/whis
 
 - **엔드포인트**: `POST /api/extract-audio` — body `{ videoId, startSec, durationSec }`.
   항상 구간 단위로만 추출(최대 5400초). `POST /api/info` — body `{ videoId }` → 영상 길이.
-- **인증(필수)**: 모든 `/api/*` 요청은 `Authorization: Bearer <Supabase access token>`이
+- **앱 로그인 인증(필수)**: 모든 `/api/*` 요청은 `Authorization: Bearer <Supabase access token>`이
   있어야 한다(브라우저는 자기 세션 토큰, Vercel `/api/whisper`는 호출자 토큰을 전달).
-  환경변수 `SUPABASE_URL`, `SUPABASE_ANON_KEY`가 없으면 모든 요청을 거부한다(fail-closed).
+  Supabase가 검증한 일반 로그인 사용자는 모두 이용 가능하다. 익명/위조 토큰은 401이다.
+  `SUPABASE_URL`, `SUPABASE_ANON_KEY`가 없으면 요청을 거부한다(fail-closed).
 - **남용 방지**: 사용자당 분당 `EXTRACT_RATE_MAX`(기본 20)회, yt-dlp 동시 실행
   `YTDLP_MAX_CONCURRENT`(기본 6) + 대기열 `YTDLP_MAX_QUEUE`(기본 16), 초과 시 503.
   `ALLOWED_ORIGINS`(쉼표 구분)를 주면 CORS도 그 출처로 제한.
 - **봇 차단 우회**: player_client 순회(android_vr, tv, …). 필요 시 쿠키를
   환경변수 `YTDLP_COOKIES_TXT`(Netscape cookies.txt 전체 내용)로 주입.
+  유튜브 인증은 서버 운영자가 한 번 설정하고, 앱 사용자는 각자 앱 계정으로 이용한다.
+  쿠키를 넣기 전에 반드시 앱 로그인 인증을 배포하고 검증해야 한다.
+  쿠키가 있으면 계정 로그인을 지원하는 클라이언트를 사용한다.
+  쿠키 파일 권한은 0600이며, 쿠키 값과 yt-dlp stderr는 로그/응답에 기록하지 않는다.
 - **자동 최신화**: 컨테이너 부팅 시 `yt-dlp[default]`를 최신으로 업데이트(Dockerfile CMD).
   Deno와 함께 `yt-dlp-ejs`도 설치/업데이트해야 유튜브 JavaScript challenge를 처리할 수 있다.
   참고: [yt-dlp EJS 설치 안내](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
