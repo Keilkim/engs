@@ -27,8 +27,15 @@ YouTube 오디오 추출 서버 (Railway 배포용). LangBuddy 앱의 `/api/whis
   코드 업데이트만으로 해소됐다고 판단하지 말고 실제 영상 추출로 확인해야 한다.
 
 ## Railway 배포
+- Source Repository: `Keilkim/engs`. 이전 저장소(`eng_young`)에 연결돼 있으면
+  이 저장소를 수정·머지해도 오디오 서버에는 반영되지 않는다.
 - Root Directory: `youtube-audio-server`
+- Config File: `/youtube-audio-server/railway.json`. 저장소 연결을 바꾼 뒤에는
+  Root Directory와 Config File이 유지됐는지 확인한다.
 - Builder: Dockerfile (railway.json 참고)
 - Vercel 쪽 `RAILWAY_AUDIO_URL`(미설정 시 코드의 기본 URL)이 이 서비스 주소를 가리켜야 함.
+- 유튜브 인증은 `YTDLP_COOKIES_TXT`에 저장한다. 컨테이너 파일에만 저장하면
+  재배포 시 사라진다. 배포 후 실제 영상의 추출·전사를 확인하고, 한 번 더
+  재배포한 뒤 다른 앱 계정으로도 같은 영상이 전사되는지 확인한다.
 
 > 참고: Vercel(프론트) 빌드는 이 폴더를 사용하지 않는다. Railway 전용.
