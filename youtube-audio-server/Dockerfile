@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
     unzip \
-    && pip3 install --break-system-packages yt-dlp \
+    && pip3 install --break-system-packages "yt-dlp[default]" \
     && curl -fsSL https://deno.land/install.sh | sh \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -35,6 +35,6 @@ RUN mkdir -p /tmp/audio
 EXPOSE 3001
 
 # Start server. Update yt-dlp on every boot so a simple redeploy/restart always
-# pulls the latest extractor (YouTube breaks old yt-dlp versions frequently,
-# which is what caused "Requested format is not available").
-CMD sh -c "pip3 install --break-system-packages -U yt-dlp || true; node server.js"
+# pulls the latest extractor AND its compatible yt-dlp-ejs challenge solver.
+# Deno alone is insufficient; bare `pip install yt-dlp` omits the solver.
+CMD sh -c 'pip3 install --break-system-packages -U "yt-dlp[default]" || true; exec node server.js'

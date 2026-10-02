@@ -5,19 +5,37 @@ YouTube 오디오 추출 서버 (Railway 배포용). LangBuddy 앱의 `/api/whis
 
 - **엔드포인트**: `POST /api/extract-audio` — body `{ videoId, startSec, durationSec }`.
   항상 구간 단위로만 추출(최대 5400초). `POST /api/info` — body `{ videoId }` → 영상 길이.
-- **인증(필수)**: 모든 `/api/*` 요청은 `Authorization: Bearer <Supabase access token>`이
+- **앱 로그인 인증(필수)**: 모든 `/api/*` 요청은 `Authorization: Bearer <Supabase access token>`이
   있어야 한다(브라우저는 자기 세션 토큰, Vercel `/api/whisper`는 호출자 토큰을 전달).
-  환경변수 `SUPABASE_URL`, `SUPABASE_ANON_KEY`가 없으면 모든 요청을 거부한다(fail-closed).
+  Supabase가 검증한 일반 로그인 사용자는 모두 이용 가능하다. 익명/위조 토큰은 401이다.
+  `SUPABASE_URL`, `SUPABASE_ANON_KEY`가 없으면 요청을 거부한다(fail-closed).
 - **남용 방지**: 사용자당 분당 `EXTRACT_RATE_MAX`(기본 20)회, yt-dlp 동시 실행
   `YTDLP_MAX_CONCURRENT`(기본 6) + 대기열 `YTDLP_MAX_QUEUE`(기본 16), 초과 시 503.
   `ALLOWED_ORIGINS`(쉼표 구분)를 주면 CORS도 그 출처로 제한.
 - **봇 차단 우회**: player_client 순회(android_vr, tv, …). 필요 시 쿠키를
   환경변수 `YTDLP_COOKIES_TXT`(Netscape cookies.txt 전체 내용)로 주입.
-- **자동 최신화**: 컨테이너 부팅 시 yt-dlp를 최신으로 업데이트(Dockerfile CMD).
+  유튜브 인증은 서버 운영자가 한 번 설정하고, 앱 사용자는 각자 앱 계정으로 이용한다.
+  쿠키를 넣기 전에 반드시 앱 로그인 인증을 배포하고 검증해야 한다.
+  쿠키가 있으면 계정 로그인을 지원하는 클라이언트를 사용한다.
+  쿠키 파일 권한은 0600이며, 쿠키 값과 yt-dlp stderr는 로그/응답에 기록하지 않는다.
+- **자동 최신화**: 컨테이너 부팅 시 `yt-dlp[default]`를 최신으로 업데이트(Dockerfile CMD).
+  Deno와 함께 `yt-dlp-ejs`도 설치/업데이트해야 유튜브 JavaScript challenge를 처리할 수 있다.
+  참고: [yt-dlp EJS 설치 안내](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
+- **오류 구분**: 봇 차단은 `YOUTUBE_BOT_BLOCKED`(502), 추출 시간 초과는
+  `AUDIO_EXTRACTION_TIMEOUT`(504), 그 외 추출 실패는 `AUDIO_EXTRACTION_FAILED`(502).
+  stderr/쿠키 내용은 응답에 포함하지 않는다. 인증·쿠키가 필요한 봇 차단은
+  코드 업데이트만으로 해소됐다고 판단하지 말고 실제 영상 추출로 확인해야 한다.
 
 ## Railway 배포
+- Source Repository: `Keilkim/engs`. 이전 저장소(`eng_young`)에 연결돼 있으면
+  이 저장소를 수정·머지해도 오디오 서버에는 반영되지 않는다.
 - Root Directory: `youtube-audio-server`
+- Config File: `/youtube-audio-server/railway.json`. 저장소 연결을 바꾼 뒤에는
+  Root Directory와 Config File이 유지됐는지 확인한다.
 - Builder: Dockerfile (railway.json 참고)
 - Vercel 쪽 `RAILWAY_AUDIO_URL`(미설정 시 코드의 기본 URL)이 이 서비스 주소를 가리켜야 함.
+- 유튜브 인증은 `YTDLP_COOKIES_TXT`에 저장한다. 컨테이너 파일에만 저장하면
+  재배포 시 사라진다. 배포 후 실제 영상의 추출·전사를 확인하고, 한 번 더
+  재배포한 뒤 다른 앱 계정으로도 같은 영상이 전사되는지 확인한다.
 
 > 참고: Vercel(프론트) 빌드는 이 폴더를 사용하지 않는다. Railway 전용.

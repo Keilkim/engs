@@ -4,6 +4,8 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { extractionFailure } = require('./extractionErrors');
+const { createRequireUser, USER_CACHE_MS } = require('./auth');
 
 const app = express();
 // Every API route requires a Supabase bearer token, so CORS is not the security
@@ -32,8 +34,12 @@ if (!fs.existsSync(TEMP_DIR)) {
 // content) so they survive redeploys. yt-dlp needs valid cookies to get past
 // YouTube's "Sign in to confirm you're not a bot" gate on many videos.
 if (process.env.YTDLP_COOKIES_TXT && process.env.YTDLP_COOKIES_TXT.trim()) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error('App authentication must be configured before supplying YouTube cookies');
+  }
   try {
-    fs.writeFileSync(COOKIES_PATH, process.env.YTDLP_COOKIES_TXT);
+    fs.writeFileSync(COOKIES_PATH, process.env.YTDLP_COOKIES_TXT, { mode: 0o600 });
+    fs.chmodSync(COOKIES_PATH, 0o600);
     console.log('[Server] Wrote YouTube cookies from env to', COOKIES_PATH);
   } catch (e) {
     console.warn('[Server] Could not write cookies from env:', e.message);
@@ -47,46 +53,16 @@ app.get('/', (req, res) => {
 
 // Verified tokens are cached briefly so audio-window fetches don't each hit
 // Supabase Auth.
-const USER_CACHE_MS = 60 * 1000;
 const userCache = new Map(); // access token -> { id, exp }
 
 // Requires a valid (non-anonymous) Supabase session: the browser sends its own
 // token, and the Vercel Whisper route forwards the caller's. Fails closed when
 // SUPABASE_URL / SUPABASE_ANON_KEY aren't configured.
-async function requireUser(req, res, next) {
-  const match = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization || '');
-  if (!match) return res.status(401).json({ error: '로그인이 필요해요' });
-  const token = match[1];
-
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.error('[Auth] SUPABASE_URL / SUPABASE_ANON_KEY not configured');
-    return res.status(500).json({ error: 'Auth not configured' });
-  }
-
-  const now = Date.now();
-  const cached = userCache.get(token);
-  if (cached && cached.exp > now) {
-    req.userId = cached.id;
-    return next();
-  }
-
-  try {
-    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
-    });
-    const user = r.ok ? await r.json() : null;
-    if (!user || !user.id || user.is_anonymous) {
-      return res.status(401).json({ error: '로그인이 필요해요' });
-    }
-    if (userCache.size >= 1000) userCache.clear();
-    userCache.set(token, { id: user.id, exp: now + USER_CACHE_MS });
-    req.userId = user.id;
-    next();
-  } catch (err) {
-    console.error('[Auth] verification failed:', err.message);
-    res.status(503).json({ error: 'Auth service unavailable' });
-  }
-}
+const requireUser = createRequireUser({
+  supabaseUrl: SUPABASE_URL,
+  anonKey: SUPABASE_ANON_KEY,
+  cache: userCache,
+});
 
 // In-memory per-user rate limit (runs after requireUser, so the key can't be
 // spoofed the way a client-supplied X-Forwarded-For can). The virtual-slow
@@ -149,6 +125,13 @@ function validVideoId(videoId) {
   return typeof videoId === 'string' && VIDEO_ID_RE.test(videoId);
 }
 
+function playerClients() {
+  // Mobile clients ignore account cookies; use clients that support the login.
+  return fs.existsSync(COOKIES_PATH)
+    ? ['default', 'web_safari', 'tv', 'web_embedded']
+    : ['android_vr', 'tv', 'default', 'android', 'web_safari', 'ios'];
+}
+
 /**
  * Run yt-dlp once with a given YouTube player client.
  * Rotating the client (default -> android -> web_safari -> ios) is the most
@@ -189,7 +172,6 @@ function runYtDlp(youtubeUrl, outputPath, playerClient, section) {
 
     ytdlp.stderr.on('data', (data) => {
       stderr += data.toString();
-      console.log(`[yt-dlp:${playerClient}] ${data}`.trim());
     });
 
     const timer = setTimeout(() => {
@@ -239,8 +221,9 @@ app.post('/api/extract-audio', requireUser, rateLimitPerUser, async (req, res) =
   // Try several player clients in order; YouTube gates formats differently per
   // client. android_vr / tv are the least bot-gated (same trick used for
   // captions), so try them first.
-  const clients = ['android_vr', 'tv', 'default', 'android', 'web_safari', 'ios'];
+  const clients = playerClients();
   let lastError = null;
+  const failures = [];
 
   try {
     for (const client of clients) {
@@ -253,7 +236,8 @@ app.post('/api/extract-audio', requireUser, rateLimitPerUser, async (req, res) =
         lastError = new Error('yt-dlp reported success but no file was produced');
       } catch (err) {
         lastError = err;
-        console.log(`[Server] client="${client}" failed: ${err.message.split('\n').pop()}`);
+        failures.push(err);
+        console.log(`[Server] client="${client}" failed: ${extractionFailure([err]).code}`);
         if (fs.existsSync(outputPath)) {
           try { fs.unlinkSync(outputPath); } catch { /* ignore */ }
         }
@@ -277,12 +261,13 @@ app.post('/api/extract-audio', requireUser, rateLimitPerUser, async (req, res) =
       size: audioBuffer.length,
     });
   } catch (error) {
-    console.error(`[Server] Error extracting audio:`, error.message);
+    console.error(`[Server] Error extracting audio:`, extractionFailure([...failures, error]).code);
     if (fs.existsSync(outputPath)) {
       try { fs.unlinkSync(outputPath); } catch { /* ignore */ }
     }
-    // yt-dlp stderr stays in the server log; it can carry paths and cookie details.
-    res.status(500).json({ error: 'Failed to extract audio' });
+    // Return and log stable codes only; stderr may contain cookie/session details.
+    const failure = extractionFailure([...failures, error]);
+    res.status(failure.status).json({ error: failure.error, code: failure.code });
   } finally {
     releaseSlot();
   }
@@ -294,7 +279,7 @@ app.post('/api/info', requireUser, rateLimitPerUser, async (req, res) => {
   const { videoId } = req.body || {};
   if (!validVideoId(videoId)) return res.status(400).json({ error: 'valid videoId is required' });
   const url = `https://www.youtube.com/watch?v=${videoId}`;
-  const clients = ['android_vr', 'tv', 'default', 'android', 'ios'];
+  const clients = playerClients();
 
   if (!(await acquireSlot())) {
     return res.status(503).json({ error: '서버가 바빠요. 잠시 후 다시 시도해 주세요.' });
