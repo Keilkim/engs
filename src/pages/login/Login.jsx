@@ -4,6 +4,7 @@ import { signIn, signInWithKakao, signInWithGoogle } from '../../services/auth';
 import { supabase } from '../../services/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { TranslatableText } from '../../components/translatable';
+import AuthStory from '../../components/AuthStory';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -83,7 +84,7 @@ export default function Login() {
   async function handleKakaoLogin() {
     try {
       await signInWithKakao();
-    } catch (err) {
+    } catch {
       setError('Kakao sign in failed');
     }
   }
@@ -91,16 +92,19 @@ export default function Login() {
   async function handleGoogleLogin() {
     try {
       await signInWithGoogle();
-    } catch (err) {
+    } catch {
       setError('Google sign in failed');
     }
   }
 
   return (
     <div className="login-screen">
+      <AuthStory />
       <div className="login-container">
-        <div className="app-logo">
-          <h1><TranslatableText textKey="login.appName">LangBuddy</TranslatableText></h1>
+        <div className="auth-heading">
+          <span className="eyebrow">YOUR NEXT CHAPTER</span>
+          <h1><TranslatableText textKey="login.welcomeBack">Good to see you.</TranslatableText><span className="heading-dot" aria-hidden="true">✳</span></h1>
+          <p><TranslatableText textKey="login.welcomeHint">A little learning. A little closer to your world.</TranslatableText></p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
@@ -126,6 +130,7 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Enter your email"
+              autoComplete="email"
               required
             />
           </div>
@@ -140,6 +145,7 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
+              autoComplete="current-password"
               required
             />
           </div>
@@ -150,7 +156,7 @@ export default function Login() {
               checked={autoLogin}
               onChange={(e) => handleAutoLoginChange(e.target.checked)}
             />
-            <span><TranslatableText textKey="login.autoLogin">자동 로그인</TranslatableText></span>
+            <span><TranslatableText textKey="login.autoLogin">Keep me signed in</TranslatableText></span>
           </label>
 
           <button
@@ -158,7 +164,7 @@ export default function Login() {
             className="login-button"
             disabled={loading}
           >
-            {loading ? 'Signing in...' : <TranslatableText textKey="login.signIn">Sign In</TranslatableText>}
+            {loading ? 'Signing in...' : <><TranslatableText textKey="login.signIn">Sign In</TranslatableText><span aria-hidden="true">↗</span></>}
           </button>
         </form>
 
@@ -170,6 +176,7 @@ export default function Login() {
               onClick={handleGoogleLogin}
               className="google-button"
             >
+              <span className="social-symbol google-symbol" aria-hidden="true">G</span>
               <TranslatableText textKey="login.continueWithGoogle">Continue with Google</TranslatableText>
             </button>
             <button
@@ -177,15 +184,17 @@ export default function Login() {
               onClick={handleKakaoLogin}
               className="kakao-button"
             >
+              <span className="social-symbol kakao-symbol" aria-hidden="true" />
               <TranslatableText textKey="login.continueWithKakao">Continue with Kakao</TranslatableText>
             </button>
           </div>
         </div>
 
         <div className="login-links">
-          <Link to="/register"><TranslatableText textKey="login.signUp">Sign Up</TranslatableText></Link>
+          <span><TranslatableText textKey="login.newHere">New around here?</TranslatableText> <Link to="/register"><TranslatableText textKey="login.signUp">Sign Up</TranslatableText> <span aria-hidden="true">↗</span></Link></span>
           <Link to="/forgot-password"><TranslatableText textKey="login.forgotPassword">Forgot Password</TranslatableText></Link>
         </div>
+        <p className="auth-footnote">Orange Dust — little by little, a world opens up.</p>
       </div>
     </div>
   );

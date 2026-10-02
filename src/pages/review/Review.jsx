@@ -6,6 +6,7 @@ import Flashcard from '../../containers/flashcard/Flashcard';
 import ScenePlayer from '../../containers/flashcard/ScenePlayer';
 import { TranslatableText } from '../../components/translatable';
 import { safeJsonParse } from '../../utils/errors';
+import Buddy from '../../components/Buddy';
 
 export default function Review() {
   const navigate = useNavigate();
@@ -198,6 +199,7 @@ export default function Review() {
         <main className="review-complete">
           {isNewUser ? (
             <>
+              <Buddy className="review-buddy" />
               <h2><TranslatableText textKey="review.noCardsHeading">Nothing to review yet</TranslatableText></h2>
               <p><TranslatableText textKey="review.noCardsCta">Tap a word in your sources to save it, and it'll show up here for review.</TranslatableText></p>
             </>

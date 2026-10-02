@@ -56,6 +56,9 @@ export default function ThemeSwitcher() {
     backdropFilter: 'blur(8px)',
   };
 
+  // Keep preview controls out of the app UI; opt in with ?devtools=1.
+  if (new URLSearchParams(window.location.search).get('devtools') !== '1') return null;
+
   return (
     <div
       style={{

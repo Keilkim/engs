@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { updateProfile } from '../../services/auth';
 import { TranslatableText } from '../../components/translatable';
+import Brand from '../../components/Brand';
+import Buddy from '../../components/Buddy';
 
 const STEPS = [
   {
     id: 'welcome',
     step: 1,
     titleKey: 'onboarding.welcome.title',
-    titleFallback: 'Welcome to LangBuddy!',
+    titleFallback: 'Hello, Orange Dust!',
     subtitleKey: 'onboarding.welcome.subtitle',
     subtitleFallback: 'Your personal English learning companion',
     descriptionKey: 'onboarding.welcome.description',
@@ -106,6 +108,7 @@ export default function Onboarding() {
   return (
     <div className="onboarding-screen">
       <div className="onboarding-header">
+        <Brand />
         <div className="step-indicator">
           {STEPS.map((_, index) => (
             <div
@@ -117,6 +120,7 @@ export default function Onboarding() {
       </div>
 
       <main className="onboarding-content">
+        {isFirst && <Buddy className="onboarding-buddy" />}
         <div className="step-number">{step.step}</div>
 
         <h1 className="step-title">

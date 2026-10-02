@@ -1,30 +1,30 @@
 /*
  * Theme system — two axes:
  *   mode:   dark | light        (neutrals: bg / text / borders / glass / shadow)
- *   accent: blue | indigo | royal | violet   (the --color-highlight family)
+ *   accent: orange | blue | indigo | royal | violet
  *
  * Applied as data-mode / data-accent on <html>; the CSS lives in
- * styles/base/themes.css (accents) + variables.css (dark base) and, soon,
- * a [data-mode="light"] block. Persisted to localStorage and kept independent
+ * styles/base/themes.css (accents and light mode) + variables.css (dark base).
+ * Persisted to localStorage and kept independent
  * of Supabase so it works before login and never blocks on the network.
  */
 
-export const MODES = ['dark', 'light'];
-export const ACCENTS = ['blue', 'indigo', 'royal', 'violet'];
+export const MODES = ['light', 'dark'];
+export const ACCENTS = ['orange', 'blue', 'indigo', 'royal', 'violet'];
 
 export const ACCENT_META = {
+  orange: { label: 'Orange Dust', swatch: '#F47716', ref: 'Signature' },
   blue: { label: 'Blue', swatch: '#0A84FF', ref: 'iOS' },
   indigo: { label: 'Indigo', swatch: '#5B63D3', ref: 'Linear / Stripe' },
   royal: { label: 'Royal', swatch: '#2563EB', ref: 'Tailwind / Vercel' },
   violet: { label: 'Violet', swatch: '#7C5CFF', ref: 'Modern' },
 };
 
-// Light mode ships in the next pass; keep the toggle from selecting it until then.
-export const MODE_ENABLED = { dark: true, light: false };
+export const MODE_ENABLED = { dark: true, light: true };
 
 const MODE_KEY = 'themeMode';
 const ACCENT_KEY = 'themeAccent';
-const DEFAULTS = { mode: 'dark', accent: 'blue' };
+const DEFAULTS = { mode: 'light', accent: 'orange' };
 
 export function getTheme() {
   let { mode, accent } = DEFAULTS;

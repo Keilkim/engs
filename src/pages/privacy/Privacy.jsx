@@ -20,7 +20,7 @@ export default function Privacy() {
         <h2>1. Information We Collect</h2>
         <p>
           When you create an account we collect your email address and nickname.
-          As you use LangBuddy we store the learning materials you add, your
+          As you use Orange Dust we store the learning materials you add, your
           highlights and annotations, saved vocabulary, chat history and study
           statistics.
         </p>
@@ -65,7 +65,7 @@ export default function Privacy() {
         </p>
 
         <h2>8. Contact</h2>
-        <p>Questions about your privacy can be sent to the LangBuddy team.</p>
+        <p>Questions about your privacy can be sent to the Orange Dust team.</p>
       </main>
     </div>
   );

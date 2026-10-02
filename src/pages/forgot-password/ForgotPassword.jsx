@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { resetPassword, updatePassword } from '../../services/auth';
 import { supabase } from '../../services/supabase';
 import { TranslatableText } from '../../components/translatable';
+import AuthStory from '../../components/AuthStory';
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -80,8 +81,10 @@ export default function ForgotPassword() {
 
   return (
     <div className="login-screen">
+      <AuthStory />
       <div className="login-container">
-        <div className="app-logo">
+        <div className="auth-heading">
+          <span className="eyebrow">LET'S GET YOU BACK IN</span>
           <h1>
             {recoveryMode ? (
               <TranslatableText textKey="forgotPassword.setNewTitle">Set New Password</TranslatableText>

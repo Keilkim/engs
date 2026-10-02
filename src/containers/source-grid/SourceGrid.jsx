@@ -2,10 +2,11 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { deleteSource } from '../../services/source';
 import { TranslatableText } from '../../components/translatable';
+import Buddy from '../../components/Buddy';
 
 const SKELETON_ITEMS = Array.from({ length: 6 }, (_, i) => i);
 
-export default function SourceGrid({ sources, loading, columnCount = 2, onSourceDeleted, onSourceUpdated, selectMode = false, selectedIds = [], onSelectToggle }) {
+export default function SourceGrid({ sources, loading, columnCount = 2, onSourceDeleted, onSourceUpdated, selectMode = false, selectedIds = [], onSelectToggle, onAdd, emptyKind = 'library' }) {
   const navigate = useNavigate();
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -36,8 +37,10 @@ export default function SourceGrid({ sources, loading, columnCount = 2, onSource
   if (!sources || sources.length === 0) {
     return (
       <div className="source-grid-empty">
-        <p><TranslatableText textKey="sourceGrid.noSources">No sources added yet</TranslatableText></p>
-        <p className="empty-hint"><TranslatableText textKey="sourceGrid.addFirst">Add your first source!</TranslatableText></p>
+        <Buddy className="empty-buddy" animated={false} />
+        <h3>{emptyKind === 'search' ? 'Nothing here just yet.' : emptyKind === 'favorites' ? 'Keep your favorites close.' : 'Good things start with a little curiosity.'}</h3>
+        <p className="empty-hint">{emptyKind === 'search' ? 'Try another title. Your next discovery is waiting.' : emptyKind === 'favorites' ? 'Tap the star on a source to save it here.' : 'Bring a video, a PDF, or a story you love. We’ll take it from there.'}</p>
+        {emptyKind === 'library' && onAdd && <button className="dust-text-button" onClick={onAdd}>Add your first source <span aria-hidden="true">↗</span></button>}
       </div>
     );
   }
@@ -96,10 +99,10 @@ export default function SourceGrid({ sources, loading, columnCount = 2, onSource
         const isSelected = selectedIds.includes(source.id);
 
         return (
-          <div
+          <article
             key={source.id}
             className={`source-card ${isConfirming ? 'confirming-delete' : ''} ${selectMode ? 'select-mode' : ''} ${isSelected ? 'selected' : ''}`}
-            onClick={() => handleSourceClick(source)}
+            data-type={source.type}
           >
             <div className="source-thumbnail">
               {previewImage ? (
@@ -117,26 +120,14 @@ export default function SourceGrid({ sources, loading, columnCount = 2, onSource
                 className="source-icon-placeholder"
                 style={{ display: previewImage ? 'none' : 'flex' }}
               >
-                {source.type.toUpperCase().charAt(0)}
+                {source.type?.toUpperCase().charAt(0) || 'S'}
               </span>
-
-              {/* 카드 제목 + 타입 뱃지 (하단 오버레이) */}
-              {!isConfirming && (
-                <div className="source-card-caption">
-                  <span className="source-card-title" title={source.title}>
-                    {source.title || 'Untitled'}
-                  </span>
-                  <span className="source-card-type">{source.type?.toUpperCase()}</span>
-                </div>
-              )}
 
               {/* 선택 모드 체크박스 (가운데) */}
               {selectMode && (
                 <div className={`source-select-checkbox ${isSelected ? 'checked' : ''}`}>
                   {isSelected && (
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
-                    </svg>
+                    <span aria-hidden="true">✓</span>
                   )}
                 </div>
               )}
@@ -147,10 +138,10 @@ export default function SourceGrid({ sources, loading, columnCount = 2, onSource
                   className={`source-pin-btn ${source.pinned ? 'active' : ''}`}
                   onClick={(e) => handlePinToggle(e, source)}
                   title={source.pinned ? 'Remove from favorites' : 'Add to favorites'}
+                  aria-label={`${source.pinned ? 'Remove from' : 'Add to'} favorites: ${source.title || 'Untitled'}`}
+                  aria-pressed={!!source.pinned}
                 >
-                  <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-                  </svg>
+                  <span aria-hidden="true">✦</span>
                 </button>
               )}
 
@@ -160,6 +151,7 @@ export default function SourceGrid({ sources, loading, columnCount = 2, onSource
                   className="source-delete-btn"
                   onClick={(e) => handleDeleteClick(e, source)}
                   title="Delete"
+                  aria-label={`Delete ${source.title || 'source'}`}
                 >
                   ×
                 </button>
@@ -188,7 +180,13 @@ export default function SourceGrid({ sources, loading, columnCount = 2, onSource
                 </div>
               )}
             </div>
-          </div>
+            <div className="source-card-caption">
+              <span className="source-card-type">{source.type === 'youtube' ? 'WATCH & LEARN' : source.type === 'pdf' ? 'A GOOD READ' : 'EXPLORE & LEARN'}</span>
+              <h3 className="source-card-title" title={source.title}>{source.title || 'Untitled'}</h3>
+              <span className="source-card-bottom"><span>{source.type?.toUpperCase()}</span><span aria-hidden="true">↗</span></span>
+            </div>
+            <button className="source-open-button" onClick={() => handleSourceClick(source)} disabled={isConfirming} aria-label={`${selectMode ? 'Select' : 'Open'} ${source.title || 'source'}`} aria-pressed={selectMode ? isSelected : undefined} />
+          </article>
         );
       })}
     </div>

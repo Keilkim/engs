@@ -19,13 +19,13 @@ export default function Terms() {
 
         <h2>1. Acceptance of Terms</h2>
         <p>
-          By creating an account or using LangBuddy ("the Service"), you agree to
+          By creating an account or using Orange Dust ("the Service"), you agree to
           these Terms of Service. If you do not agree, please do not use the Service.
         </p>
 
         <h2>2. Description of the Service</h2>
         <p>
-          LangBuddy is a personal English-learning tool that lets you add learning
+          Orange Dust is a personal English-learning tool that lets you add learning
           materials (PDFs, images, web pages and YouTube videos), highlight and
           annotate text, save vocabulary, and review it with spaced repetition.
         </p>
@@ -69,7 +69,7 @@ export default function Terms() {
         </p>
 
         <h2>9. Contact</h2>
-        <p>Questions about these Terms can be sent to the LangBuddy team.</p>
+        <p>Questions about these Terms can be sent to the Orange Dust team.</p>
       </main>
     </div>
   );

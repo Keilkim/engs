@@ -1,0 +1,19 @@
+{
+  "generator": "Built-in image_gen",
+  "assets": [
+    {
+      "file": "orange-dust-buddy.png",
+      "prompt": "Use case: illustration-story\nAsset type: transparent PNG mascot for the existing LangBuddy language-learning web app.\nInput images: Image 1 is a STYLE REFERENCE ONLY: the user's flat orange organic blob with big white eyes. Generate a new original mascot inspired by its charm and simplicity.\nPrimary request: A single charming orange blob character, simple, contemporary editorial illustration suitable for a polished app. Asymmetric soft cloud-shaped body with 5 large rounded lobes, two big oval white eyes and charcoal pupils, a tiny curved charcoal smile, and one little rounded arm raised in a friendly wave. Face looking slightly upward toward the viewer. Warm vivid orange approximately #F47716, eye whites #FFFDF8, pupils #302E2B. A little irregularity in silhouette makes it feel human and playful. No accessories.\nStyle/medium: Absolutely FLAT 2D artwork, solid colors, crisp edges, no contour strokes, no outlines, no gradients, no 3D, no shadows, no glossy highlights. Like a thoughtfully designed independent illustration studio mascot, cute but sophisticated.\nComposition/framing: One complete character centered on a square canvas, entire silhouette visible, generous transparent margin around it. Wide body about 1.1 times its height. Friendly short rounded feet. Usable at 48px and 320px.\nScene/backdrop: Genuine transparent background with alpha.\nText: No text, no letters, no logo, no watermark.\nConstraints: Exactly one character, preserve the reference's simple irregular orange blob spirit, large expressive white eyes, no extra decorative objects."
+    },
+    {
+      "file": "orange-dust-wordmark.png",
+      "prompt": "Use case: logo-brand\nAsset type: transparent PNG wordmark for the Orange Dust web app, displayed in the header and login screen.\nPrimary request: Create a beautiful playful custom typographic wordmark that reads EXACTLY \"orange dust\" in all lowercase, on ONE HORIZONTAL LINE. This is a typography asset, not a UI mockup.\nText (verbatim): \"orange dust\". Spelling: o r a n g e [space] d u s t.\nStyle/medium: Solid vivid signature orange #F47716. Exceptionally bold, chunky, hand-shaped rounded sans serif letters inspired by charming independent editorial typography. Each letter is a little different, with slight quirky tilts and bouncy baselines, just like the user's reference of \"hello po\" sitting over a flat orange blob. Very heavy sturdy letters with open counters, soft corners and subtly irregular forms. Sophisticated and cute, readable at a small navigation size. The g is single storey. The spacing is visually balanced, with a clearly visible word space.\nComposition/framing: A clean wide horizontal wordmark centered, occupies 90% of width, small generous margin on all four sides. Aspect ratio approximately 3:1. Only the words, no mascot.\nScene/backdrop: Actual transparent background with alpha channel.\nConstraints: Flat solid orange text ONLY. No outlines, no shadows, no gradients, no 3D, no texture, no white background, no pattern, no extra graphics, no icon, no punctuation, no additional words, no watermark. Only \"orange dust\"."
+    }
+  ],
+  "references": [
+    "https://www.speak.com/",
+    "https://www.hellonabu.com/",
+    "https://loing.app/en"
+  ],
+  "signatureColor": "#F47716"
+}

@@ -1,11 +1,11 @@
 /*
  * ===========================================
- * Themes — accent overrides (+ light mode, coming next)
+ * Orange Dust — accent overrides and light mode
  * ===========================================
  *
  * Two axes drive the look, set as data attributes on <html> by services/theme.js:
  *   data-mode="dark|light"    → neutrals (base / text / borders / glass / shadow)
- *   data-accent="blue|indigo|royal|violet" → the --color-highlight family
+ *   data-accent="orange|blue|indigo|royal|violet" → the --color-highlight family
  *
  * DARK is the base theme in variables.css. BLUE is the base accent (no block
  * needed). --color-highlight-subtle and --focus-ring are color-mix on
@@ -14,6 +14,13 @@
  */
 
 /* ========== Accents (apply in both modes) ========== */
+
+:root[data-accent="orange"] {
+  --color-highlight: #F47716;
+  --color-highlight-light: #FF8D36;
+  --color-highlight-dark: #C7560C;
+  --color-on-highlight: #302E2B;
+}
 
 :root[data-accent="indigo"] {
   --color-highlight: #5B63D3;      /* Linear / Stripe */
@@ -33,16 +40,52 @@
   --color-highlight-dark: #6440E0;
 }
 
-/* ========== Light mode — SHIPS NEXT ==========
- * Will override the neutral tokens for a light surface: base / base-sub / accent
- * / sub-accent / text*, plus the white-on-dark helpers that would be invisible
- * on a light background (--glass-*, --color-bg-hover, --shadow-card*). The four
- * accents above then compose with it to give the 4 light themes.
- *
- * :root[data-mode="light"] {
- *   --color-base: #FFFFFF;
- *   --color-text: #1D1D1F;
- *   --glass-bg: rgba(0, 0, 0, 0.04);
- *   ...
- * }
- */
+:root[data-mode="light"] {
+  color-scheme: light;
+  --color-signature: #F47716;
+  --color-signature-light: #FF8D36;
+  --color-signature-dark: #C7560C;
+  --color-base: #FAF9F6;
+  --color-base-light: #FFFFFF;
+  --color-base-dark: #F0EEE9;
+  --color-base-sub: #FFFFFF;
+  --color-base-sub-light: #F4F2ED;
+  --color-base-sub-dark: #EAE8E2;
+  --color-accent: #E9E6DF;
+  --color-accent-light: #DEDBD3;
+  --color-accent-dark: #F0EEE9;
+  --color-sub-accent: #CBC7BE;
+  --color-sub-accent-light: #D9D5CD;
+  --color-sub-accent-dark: #B8B2A7;
+  --color-text: #302E2B;
+  --color-text-sub: #706D66;
+  --color-text-light: #79766F;
+  --color-text-inverse: #FFFFFF;
+  --color-success: #23774C;
+  --color-success-dark: #195E3A;
+  --color-warning: #A15C0D;
+  --color-error: #C33A2B;
+  --color-error-dark: #A62F22;
+  --color-info: #246ABA;
+  --color-bg-hover: rgba(48, 46, 43, 0.045);
+  --glass-bg: rgba(48, 46, 43, 0.025);
+  --glass-bg-hover: rgba(48, 46, 43, 0.05);
+  --glass-border: transparent;
+  --glass-border-hover: transparent;
+  --shadow-sm: 0 2px 8px rgba(48, 46, 43, 0.035);
+  --shadow-md: 0 6px 24px rgba(48, 46, 43, 0.06);
+  --shadow-lg: 0 12px 40px rgba(48, 46, 43, 0.08);
+  --shadow-xl: 0 24px 64px rgba(48, 46, 43, 0.12);
+  --shadow-card: none;
+  --shadow-card-hover: 0 8px 24px rgba(48, 46, 43, 0.045);
+  --shadow-btn: none;
+  --shadow-btn-hover: none;
+  --overlay-light: rgba(48, 46, 43, 0.15);
+  --overlay-medium: rgba(48, 46, 43, 0.35);
+  --overlay-dark: rgba(48, 46, 43, 0.55);
+  --overlay-darker: rgba(48, 46, 43, 0.7);
+}
+
+:root[data-mode="dark"] {
+  color-scheme: dark;
+}

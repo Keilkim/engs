@@ -1,12 +1,20 @@
 {
   "nav": {
+    "review": { "en": "Review", "ko": "복습" },
     "home": { "en": "Home", "ko": "홈" },
     "chat": { "en": "Chat", "ko": "대화" },
     "back": { "en": "Back", "ko": "뒤로" }
   },
   "home": {
+    "heroEyebrow": { "en": "A LITTLE CURIOSITY GOES A LONG WAY", "ko": "작은 호기심이 넓혀주는 세상" },
+    "heroHint": { "en": "Your favorite videos, stories, and ideas. A new way to make English your own.", "ko": "좋아하는 영상과 이야기로 나만의 영어를 만나보세요." },
+    "addSource": { "en": "Add a source", "ko": "자료 추가하기" },
+    "yourPace": { "en": "A little every day. At your own pace.", "ko": "매일 조금씩, 나만의 속도로." },
+    "pickUp": { "en": "Pick up where you left off", "ko": "지난번에 읽던 곳부터 이어가요" },
+    "curiosityTitle": { "en": "Follow your curiosity.", "ko": "호기심을 따라가 보세요." },
+    "curiosityHint": { "en": "A video you love. A story that stays. Good English starts with good interests.", "ko": "좋아하는 영상, 마음에 남는 이야기. 영어는 관심에서 시작해요." },
     "myLibrary": { "en": "My Library", "ko": "내 서재" },
-    "learningSources": { "en": "Learning Sources", "ko": "학습 소스" },
+    "learningSources": { "en": "Your little library", "ko": "나의 작은 서재" },
     "items": { "en": "items", "ko": "개" },
     "shelfTitle": { "en": "Next to Decode", "ko": "다음에 풀어볼 영상" },
     "shelfRefresh": { "en": "Refresh", "ko": "새로 보기" },
@@ -19,15 +27,18 @@
   "reviewCard": {
     "title": { "en": "Today's Review", "ko": "오늘의 복습" },
     "itemsToReview": { "en": "items to review", "ko": "개의 항목" },
-    "timeToReview": { "en": "Time to review!", "ko": "복습할 시간이에요!" },
-    "allDone": { "en": "All done!", "ko": "모두 완료!" },
-    "completedToday": { "en": "You've completed today's review", "ko": "오늘 복습을 마쳤습니다" },
-    "startReview": { "en": "Start Review", "ko": "복습 시작하기" },
+    "timeToReview": { "en": "A few familiar words. A little more confidence.", "ko": "익숙한 단어 몇 개, 조금 더 쌓이는 자신감." },
+    "allDone": { "en": "All caught up.", "ko": "지금 복습할 단어는 없어요." },
+    "completedToday": { "en": "Keep exploring. Your next words are out there.", "ko": "계속 둘러보세요. 새로운 단어가 기다리고 있어요." },
+    "startReview": { "en": "A little practice", "ko": "조금만 복습해볼까요" },
     "reviewAgain": { "en": "Review Again", "ko": "다시 보기" }
   },
   "login": {
-    "appName": { "en": "LangBuddy", "ko": "랭버디" },
-    "autoLogin": { "en": "Auto Login", "ko": "자동 로그인" },
+    "appName": { "en": "Orange Dust", "ko": "오렌지 더스트" },
+    "welcomeBack": { "en": "Good to see you.", "ko": "다시 만나 반가워요." },
+    "welcomeHint": { "en": "A little learning. A little closer to your world.", "ko": "조금씩 배우면서, 내 세상과 조금 더 가까이." },
+    "newHere": { "en": "New around here?", "ko": "처음 오셨나요?" },
+    "autoLogin": { "en": "Keep me signed in", "ko": "자동 로그인" },
     "email": { "en": "Email", "ko": "이메일" },
     "password": { "en": "Password", "ko": "비밀번호" },
     "enterEmail": { "en": "Enter your email", "ko": "이메일을 입력하세요" },
@@ -44,6 +55,8 @@
     "kakaoSignInFailed": { "en": "Kakao sign in failed", "ko": "Kakao 로그인에 실패했습니다" }
   },
   "register": {
+    "welcome": { "en": "Your world, wider.", "ko": "나의 세상이 조금 더 넓게." },
+    "welcomeHint": { "en": "Make a little room for something new.", "ko": "새로운 발견을 위한 작은 자리를 만들어보세요." },
     "back": { "en": "Back", "ko": "뒤로가기" },
     "signUp": { "en": "Sign Up", "ko": "회원가입" },
     "email": { "en": "Email", "ko": "이메일" },

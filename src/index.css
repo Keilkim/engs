@@ -1,12 +1,12 @@
 /*
  * ===========================================
- * LangBuddy - Apple Titanium Black Style
+ * Orange Dust - shared layouts and legacy components
  * ===========================================
  */
 
 /* Import base styles */
 @import './styles/base/variables.css';
-@import './styles/base/themes.css'; /* accent overrides + (soon) light mode */
+@import './styles/base/themes.css';
 @import './styles/base/reset.css';
 @import './styles/base/typography.css';
 

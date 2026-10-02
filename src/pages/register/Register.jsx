@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { signUp } from '../../services/auth';
 import { TranslatableText } from '../../components/translatable';
+import AuthStory from '../../components/AuthStory';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -83,6 +84,7 @@ export default function Register() {
 
   return (
     <div className="register-screen">
+      <AuthStory />
       <div className="register-container">
         <button
           type="button"
@@ -92,7 +94,11 @@ export default function Register() {
           <TranslatableText textKey="nav.back">Back</TranslatableText>
         </button>
 
-        <h1><TranslatableText textKey="register.signUp">Sign Up</TranslatableText></h1>
+        <div className="auth-heading">
+          <span className="eyebrow">A FRESH START</span>
+          <h1><TranslatableText textKey="register.welcome">Your world, wider.</TranslatableText></h1>
+          <p><TranslatableText textKey="register.welcomeHint">Make a little room for something new.</TranslatableText></p>
+        </div>
 
         <form onSubmit={handleSubmit} className="register-form">
           {error && <div className="error-message">{error}</div>}
@@ -105,6 +111,7 @@ export default function Register() {
               id="email"
               name="email"
               type="email"
+              autoComplete="email"
               value={formData.email}
               onChange={handleChange}
               placeholder="Enter your email"
@@ -118,6 +125,7 @@ export default function Register() {
             </label>
             <input
               id="password"
+              autoComplete="new-password"
               name="password"
               type="password"
               value={formData.password}
@@ -133,6 +141,7 @@ export default function Register() {
             </label>
             <input
               id="confirmPassword"
+              autoComplete="new-password"
               name="confirmPassword"
               type="password"
               value={formData.confirmPassword}
@@ -148,6 +157,7 @@ export default function Register() {
             </label>
             <input
               id="nickname"
+              autoComplete="nickname"
               name="nickname"
               type="text"
               value={formData.nickname}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSources, updateSource } from '../../services/source';
 import { getTodayReviewCount } from '../../services/review';
@@ -11,6 +11,8 @@ import useDecodeShelf from '../../hooks/useDecodeShelf';
 import { shelfRelativeTime } from '../../services/shelf';
 import useDiscoveryShelf from '../../hooks/useDiscoveryShelf';
 import DiscoverShelf from '../../components/discover/DiscoverShelf';
+import Brand from '../../components/Brand';
+import Buddy from '../../components/Buddy';
 
 export default function Home() {
   const { user } = useAuth();
@@ -32,11 +34,11 @@ export default function Home() {
 
   // 검색 및 필터 상태
   const [searchQuery, setSearchQuery] = useState('');
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pinned'
   const [columnCount, setColumnCount] = useState(() => {
     const saved = localStorage.getItem('grid_column_count');
-    return saved ? Math.min(6, Math.max(2, parseInt(saved, 10))) : 2;
+    const value = Number.parseInt(saved, 10);
+    return Number.isFinite(value) ? Math.min(6, Math.max(2, value)) : 3;
   });
 
 
@@ -184,51 +186,39 @@ export default function Home() {
   return (
     <div className="home-screen">
       <header className="home-header">
-        <h1><TranslatableText textKey="home.myLibrary">My Library</TranslatableText></h1>
+        <Brand />
+        <nav className="header-nav" aria-label="Main navigation">
+          <Link to="/" className="header-nav-link active" aria-current="page"><TranslatableText textKey="home.myLibrary">My Library</TranslatableText></Link>
+          <Link to="/review" className="header-nav-link"><TranslatableText textKey="nav.review">Review</TranslatableText>{!loading && reviewCount > 0 && <span className="nav-review-count">{reviewCount}</span>}</Link>
+        </nav>
         <div className="header-buttons">
-          <button
-            className={`mypage-button search-button ${isSearchOpen ? 'active' : ''}`}
-            onClick={() => setIsSearchOpen(!isSearchOpen)}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/>
-              <path d="m21 21-4.35-4.35"/>
-            </svg>
-          </button>
           <button
             className="mypage-button"
             onClick={() => navigate('/mypage')}
+            aria-label="My profile"
           >
-            My
+            <span className="profile-initial">{(user?.user_metadata?.nickname || 'My').slice(0, 2)}</span>
           </button>
         </div>
       </header>
 
-      {/* 검색창 */}
-      {isSearchOpen && (
-        <div className="search-bar">
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Search by title..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            autoFocus
-          />
-          {searchQuery && (
-            <button
-              className="search-clear-btn"
-              onClick={() => setSearchQuery('')}
-            >
-              ×
-            </button>
-          )}
-        </div>
-      )}
-
       <main className="home-content">
-        <section className="review-section">
-          <ReviewCard count={reviewCount} loading={loading} />
+        <section className="home-hero" aria-labelledby="home-title">
+          <div className="hero-copy">
+            <span className="eyebrow"><span className="orange-dot" aria-hidden="true" /><TranslatableText textKey="home.heroEyebrow">A LITTLE CURIOSITY GOES A LONG WAY</TranslatableText></span>
+            <h1 id="home-title">Your world,<br /><span>a little wider.</span></h1>
+            <p><TranslatableText textKey="home.heroHint">Your favorite videos, stories, and ideas.<br />A new way to make English your own.</TranslatableText></p>
+            <button className="dust-primary-button" onClick={() => setShowAddModal(true)}>
+              <span aria-hidden="true">+</span><TranslatableText textKey="home.addSource">Add a source</TranslatableText><span className="button-arrow" aria-hidden="true">↗</span>
+            </button>
+            <span className="hero-small-note"><TranslatableText textKey="home.yourPace">A little every day. At your own pace.</TranslatableText></span>
+          </div>
+          <div className="hero-art">
+            <span className="hero-hello" aria-hidden="true">hello, you<span>!</span></span>
+            <Buddy className="hero-buddy" />
+            <span className="hero-sticker"><span aria-hidden="true">✳</span> stay curious</span>
+            <span className="art-spark hero-spark" aria-hidden="true">✳</span>
+          </div>
         </section>
 
         {loadError ? (
@@ -247,17 +237,30 @@ export default function Home() {
           </section>
         ) : (
         <>
+        <div className="learning-overview">
+          <section className="review-section">
+            <ReviewCard count={reviewCount} loading={loading} />
+          </section>
         {!loading && recentSource && statusFilter === 'all' && !searchQuery.trim() && (
           <section className="continue-section">
             <div className="section-header">
+              <span className="overview-symbol" aria-hidden="true">↗</span>
               <h2><TranslatableText textKey="home.continueLearning">Continue Learning</TranslatableText></h2>
             </div>
             <button className="continue-card" onClick={() => openSource(recentSource)}>
               <span className="continue-type">{recentSource.type?.toUpperCase()}</span>
               <span className="continue-title">{recentSource.title || 'Untitled'}</span>
+              <span className="continue-cta"><TranslatableText textKey="home.pickUp">Pick up where you left off</TranslatableText><span aria-hidden="true">→</span></span>
             </button>
           </section>
         )}
+          {(!recentSource || statusFilter !== 'all' || searchQuery.trim()) && (
+            <section className="curiosity-card">
+              <span className="overview-symbol" aria-hidden="true">✳</span>
+              <div><h2><TranslatableText textKey="home.curiosityTitle">Follow your curiosity.</TranslatableText></h2><p><TranslatableText textKey="home.curiosityHint">A video you love. A story that stays.<br />Good English starts with good interests.</TranslatableText></p></div>
+            </section>
+          )}
+        </div>
 
         {/* 다음 해독거리 추천 줄 — 이미 추가한 유튜브 채널의 새 업로드. 보여줄 게
             없으면 섹션 자체가 사라진다(빈 상태 문구도, 추가 유도도 없음). */}
@@ -313,27 +316,41 @@ export default function Home() {
         )}
 
         <section className="source-section">
+          <div className="section-header library-heading">
+            <div><span className="eyebrow">COLLECT. EXPLORE. MAKE IT YOURS.</span><h2><TranslatableText textKey="home.learningSources">Your little library</TranslatableText><span className="source-count">{filteredSources.length}</span></h2></div>
+            <button className="dust-text-button" onClick={() => setShowAddModal(true)}><TranslatableText textKey="home.addSource">Add a source</TranslatableText> <span aria-hidden="true">↗</span></button>
+          </div>
+          <div className="library-toolbar">
           {/* 필터 탭 */}
-          <div className="filter-tabs">
+          <div className="filter-tabs" role="group" aria-label="Filter sources">
             <button
               className={`filter-tab ${statusFilter === 'all' ? 'active' : ''}`}
               onClick={() => setStatusFilter('all')}
+              aria-pressed={statusFilter === 'all'}
             >
               All
             </button>
             <button
               className={`filter-tab ${statusFilter === 'pinned' ? 'active' : ''}`}
               onClick={() => setStatusFilter('pinned')}
+              aria-pressed={statusFilter === 'pinned'}
             >
-              Favorites
+              <span aria-hidden="true">✦</span> Favorites
             </button>
 
-            {/* 컬럼 조절 */}
+          </div>
+          <div className="library-tools">
+            <div className="search-bar">
+              <span className="search-glyph" aria-hidden="true">⌕</span>
+              <input type="search" className="search-input" aria-label="Search your library" placeholder="Find something good..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              {searchQuery && <button className="search-clear-btn" aria-label="Clear search" onClick={() => setSearchQuery('')}>×</button>}
+            </div>
             <div className="column-control">
               <button
                 className="column-btn"
                 onClick={() => handleColumnChange(-1)}
                 disabled={columnCount <= 2}
+                aria-label="Fewer columns"
               >
                 −
               </button>
@@ -342,15 +359,12 @@ export default function Home() {
                 className="column-btn"
                 onClick={() => handleColumnChange(1)}
                 disabled={columnCount >= 6}
+                aria-label="More columns"
               >
                 +
               </button>
             </div>
           </div>
-
-          <div className="section-header">
-            <h2><TranslatableText textKey="home.learningSources">Learning Sources</TranslatableText></h2>
-            <span className="source-count">{filteredSources.length} <TranslatableText textKey="home.items">items</TranslatableText></span>
           </div>
           <SourceGrid
             sources={filteredSources}
@@ -358,18 +372,22 @@ export default function Home() {
             columnCount={columnCount}
             onSourceDeleted={loadData}
             onSourceUpdated={handleSourceUpdated}
+            onAdd={() => setShowAddModal(true)}
+            emptyKind={searchQuery.trim() ? 'search' : statusFilter === 'pinned' ? 'favorites' : 'library'}
           />
         </section>
         </>
         )}
+        <footer className="home-footer"><span>little by little, a world opens up.</span><span>orange dust <span aria-hidden="true">✳</span></span></footer>
       </main>
 
-      <nav className="bottom-nav">
+      <nav className="bottom-nav" aria-label="Quick add">
         <button
           className="nav-button add-button"
           onClick={() => setShowAddModal(true)}
+          aria-label="Add a source"
         >
-          <span>+</span>
+          <span aria-hidden="true">+</span><span className="floating-add-label">Add a source</span>
         </button>
       </nav>
 

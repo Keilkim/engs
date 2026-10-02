@@ -270,9 +270,9 @@ export default function Settings() {
                     style={{
                       padding: '6px 14px',
                       borderRadius: 'var(--radius-md)',
-                      border: '1px solid var(--color-accent)',
+                      border: 'none',
                       background: theme.mode === m ? 'var(--color-highlight)' : 'transparent',
-                      color: theme.mode === m ? '#fff' : 'var(--color-text-sub)',
+                      color: theme.mode === m ? 'var(--color-on-highlight)' : 'var(--color-text-sub)',
                       opacity: MODE_ENABLED[m] ? 1 : 0.45,
                       cursor: MODE_ENABLED[m] ? 'pointer' : 'not-allowed',
                       fontSize: 'var(--font-sm)',
@@ -512,7 +512,7 @@ export default function Settings() {
             {activeSection === 'info' && (
               <div className="section-content info-content">
                 <p><strong><TranslatableText textKey="settings.version">Version:</TranslatableText></strong> 1.0.0</p>
-                <p><strong><TranslatableText textKey="settings.developedBy">Developed by:</TranslatableText></strong> LangBuddy Team</p>
+                <p><strong><TranslatableText textKey="settings.developedBy">Developed by:</TranslatableText></strong> Orange Dust Team</p>
                 <a href="/terms" target="_blank">
                   <TranslatableText textKey="settings.termsOfService">Terms of Service</TranslatableText>
                 </a>

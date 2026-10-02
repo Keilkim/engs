@@ -30,6 +30,7 @@
   --color-highlight: #0A84FF;
   --color-highlight-light: #409CFF;
   --color-highlight-dark: #0071E3;
+  --color-on-highlight: #FFFFFF;
 
   /* Accent - Borders, dividers */
   --color-accent: #2D2D2D;
@@ -67,7 +68,8 @@
 
   /* ========== Typography ========== */
 
-  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Noto Sans KR', sans-serif;
+  --font-family: 'DM Sans', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Outfit', 'DM Sans', 'Noto Sans KR', sans-serif;
 
   --font-xs: 0.75rem;    /* 12px */
   --font-sm: 0.875rem;   /* 14px */
