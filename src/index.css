@@ -463,7 +463,7 @@
 .review-card:hover,
 .today-review-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(10, 132, 255, 0.3);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--color-highlight) 30%, transparent);
 }
 
 .review-card h3,
@@ -1012,7 +1012,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(10, 132, 255, 0.4);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-highlight) 40%, transparent);
   cursor: pointer;
   z-index: 100;
   transition: transform 0.2s, box-shadow 0.2s;
