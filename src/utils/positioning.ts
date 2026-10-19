@@ -138,6 +138,71 @@ export function adjustPositionToViewport({ element, position, padding = 16 }: Ad
   return { x, y };
 }
 
+interface AnchoredMenuOptions {
+  /** Viewport-px top/bottom edges of the word or sentence the menu points at. */
+  anchor: { top: number; bottom: number };
+  /** The menu's natural (unconstrained) height. */
+  menuHeight: number;
+  preferred?: 'below' | 'above';
+  viewportHeight: number;
+  /** Space reserved at the bottom (browser bar / safe area). */
+  bottomInset?: number;
+  /** Minimum distance from the screen edges. */
+  margin?: number;
+  /** Distance between the anchor and the menu (room for the arrow). */
+  gap?: number;
+  /** Never squeeze the menu below this; overlap the anchor instead. */
+  minHeight?: number;
+}
+
+interface AnchoredMenuResult {
+  placement: 'below' | 'above';
+  top: number;
+  maxHeight: number;
+  /** The menu had to be shifted off the anchor, so its arrow would point wrong. */
+  detached: boolean;
+}
+
+/**
+ * Place a menu above or below its anchor using the menu's REAL height, so it
+ * always stays on screen. Prefers `preferred` if the menu fits there, else the
+ * other side, else the roomier side with `maxHeight` capped to that space (the
+ * menu body scrolls internally).
+ */
+export function placeAnchoredMenu({
+  anchor,
+  menuHeight,
+  preferred = 'below',
+  viewportHeight,
+  bottomInset = 0,
+  margin = 12,
+  gap = 12,
+  minHeight = 160,
+}: AnchoredMenuOptions): AnchoredMenuResult {
+  const minTop = margin;
+  const maxBottom = viewportHeight - bottomInset - margin;
+  const spaceBelow = maxBottom - (anchor.bottom + gap);
+  const spaceAbove = anchor.top - gap - minTop;
+  const space = { below: spaceBelow, above: spaceAbove };
+  const other = preferred === 'below' ? 'above' : 'below';
+
+  let placement: 'below' | 'above';
+  if (menuHeight <= space[preferred]) placement = preferred;
+  else if (menuHeight <= space[other]) placement = other;
+  else placement = spaceBelow >= spaceAbove ? 'below' : 'above';
+
+  const usable = Math.max(0, maxBottom - minTop);
+  const maxHeight = Math.min(Math.max(space[placement], minHeight), usable);
+  const rendered = Math.min(menuHeight, maxHeight);
+
+  const idealTop = placement === 'below'
+    ? anchor.bottom + gap
+    : anchor.top - gap - rendered;
+  const top = Math.max(minTop, Math.min(idealTop, maxBottom - rendered));
+
+  return { placement, top, maxHeight, detached: Math.abs(top - idealTop) > 1 };
+}
+
 /**
  * Get arrow CSS class based on placement.
  */

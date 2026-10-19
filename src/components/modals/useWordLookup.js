@@ -52,7 +52,7 @@ export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, 
     setLoading(true);
     setError('');
     try {
-      const result = await lookupWord(word);
+      const result = await lookupWord(word, { sentence });
       if (seq !== lookupSeqRef.current) return; // superseded (closed/re-opened) → discard
       // Only ever store the string definition; surface lookup errors instead of
       // persisting garbage.
@@ -72,7 +72,7 @@ export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, 
     } finally {
       if (seq === lookupSeqRef.current) setLoading(false);
     }
-  }, [word]);
+  }, [word, sentence]);
 
   async function handleSave() {
     if (!word || loading) return;
@@ -90,7 +90,7 @@ export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, 
       let ph = typeof phonetic === 'string' ? phonetic : '';
 
       if (!def) {
-        const result = await lookupWord(word);
+        const result = await lookupWord(word, { sentence });
         if (result?.error) {
           setError('lookupFailed');
           setLoading(false);

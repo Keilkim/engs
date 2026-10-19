@@ -24,9 +24,35 @@
   min-width: min(200px, 85vw);
   max-width: min(94vw, 340px);
   max-height: 70vh;
+  /* Visible so the arrow can sit outside the box; the flex column keeps the
+     content inside max-height by shrinking only .word-menu-body. */
   overflow: visible;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   pointer-events: auto;
+}
+
+/* Header and action buttons stay pinned; only the body shrinks and scrolls
+   when the menu is capped to the space left on screen. */
+.word-quick-menu > * {
+  flex-shrink: 0;
+}
+
+.word-quick-menu > .word-menu-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-bottom: var(--spacing-md);
+}
+
+.word-menu-body > :last-child {
+  margin-bottom: 0;
+}
+
+.word-quick-menu.no-arrow::before {
+  display: none;
 }
 
 /* Arrow - base style */
@@ -125,8 +151,6 @@
   line-height: 1.5;
   margin-bottom: var(--spacing-md);
   white-space: pre-wrap;
-  max-height: 40vh;
-  overflow-y: auto;
 }
 
 .word-menu-actions {
@@ -185,8 +209,6 @@
   flex-direction: column;
   gap: var(--spacing-xs);
   margin-bottom: var(--spacing-md);
-  max-height: 40vh;
-  overflow-y: auto;
 }
 
 .pattern-checkbox {

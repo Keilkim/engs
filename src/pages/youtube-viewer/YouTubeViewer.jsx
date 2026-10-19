@@ -67,6 +67,7 @@ export default function YouTubeViewer() {
   const [selectedSceneEnd, setSelectedSceneEnd] = useState(null);
   const [existingAnnotationForWord, setExistingAnnotationForWord] = useState(null);
   const [menuPlacement, setMenuPlacement] = useState('below');
+  const [wordAnchorEl, setWordAnchorEl] = useState(null);
 
   // 탭한 자막 행 기준으로 팝업 위치/방향 결정: 아래 공간이 부족하면 행 '위'로
   // 뒤집어(화살표는 아래를 향함) 하단 자막에서도 어긋나지 않게 한다.
@@ -292,12 +293,13 @@ export default function YouTubeViewer() {
   }, [rows]);
 
   // Word long-press → vocab search
-  const handleWordLongPress = useCallback((word, rect, rowIndex, wordIdx, timestamp) => {
+  const handleWordLongPress = useCallback((word, rect, rowIndex, wordIdx, timestamp, anchorEl) => {
     if (!word) return;
     const existing = findExistingAnnotation(word);
     const scene = rowScene(rowIndex);
 
     const anchor = computeMenuAnchor(rect, 240);
+    setWordAnchorEl(anchorEl || null);
     setSelectedWord(word);
     setIsGrammarMode(false);
     setWordPosition({ x: anchor.x, y: anchor.y });
@@ -312,11 +314,12 @@ export default function YouTubeViewer() {
   }, [findExistingAnnotation, computeMenuAnchor, rowScene]);
 
   // Line long-press → grammar search
-  const handleLineLongPress = useCallback((sentenceText, rect, rowIndex, timestamp) => {
+  const handleLineLongPress = useCallback((sentenceText, rect, rowIndex, timestamp, anchorEl) => {
     if (!sentenceText) return;
     const scene = rowScene(rowIndex);
 
     const anchor = computeMenuAnchor(rect, 340);
+    setWordAnchorEl(anchorEl || null);
     setSelectedWord(sentenceText);
     setIsGrammarMode(true);
     setWordPosition({ x: anchor.x, y: anchor.y });
@@ -333,6 +336,7 @@ export default function YouTubeViewer() {
   const closeWordModal = useCallback(() => {
     setSelectedWord(null);
     setWordPosition(null);
+    setWordAnchorEl(null);
     setSelectedSegmentIndex(null);
     setSelectedRowIndex(null);
     setSelectedWordIndex(null);
@@ -632,6 +636,7 @@ export default function YouTubeViewer() {
         isOpen={!!selectedWord}
         position={wordPosition}
         placement={menuPlacement}
+        anchorEl={wordAnchorEl}
         word={selectedWord}
         isGrammarMode={isGrammarMode}
         sourceId={id}

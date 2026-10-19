@@ -246,13 +246,14 @@ Return ONLY valid JSON, no markdown:
   try {
     const data = await fetchGemini({
       contents: [{ parts: [{ text: prompt }] }],
+      // Temperature is left at Gemini 3's default (1.0); Google warns lower
+      // values can cause looping or degraded output on these models.
       generationConfig: {
-        temperature: 0.3,
-        // Gemini 2.5 Flash "thinks" (internal chain-of-thought) before answering
-        // by default, which adds several seconds of latency to every long-press.
-        // This grammar card is a straightforward extraction, so disable thinking
-        // for a much snappier response. (thinkingBudget: 0 = no thinking.)
-        thinkingConfig: { thinkingBudget: 0 },
+        // Gemini "thinks" (internal chain-of-thought) before answering, which
+        // adds seconds to every long-press. This card is a straightforward
+        // extraction, so think as little as the model allows (the proxy adapts
+        // the level to the configured model).
+        thinkingConfig: { thinkingLevel: 'minimal' },
         // We ask for pure JSON below — enforce it so parsing is reliable and we
         // don't waste tokens/latency on markdown fences.
         responseMimeType: 'application/json',

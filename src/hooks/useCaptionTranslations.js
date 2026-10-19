@@ -1,17 +1,21 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { googleTranslate } from '../services/ai/vocabulary';
+import { translateLines } from '../services/ai/vocabulary';
 import { logError } from '../utils/errors';
 
-// Keep concurrent calls to the unofficial Google Translate endpoint low: it is
-// shared with word-lookup, and bursting it risks a temporary IP block.
-const CONCURRENCY = 4;
+// Lines are translated in batches (one Gemini call each) so a transcript costs
+// a handful of calls from the daily AI quota instead of one per line.
+const BATCH_SIZE = 15;
+// Requests arrive one per visible line in the same tick; wait briefly so a
+// screenful lands in one batch instead of the first line going alone.
+const BATCH_WINDOW_MS = 40;
+const CONCURRENCY = 2;
 // A line that keeps failing is re-queued this many times before we give up
 // (a later re-scroll can still start it over).
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_MS = 600;
-// A stalled fetch would otherwise hold its concurrency slot forever; abort it
-// so the slot is released and the line can be retried.
-const TRANSLATE_TIMEOUT_MS = 8000;
+// A stalled request would otherwise hold its concurrency slot forever; abort
+// it so the slot is released and the lines can be retried.
+const TRANSLATE_TIMEOUT_MS = 15000;
 
 /**
  * Lazily translate YouTube caption segments on demand (visibility/playback
@@ -35,12 +39,14 @@ export default function useCaptionTranslations({ segments, enabled, targetLang }
   const [translations, setTranslations] = useState({});
 
   const cacheRef = useRef(new Map());       // text -> translated (dedupes repeats)
-  const inFlightRef = useRef(new Map());    // text -> in-flight promise (dedupes concurrent identical lines)
+  const inFlightRef = useRef(new Set());    // texts in a running batch
+  const waitersRef = useRef(new Map());     // text -> Set of segment indices waiting for it
   const requestedRef = useRef(new Set());   // segment indices queued/running/done
   const attemptsRef = useRef(new Map());    // index -> failed attempts so far
   const queueRef = useRef([]);              // pending segment indices
   const runningRef = useRef(0);
   const controllersRef = useRef(new Set()); // in-flight AbortControllers (for unmount)
+  const batchTimerRef = useRef(null);
   // Latest `pump`, so async callbacks can re-pump without pump referencing
   // itself (forbidden by the lint rules and prone to capturing a stale closure).
   const pumpRef = useRef(null);
@@ -51,75 +57,104 @@ export default function useCaptionTranslations({ segments, enabled, targetLang }
     const controllers = controllersRef.current;
     return () => {
       aliveRef.current = false;
+      clearTimeout(batchTimerRef.current);
       controllers.forEach((c) => c.abort());
       controllers.clear();
     };
+  }, []);
+
+  const showTranslation = useCallback((index, translated) => {
+    setTranslations(prev => (prev[index] === translated ? prev : { ...prev, [index]: translated }));
+  }, []);
+
+  // Bounded retry: nothing re-requests a line that stays on screen, so re-queue
+  // it ourselves after a short backoff instead of leaving it permanently blank
+  // on a transient failure.
+  const retryLater = useCallback((index) => {
+    const attempts = (attemptsRef.current.get(index) || 0) + 1;
+    if (aliveRef.current && attempts < MAX_ATTEMPTS) {
+      attemptsRef.current.set(index, attempts);
+      setTimeout(() => {
+        if (!aliveRef.current) return;
+        queueRef.current.push(index);
+        pumpRef.current?.();
+      }, RETRY_BASE_MS * attempts);
+    } else {
+      // Give up for now; a later genuine re-request (re-scroll) starts over.
+      attemptsRef.current.delete(index);
+      requestedRef.current.delete(index);
+    }
   }, []);
 
   const pump = useCallback(() => {
     if (!enabled) return;
 
     while (runningRef.current < CONCURRENCY && queueRef.current.length > 0) {
-      const index = queueRef.current.shift();
-      const text = segments?.[index]?.text?.trim();
-      if (!text) continue;
+      // Collect up to BATCH_SIZE distinct texts that still need translating.
+      const texts = [];
+      while (texts.length < BATCH_SIZE && queueRef.current.length > 0) {
+        const index = queueRef.current.shift();
+        const text = segments?.[index]?.text?.trim();
+        if (!text) continue;
 
-      // Identical line already translated → reuse without a network call.
-      const cached = cacheRef.current.get(text);
-      if (cached !== undefined) {
-        setTranslations(prev => (prev[index] === cached ? prev : { ...prev, [index]: cached }));
-        continue;
+        // Identical line already translated → reuse without a network call.
+        const cached = cacheRef.current.get(text);
+        if (cached !== undefined) {
+          showTranslation(index, cached);
+          continue;
+        }
+
+        if (!waitersRef.current.has(text)) waitersRef.current.set(text, new Set());
+        waitersRef.current.get(text).add(index);
+        // Already being translated (this batch or a running one) → just wait.
+        if (inFlightRef.current.has(text)) continue;
+        inFlightRef.current.add(text);
+        texts.push(text);
       }
+      if (texts.length === 0) continue;
 
       runningRef.current += 1;
+      const controller = new AbortController();
+      controllersRef.current.add(controller);
+      const timer = setTimeout(() => controller.abort(), TRANSLATE_TIMEOUT_MS);
 
-      // Share one network call across identical lines requested close together,
-      // and time out a stalled request so its slot is always released.
-      let shared = inFlightRef.current.get(text);
-      if (!shared) {
-        const controller = new AbortController();
-        controllersRef.current.add(controller);
-        const timer = setTimeout(() => controller.abort(), TRANSLATE_TIMEOUT_MS);
-        shared = googleTranslate(text, targetLang, { signal: controller.signal })
-          .finally(() => {
-            clearTimeout(timer);
-            controllersRef.current.delete(controller);
-            inFlightRef.current.delete(text);
+      const settle = (text) => {
+        const indices = waitersRef.current.get(text) || new Set();
+        waitersRef.current.delete(text);
+        inFlightRef.current.delete(text);
+        return indices;
+      };
+
+      translateLines(texts, targetLang, { signal: controller.signal })
+        .then(results => {
+          texts.forEach((text, i) => {
+            cacheRef.current.set(text, results[i]);
+            settle(text).forEach(index => {
+              attemptsRef.current.delete(index);
+              if (aliveRef.current) showTranslation(index, results[i]);
+            });
           });
-        inFlightRef.current.set(text, shared);
-      }
-
-      shared
-        .then(translated => {
-          cacheRef.current.set(text, translated);
-          attemptsRef.current.delete(index);
-          if (aliveRef.current) setTranslations(prev => ({ ...prev, [index]: translated }));
         })
         .catch(err => {
           logError('useCaptionTranslations', err);
-          // Bounded retry: nothing re-requests a line that stays on screen, so
-          // re-queue it ourselves after a short backoff instead of leaving it
-          // permanently blank on a transient failure.
-          const attempts = (attemptsRef.current.get(index) || 0) + 1;
-          if (aliveRef.current && attempts < MAX_ATTEMPTS) {
-            attemptsRef.current.set(index, attempts);
-            setTimeout(() => {
-              if (!aliveRef.current) return;
-              queueRef.current.push(index);
-              pumpRef.current?.();
-            }, RETRY_BASE_MS * attempts);
-          } else {
-            // Give up for now; a later genuine re-request (re-scroll) starts over.
-            attemptsRef.current.delete(index);
-            requestedRef.current.delete(index);
-          }
+          texts.forEach(text => settle(text).forEach(retryLater));
         })
         .finally(() => {
+          clearTimeout(timer);
+          controllersRef.current.delete(controller);
           runningRef.current -= 1;
           if (aliveRef.current) pumpRef.current?.();
         });
     }
-  }, [enabled, targetLang, segments]);
+  }, [enabled, targetLang, segments, showTranslation, retryLater]);
+
+  const schedulePump = useCallback(() => {
+    if (batchTimerRef.current) return;
+    batchTimerRef.current = setTimeout(() => {
+      batchTimerRef.current = null;
+      pumpRef.current?.();
+    }, BATCH_WINDOW_MS);
+  }, []);
 
   // Keep the ref pointing at the current pump for the async re-pump above.
   useEffect(() => {
@@ -138,7 +173,7 @@ export default function useCaptionTranslations({ segments, enabled, targetLang }
         if (qi > 0) {
           queueRef.current.splice(qi, 1);
           queueRef.current.unshift(index);
-          pump();
+          schedulePump();
         }
       }
       return;
@@ -147,8 +182,8 @@ export default function useCaptionTranslations({ segments, enabled, targetLang }
     requestedRef.current.add(index);
     if (priority) queueRef.current.unshift(index);
     else queueRef.current.push(index);
-    pump();
-  }, [enabled, pump]);
+    schedulePump();
+  }, [enabled, schedulePump]);
 
   return { translations, requestTranslation };
 }

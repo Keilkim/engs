@@ -33,7 +33,7 @@ function extractSentenceAt(text, partIndex) {
 
 /**
  * Renders message text as interactive word spans with short/long press detection.
- * - Short press (< 500ms): word lookup (onWordPress)
+ * - Short press (< 500ms): word lookup (onWordPress, with its sentence)
  * - Long press (>= 500ms): grammar analysis (onLongPress)
  * Pattern borrowed from CaptionLine.jsx, simplified for chat messages.
  */
@@ -87,7 +87,7 @@ export default function InteractiveMessageText({
         // Long press → grammar analysis on the tapped sentence only
         // (not the entire multi-paragraph message).
         const rect = target.getBoundingClientRect();
-        onLongPress?.(extractSentenceAt(text, touchStateRef.current.partIndex), rect);
+        onLongPress?.(extractSentenceAt(text, touchStateRef.current.partIndex), rect, target);
       }
     }, LONG_PRESS_DURATION);
   }, [text, onLongPress, onPressStart]);
@@ -108,7 +108,7 @@ export default function InteractiveMessageText({
     clearTimer();
     if (!touchStateRef.current) return;
 
-    const { moved, executed, startTime, word, target } = touchStateRef.current;
+    const { moved, executed, startTime, word, partIndex, target } = touchStateRef.current;
     const duration = Date.now() - startTime;
 
     // Long press already fired (menu opened) → prevent synthetic mouse events
@@ -122,7 +122,7 @@ export default function InteractiveMessageText({
       // Short tap on a word → vocabulary lookup
       if (word) {
         const rect = target.getBoundingClientRect();
-        onWordPress?.(word, rect);
+        onWordPress?.(word, rect, extractSentenceAt(text, partIndex), target);
       } else {
         // Tapped non-word area, no menu
         onPressEndNoMenu?.();
@@ -133,7 +133,7 @@ export default function InteractiveMessageText({
     }
 
     touchStateRef.current = null;
-  }, [clearTimer, onWordPress, onPressEndNoMenu]);
+  }, [text, clearTimer, onWordPress, onPressEndNoMenu]);
 
   const handlePointerCancel = useCallback(() => {
     clearTimer();

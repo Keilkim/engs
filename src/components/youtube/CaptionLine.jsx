@@ -142,12 +142,12 @@ function CaptionLine({
           // Word long-press → vocab search
           const wIdx = touchStateRef.current.wordIndex;
           const timestamp = wordTimings[wIdx]?.start;
-          onWordLongPress?.(word, target.getBoundingClientRect(), index, wIdx, timestamp);
+          onWordLongPress?.(word, target.getBoundingClientRect(), index, wIdx, timestamp, target);
         } else {
           // Line long-press (non-word area) → grammar search
           const lineEl = target.closest('.caption-line');
-          const rect = lineEl ? lineEl.getBoundingClientRect() : target.getBoundingClientRect();
-          onLineLongPress?.(segment.text, rect, index, segment.start);
+          const anchor = lineEl || target;
+          onLineLongPress?.(segment.text, anchor.getBoundingClientRect(), index, segment.start, anchor);
         }
       }
     }, LONG_PRESS_DURATION);

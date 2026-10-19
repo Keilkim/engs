@@ -32,6 +32,8 @@ export default function ChatPanel({ chat, sourceTitle }) {
   // Word quick menu state
   const [selectedWord, setSelectedWord] = useState(null);
   const [wordPosition, setWordPosition] = useState(null);
+  const [wordAnchorEl, setWordAnchorEl] = useState(null);
+  const [selectedSentence, setSelectedSentence] = useState(null);
   const [isGrammarMode, setIsGrammarMode] = useState(false);
   const inputRef = useRef(null);
   const prevStreamingRef = useRef('');
@@ -271,27 +273,33 @@ export default function ChatPanel({ chat, sourceTitle }) {
   }, [startListening, managedSetTimeout]);
 
   // Chat message word short press → vocabulary lookup
-  const handleChatWordPress = useCallback((word, rect) => {
+  const handleChatWordPress = useCallback((word, rect, sentence, anchorEl) => {
     if (!word) return;
     pauseConversation();
     setSelectedWord(word);
+    setSelectedSentence(sentence || null);
     setIsGrammarMode(false);
     setWordPosition({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
+    setWordAnchorEl(anchorEl || null);
   }, [pauseConversation]);
 
   // Chat message long press → grammar analysis
-  const handleChatSentenceLongPress = useCallback((text, rect) => {
+  const handleChatSentenceLongPress = useCallback((text, rect, anchorEl) => {
     if (!text) return;
     pauseConversation();
     setSelectedWord(text);
+    setSelectedSentence(null);
     setIsGrammarMode(true);
     setWordPosition({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
+    setWordAnchorEl(anchorEl || null);
   }, [pauseConversation]);
 
   // Close word modal → resume conversation
   const closeWordModal = useCallback(() => {
     setSelectedWord(null);
     setWordPosition(null);
+    setWordAnchorEl(null);
+    setSelectedSentence(null);
     setIsGrammarMode(false);
     resumeConversation();
   }, [resumeConversation]);
@@ -465,6 +473,8 @@ export default function ChatPanel({ chat, sourceTitle }) {
               isOpen={!!selectedWord}
               position={wordPosition}
               placement="below"
+              anchorEl={wordAnchorEl}
+              sentence={selectedSentence || undefined}
               word={selectedWord || ''}
               wordBbox={null}
               sentenceWords={null}

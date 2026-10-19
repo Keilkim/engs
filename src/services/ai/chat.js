@@ -311,6 +311,15 @@ Format your response as:
   return data.candidates[0].content.parts[0].text;
 }
 
+// Temperature stays at Gemini 3's default (1.0), as Google recommends. Thinking
+// tokens count toward maxOutputTokens, so keep thinking low (tutor replies are
+// short and latency matters, especially in voice mode) and leave headroom so a
+// reply is never cut off by its own reasoning.
+const CHAT_GENERATION_CONFIG = {
+  maxOutputTokens: 2048,
+  thinkingConfig: { thinkingLevel: 'low' },
+};
+
 /**
  * AI chat (with conversation history support)
  */
@@ -333,10 +342,7 @@ export async function chat(message, context = '', conversationHistory = [], opti
   const data = await fetchGemini({
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents,
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 1024,
-    },
+    generationConfig: CHAT_GENERATION_CONFIG,
   }, requestScope);
 
   requestScope.signal.throwIfAborted();
@@ -376,10 +382,7 @@ You are having a real-time voice conversation with the user for English practice
   const response = await fetchGeminiStream({
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents,
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 1024,
-    },
+    generationConfig: CHAT_GENERATION_CONFIG,
   }, requestScope);
 
   signal.throwIfAborted();

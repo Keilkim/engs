@@ -447,6 +447,8 @@ const zoomOrigin = { x: 0, y: 0 };
       placement,
       word: word.text,
       wordBbox: word.bbox,
+      // Context for the lookup (picks the sense used here) and the saved card.
+      sentence: findSentenceFromWord(word)?.text,
       existingAnnotation: null,
       isGrammarMode: false,
     });
@@ -515,6 +517,12 @@ const zoomOrigin = { x: 0, y: 0 };
     isPanning, spacebarHeld, panStartRef,
     pinchStartRef, twoFingerPanRef, touchStartRef,
   });
+
+  // Dragging outside the word menu while zoomed pans the page (the menu
+  // follows its word via panOffset).
+  const handleWordMenuPan = useCallback((dx, dy) => {
+    setPanOffset((prev) => clampPanOffset(prev.x + dx, prev.y + dy, zoomScale));
+  }, [clampPanOffset, zoomScale]);
 
   const triggerShake = useCallback(() => _triggerShake(setIsShaking), [_triggerShake]);
 
@@ -936,6 +944,7 @@ const zoomOrigin = { x: 0, y: 0 };
         word={activeModal.data.word || ''}
         wordBbox={activeModal.data.wordBbox || null}
         sentenceWords={activeModal.data.sentenceWords || null}
+        sentence={activeModal.data.sentence}
         sourceId={id}
         currentPage={currentPage}
         existingAnnotation={activeModal.data.existingAnnotation || null}
@@ -943,6 +952,7 @@ const zoomOrigin = { x: 0, y: 0 };
         containerRef={zoomWrapperRef}
         zoomScale={zoomScale}
         panOffset={panOffset}
+        onBackdropPan={zoomScale > 1 ? handleWordMenuPan : undefined}
         onClose={closeWordMenu}
         onSaved={handleWordMenuSaved}
         onDeleted={handleWordMenuDelete}
