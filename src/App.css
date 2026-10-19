@@ -2425,6 +2425,23 @@
  * ===========================================
  */
 
+.web-capture-recovery {
+  max-width: 720px;
+  margin: var(--spacing-md) auto;
+  padding: var(--spacing-md);
+  background: var(--color-base-sub);
+  border-radius: var(--radius-md);
+  line-height: 1.6;
+}
+
+.web-capture-recovery .submit-button {
+  margin-top: var(--spacing-sm);
+}
+
+.web-capture-recovery [role="alert"] {
+  color: var(--color-error);
+}
+
 .article-viewer {
   max-width: 720px;
   margin: 0 auto;

@@ -1,7 +1,47 @@
 import { supabase } from './supabase';
 import { safeJsonParse } from '../utils/errors';
 import { localDateString } from '../utils/dateUtils';
+import { captureSessionScope, assertSessionScope } from './sessionScope.js';
+import { createAnnotationWriter } from './annotationWriter.js';
 import type { Annotation, SelectionRect, BBox } from '../types';
+
+function parseAnalysis(value: string | null | undefined): Record<string, unknown> {
+  const parsed = safeJsonParse<unknown>(value, {});
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : {};
+}
+
+async function requireSessionUser() {
+  const scope = await captureSessionScope();
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  if (!user) throw new Error('로그인이 만료되었습니다. 다시 로그인해 주세요.');
+  assertSessionScope(scope);
+  if (user.id !== scope.userId) throw new Error('로그인 계정이 변경되었습니다. 다시 시도해 주세요.');
+  return scope;
+}
+
+const writeAnnotation = createAnnotationWriter({
+  captureScope: requireSessionUser,
+  assertScope: assertSessionScope,
+  async insertAnnotation(annotation: CreateAnnotationInput, userId: string) {
+    const { data, error } = await supabase
+      .from('annotations')
+      .insert({ ...annotation, user_id: userId })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Annotation;
+  },
+  insertReview: createReviewItem,
+  async removeAnnotation(id: number, userId: string) {
+    // The FK cascades to any review row whose insert committed before its
+    // response failed. Keep the original owner filter throughout compensation.
+    const { error } = await supabase.from('annotations').delete().eq('id', id).eq('user_id', userId);
+    if (error) throw error;
+  },
+});
 
 // 복습 카드로 만들 수 있는 분석 데이터가 있는지 판단.
 // isVocabulary 단어 또는 grammar 분석만 플래시카드로 렌더링되므로,
@@ -9,7 +49,7 @@ import type { Annotation, SelectionRect, BBox } from '../types';
 // (질문=답이 되는 '분석 없는' 카드가 복습 큐에 들어가는 것을 근절)
 function hasReviewableAnalysis(aiAnalysisJson: string | null | undefined): boolean {
   if (!aiAnalysisJson) return false;
-  const json = safeJsonParse<Record<string, unknown>>(aiAnalysisJson, {});
+  const json = parseAnalysis(aiAnalysisJson);
   if (json.isVocabulary === true) return true;
   if (json.type === 'grammar') {
     // Grammar cards are only reviewable when there's a real, bold-able target:
@@ -37,7 +77,7 @@ export async function getAnnotations(sourceId: string): Promise<Annotation[]> {
 }
 
 interface CreateAnnotationInput {
-  source_id: string;
+  source_id: string | number | null;
   type: string;
   selected_text: string | null;
   selection_rect: string | null;
@@ -46,25 +86,10 @@ interface CreateAnnotationInput {
 }
 
 export async function createAnnotation(annotation: CreateAnnotationInput): Promise<Annotation> {
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const { data, error } = await supabase
-    .from('annotations')
-    .insert({
-      ...annotation,
-      user_id: user!.id,
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  // 분석 데이터가 있는 highlight만 복습 카드로 생성 (펜 스트로크/분석 없는 카드 제외)
-  if (annotation.type === 'highlight' && hasReviewableAnalysis(annotation.ai_analysis_json)) {
-    await createReviewItem(data.id);
-  }
-
-  return data as Annotation;
+  return writeAnnotation(
+    annotation,
+    annotation.type === 'highlight' && hasReviewableAnalysis(annotation.ai_analysis_json),
+  );
 }
 
 export async function deleteAnnotation(id: string): Promise<void> {
@@ -88,26 +113,15 @@ export async function updateAnnotation(id: string, updates: Partial<Annotation>)
   return data as Annotation;
 }
 
-async function createReviewItem(annotationId: string): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-
-  // 중복 방지: 동일 annotation에 대한 review_item이 이미 있으면 생성하지 않는다
-  // (재시도/중복 저장 로직으로 인한 같은 카드의 중복 출제 방지)
-  const { data: existing } = await supabase
-    .from('review_items')
-    .select('id')
-    .eq('annotation_id', annotationId)
-    .limit(1)
-    .maybeSingle();
-
-  if (existing) return;
-
+async function createReviewItem(annotationId: number, userId: string): Promise<void> {
+  // Each new annotation is owned by one serialized save operation. Retrying a
+  // failed save removes that row (and its reviews) before creating another.
   const today = localDateString();
 
   const { error } = await supabase
     .from('review_items')
     .insert({
-      user_id: user!.id,
+      user_id: userId,
       annotation_id: annotationId,
       next_review_date: today,
       interval_days: 1,
@@ -120,23 +134,24 @@ async function createReviewItem(annotationId: string): Promise<void> {
 }
 
 export async function getVocabulary(): Promise<Annotation[]> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const scope = await requireSessionUser();
 
   // 서버측에서 vocabulary만 필터: 펜 스트로크(ai_analysis_json=null) 등이
   // limit 창을 잠식해 저장 단어가 사전에서 사라지는 것을 방지한다.
   const { data, error } = await supabase
     .from('annotations')
     .select('*')
-    .eq('user_id', user!.id)
+    .eq('user_id', scope.userId)
     .eq('type', 'highlight')
     .ilike('ai_analysis_json', '%"isVocabulary":true%')
     .order('created_at', { ascending: false })
     .limit(200);
 
+  assertSessionScope(scope);
   if (error) throw error;
 
   return (data || []).filter(item => {
-    const json = safeJsonParse(item.ai_analysis_json, {});
+    const json = parseAnalysis(item.ai_analysis_json);
     return json.isVocabulary === true;
   }) as Annotation[];
 }
@@ -147,63 +162,54 @@ export async function createVocabularyItem(
   sourceId: string | null = null,
   selectionRect: SelectionRect | null = null
 ) {
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const { data, error } = await supabase
-    .from('annotations')
-    .insert({
-      user_id: user!.id,
-      source_id: sourceId,
-      type: 'highlight',
-      selected_text: word,
-      ai_analysis_json: JSON.stringify({ isVocabulary: true, definition }),
-      selection_rect: selectionRect ? JSON.stringify(selectionRect) : null,
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  await createReviewItem(data.id);
-  return data as Annotation;
+  return createAnnotation({
+    source_id: sourceId,
+    type: 'highlight',
+    selected_text: word,
+    ai_analysis_json: JSON.stringify({ isVocabulary: true, definition }),
+    selection_rect: selectionRect ? JSON.stringify(selectionRect) : null,
+  });
 }
 
 export async function getVocabularyWithSource() {
-  const { data: { user } } = await supabase.auth.getUser();
+  const scope = await requireSessionUser();
 
   // 서버측에서 vocabulary만 필터 (getVocabulary와 동일한 이유)
   const { data, error } = await supabase
     .from('annotations')
     .select('*, sources(title)')
-    .eq('user_id', user!.id)
+    .eq('user_id', scope.userId)
     .eq('type', 'highlight')
     .ilike('ai_analysis_json', '%"isVocabulary":true%')
     .order('created_at', { ascending: false })
     .limit(200);
 
+  assertSessionScope(scope);
   if (error) throw error;
 
   return (data || []).filter(item => {
-    const json = safeJsonParse(item.ai_analysis_json, {});
+    const json = parseAnalysis(item.ai_analysis_json);
     return json.isVocabulary === true;
   });
 }
 
 export async function getGrammarPatterns() {
-  const { data: { user } } = await supabase.auth.getUser();
+  const scope = await requireSessionUser();
 
   const { data, error } = await supabase
     .from('annotations')
     .select('*, sources(title)')
-    .eq('user_id', user!.id)
+    .eq('user_id', scope.userId)
     .eq('type', 'highlight')
     .not('ai_analysis_json', 'is', null)
     .order('created_at', { ascending: false })
     .limit(200);
 
+  assertSessionScope(scope);
   if (error) throw error;
 
   return (data || []).filter(item => {
-    const json = safeJsonParse(item.ai_analysis_json, {});
+    const json = parseAnalysis(item.ai_analysis_json);
     return json.type === 'grammar';
   });
 }
@@ -215,22 +221,23 @@ export async function addManualVocabulary(word: string, definition: string) {
 // Sentence pattern functions
 
 export async function getSentencePatterns(): Promise<Annotation[]> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const scope = await requireSessionUser();
 
   const { data, error } = await supabase
     .from('annotations')
     .select('*')
-    .eq('user_id', user!.id)
+    .eq('user_id', scope.userId)
     .eq('type', 'highlight')
     .is('source_id', null)
     .not('ai_analysis_json', 'is', null)
     .order('created_at', { ascending: false })
     .limit(100);
 
+  assertSessionScope(scope);
   if (error) throw error;
 
   return (data || []).filter(item => {
-    const json = safeJsonParse(item.ai_analysis_json, {});
+    const json = parseAnalysis(item.ai_analysis_json);
     return json.type === 'sentence_pattern';
   }) as Annotation[];
 }
@@ -241,29 +248,15 @@ export async function createSentencePattern(
   explanation: string,
   example: string,
 ): Promise<Annotation> {
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const { data, error } = await supabase
-    .from('annotations')
-    .insert({
-      user_id: user!.id,
-      source_id: null,
-      type: 'highlight',
-      selected_text: pattern,
-      selection_rect: null,
-      ai_analysis_json: JSON.stringify({
-        type: 'sentence_pattern',
-        pattern,
-        parts,
-        explanation,
-        example,
-      }),
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data as Annotation;
+  return createAnnotation({
+    source_id: null,
+    type: 'highlight',
+    selected_text: pattern,
+    selection_rect: null,
+    ai_analysis_json: JSON.stringify({
+      type: 'sentence_pattern', pattern, parts, explanation, example,
+    }),
+  });
 }
 
 export async function deleteSentencePattern(id: string): Promise<void> {
@@ -281,7 +274,7 @@ interface PenStrokeData {
 }
 
 interface PenStroke extends PenStrokeData {
-  id: string;
+  id: number;
   createdAt: string;
 }
 
@@ -313,8 +306,6 @@ export async function getPenStrokes(sourceId: string): Promise<PenStroke[]> {
 }
 
 export async function createPenStroke(sourceId: string, strokeData: PenStrokeData): Promise<PenStroke> {
-  const { data: { user } } = await supabase.auth.getUser();
-
   const selectionRect = JSON.stringify({
     type: 'pen_stroke',
     points: strokeData.points,
@@ -324,20 +315,13 @@ export async function createPenStroke(sourceId: string, strokeData: PenStrokeDat
     page: strokeData.page,
   });
 
-  const { data, error } = await supabase
-    .from('annotations')
-    .insert({
-      user_id: user!.id,
-      source_id: sourceId,
-      type: 'highlight',
-      selected_text: null,
-      ai_analysis_json: null,
-      selection_rect: selectionRect,
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
+  const data = await createAnnotation({
+    source_id: sourceId,
+    type: 'highlight',
+    selected_text: null,
+    ai_analysis_json: null,
+    selection_rect: selectionRect,
+  });
 
   const rect = safeJsonParse(data.selection_rect, {} as SelectionRect);
   return {

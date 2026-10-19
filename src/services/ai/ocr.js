@@ -1,4 +1,5 @@
 import { logError } from '../../utils/errors';
+import { abortable, loadImage } from '../../utils/abort';
 
 // Dynamically import tesseract.js to avoid bundling in main chunk
 let Tesseract = null;
@@ -10,31 +11,43 @@ async function loadTesseract() {
   return Tesseract;
 }
 
-// Shared OCR worker reused across pages so we don't pay the (30-90s for large PDFs)
-// re-initialization cost per page. Callers must invoke terminateOcrWorker() when done.
-let ocrWorker = null;
-async function getOcrWorker() {
-  if (!ocrWorker) {
-    const tess = await loadTesseract();
-    ocrWorker = await tess.createWorker('eng', 1);
-  }
-  return ocrWorker;
-}
-
-/**
- * Terminate the shared OCR worker and release its Web Worker + WASM memory.
- * Safe to call when no worker exists. Call once after a batch (or in a finally).
- */
-export async function terminateOcrWorker() {
-  if (ocrWorker) {
-    const worker = ocrWorker;
-    ocrWorker = null;
-    try {
-      await worker.terminate();
-    } catch {
-      // ignore terminate errors (worker may already be gone)
-    }
-  }
+// Reuse one worker per import, not globally: cancelling an older import must
+// never terminate the worker belonging to a newly opened upload dialog.
+export function createOcrSession(signal) {
+  let pendingWorker;
+  let worker;
+  let closed = false;
+  const terminate = () => {
+    closed = true;
+    signal?.removeEventListener('abort', terminate);
+    if (!worker) return Promise.resolve();
+    const current = worker;
+    worker = null;
+    return current.terminate().catch(() => {});
+  };
+  signal?.addEventListener('abort', terminate, { once: true });
+  return {
+    terminate,
+    async recognize(image) {
+      signal?.throwIfAborted();
+      if (closed) throw new DOMException('OCR session closed', 'AbortError');
+      if (!pendingWorker) {
+        pendingWorker = loadTesseract().then(async tess => {
+          signal?.throwIfAborted();
+          const created = await tess.createWorker('eng', 1);
+          if (closed || signal?.aborted) {
+            await created.terminate();
+            throw new DOMException('OCR cancelled', 'AbortError');
+          }
+          worker = created;
+          return created;
+        });
+      }
+      const ready = await abortable(pendingWorker, signal);
+      signal?.throwIfAborted();
+      return abortable(ready.recognize(image, {}, { text: true, blocks: true }), signal);
+    },
+  };
 }
 
 /**
@@ -242,19 +255,12 @@ function deduplicateWords(words) {
  * Extract text with word-level bounding boxes (Tesseract.js v7)
  * Automatically splits large images into strips to avoid WASM memory limits
  */
-export async function extractTextWithWordPositions(base64Image) {
+export async function extractTextWithWordPositions(base64Image, session, signal) {
+  const ownedSession = session || createOcrSession(signal);
   try {
-    const img = new Image();
-    const imgLoadPromise = new Promise((resolve) => {
-      img.onload = () => resolve({ width: img.width, height: img.height });
-      img.onerror = () => resolve({ width: 1, height: 1 });
-      img.src = base64Image;
-    });
-    const { width: imageWidth, height: imageHeight } = await imgLoadPromise;
+    const img = await loadImage(base64Image, signal);
+    const { width: imageWidth, height: imageHeight } = img;
     console.log('[OCR-Extract] Image dimensions:', imageWidth, 'x', imageHeight);
-
-    // Reuse the shared worker across pages; terminateOcrWorker() releases it after the batch.
-    const worker = await getOcrWorker();
 
     let allWords = [];
     let fullText = '';
@@ -265,12 +271,13 @@ export async function extractTextWithWordPositions(base64Image) {
       console.log(`[OCR-Extract] Image too tall, splitting into ${sliceCount} slices`);
 
       for (let offsetY = 0; offsetY < imageHeight; offsetY += MAX_SLICE_HEIGHT - SLICE_OVERLAP) {
+        signal?.throwIfAborted();
         const sliceHeight = Math.min(MAX_SLICE_HEIGHT, imageHeight - offsetY);
         const sliceIndex = Math.floor(offsetY / (MAX_SLICE_HEIGHT - SLICE_OVERLAP));
         console.log(`[OCR-Extract] Processing slice ${sliceIndex + 1}/${sliceCount} (y:${offsetY}, h:${sliceHeight})`);
 
         const sliceBase64 = cropImageSlice(img, offsetY, sliceHeight, imageWidth);
-        const result = await worker.recognize(sliceBase64, {}, { text: true, blocks: true });
+        const result = await ownedSession.recognize(sliceBase64);
 
         const sliceWords = extractWordsFromResult(result.data);
         // Offset word y coordinates back to original image space
@@ -291,7 +298,7 @@ export async function extractTextWithWordPositions(base64Image) {
       console.log(`[OCR-Extract] After dedup: ${allWords.length} words`);
     } else {
       // Normal path for images within size limits
-      const result = await worker.recognize(base64Image, {}, { text: true, blocks: true });
+      const result = await ownedSession.recognize(base64Image);
       allWords = extractWordsFromResult(result.data);
       fullText = result.data.text || '';
     }
@@ -328,7 +335,10 @@ export async function extractTextWithWordPositions(base64Image) {
       imageSize: { width: imageWidth, height: imageHeight },
     };
   } catch (err) {
+    signal?.throwIfAborted();
     throw new Error(`Tesseract OCR failed: ${err.message}`);
+  } finally {
+    if (!session) await ownedSession.terminate();
   }
 }
 

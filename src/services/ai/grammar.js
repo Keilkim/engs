@@ -17,7 +17,7 @@ function hasTag(tags, ...targetTags) {
   }
 
   if (typeof tags === 'object') {
-    return targetTags.some(target => tags[target] === true || tags.hasOwnProperty(target));
+    return targetTags.some(target => tags[target] === true || Object.prototype.hasOwnProperty.call(tags, target));
   }
 
   return false;

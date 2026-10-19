@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { calculateModalPosition, getArrowClass, getMobileSafeAreaBottom } from '../../utils/positioning';
 import { cleanDisplayText } from '../../utils/textUtils';
 import { useTranslation } from '../../i18n';
@@ -35,7 +35,6 @@ export default function WordQuickMenu({
   // Optional source sentence for context/recall (omitted when unavailable)
   sentence,
 }) {
-  const isYouTube = sourceType === 'youtube';
   const { ko } = useTranslation();
 
   // Vocabulary tokens arrive straight from OCR / caption text and often carry
@@ -53,7 +52,6 @@ export default function WordQuickMenu({
       ? sentenceWords.map((w) => (typeof w === 'string' ? w : w?.text || '')).join(' ').replace(/\s+/g, ' ').trim()
       : undefined);
   const [dynamicPosition, setDynamicPosition] = useState(null);
-  const [positionReady, setPositionReady] = useState(false);
   const rafRef = useRef(null);
   const modalRef = useRef(null);
   const backdropRef = useRef(null);
@@ -103,12 +101,13 @@ export default function WordQuickMenu({
 
   const vocab = useWordLookup({ word: vocabWord, wordBbox, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp, sceneStart, sceneEnd, sentence: contextSentence });
   const grammar = useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, currentPage, onSaved, onClose, sourceType, segmentIndex, wordIndex, timestamp, sceneStart, sceneEnd });
+  const { reset: resetVocab, loadExisting: loadVocab, handleLookup } = vocab;
+  const { reset: resetGrammar, loadExisting: loadGrammar, handleAnalyze } = grammar;
 
   // Position update (wordBbox % → viewport coords)
   const updatePosition = useCallback(() => {
     if (!wordBbox || !containerRef?.current) {
       setDynamicPosition(null);
-      if (position) setPositionReady(true);
       return;
     }
 
@@ -123,18 +122,15 @@ export default function WordQuickMenu({
       : containerRect.top + (topY * containerRect.height / 100) - 12;
 
     setDynamicPosition({ x: newX, y: newY });
-    setPositionReady(true);
-  }, [wordBbox, containerRef, placement, position]);
+  }, [wordBbox, containerRef, placement]);
 
-  // Update position on zoom/pan change
-  useEffect(() => {
+  // The transformed DOM bounds are only available after commit. Measure before
+  // paint so opening/repositioning the menu cannot flash its previous location.
+  useLayoutEffect(() => {
     if (!isOpen) return;
-    if (wordBbox && containerRef?.current) {
-      updatePosition();
-    } else if (position) {
-      setPositionReady(true);
-    }
-  }, [isOpen, wordBbox, containerRef, updatePosition, zoomScale, panOffset, position]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Synchronize measured DOM geometry before paint.
+    updatePosition();
+  }, [isOpen, updatePosition, zoomScale, panOffset]);
 
   // Update position on scroll/resize
   useEffect(() => {
@@ -158,9 +154,8 @@ export default function WordQuickMenu({
   // Load data on open / reset on close
   useEffect(() => {
     if (!isOpen) {
-      vocab.reset();
-      grammar.reset();
-      setPositionReady(false);
+      resetVocab();
+      resetGrammar();
       return;
     }
 
@@ -168,9 +163,9 @@ export default function WordQuickMenu({
       try {
         const data = JSON.parse(existingAnnotation.ai_analysis_json || '{}');
         if (data.type === 'grammar') {
-          grammar.loadExisting(data);
+          loadGrammar(data);
         } else {
-          vocab.loadExisting(data);
+          loadVocab(data);
         }
       } catch {
         // Existing annotation data corrupt - no-op
@@ -179,11 +174,11 @@ export default function WordQuickMenu({
     }
 
     if (isGrammarMode && word) {
-      grammar.handleAnalyze();
+      handleAnalyze();
     } else if (!isGrammarMode && word) {
-      vocab.handleLookup();
+      handleLookup();
     }
-  }, [isOpen, word, existingAnnotation, isGrammarMode]);
+  }, [isOpen, word, existingAnnotation, isGrammarMode, resetVocab, resetGrammar, loadVocab, loadGrammar, handleAnalyze, handleLookup]);
 
   if (!isOpen) return null;
 
@@ -193,6 +188,7 @@ export default function WordQuickMenu({
   const safeAreaBottom = getMobileSafeAreaBottom();
   const menuWidth = isGrammarMode ? Math.min(340, vw - 24) : Math.min(300, vw - 24);
   const effectivePosition = dynamicPosition || position;
+  const positionReady = Boolean(effectivePosition);
 
   const { left, top, transform, arrowLeft } = calculateModalPosition({
     position: effectivePosition,

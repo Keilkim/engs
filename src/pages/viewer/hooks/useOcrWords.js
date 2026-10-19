@@ -1,36 +1,31 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 
 /**
  * Hook for managing OCR word data
  */
 export function useOcrWords(source, currentPage) {
-  const [ocrWords, setOcrWords] = useState([]);
-
-  // Load OCR words for current page from source.ocr_data
-  useEffect(() => {
-    if (!source?.ocr_data) {
-      setOcrWords([]);
-      return;
-    }
+  const rawOcr = source?.ocr_data;
+  // Derive during rendering: a page change must never use the previous page's
+  // hitboxes for one frame while an effect catches up.
+  const ocrWords = useMemo(() => {
+    if (!rawOcr) return [];
 
     try {
-      const ocrData = typeof source.ocr_data === 'string'
-        ? JSON.parse(source.ocr_data)
-        : source.ocr_data;
-
-      const pageData = ocrData.pages?.find(p => p.pageIndex === currentPage);
-      setOcrWords(pageData?.words || []);
-      console.log(`[OCR] Page ${currentPage} loaded:`, pageData?.words?.length || 0, 'words');
+      const ocrData = typeof rawOcr === 'string' ? JSON.parse(rawOcr) : rawOcr;
+      const pages = Array.isArray(ocrData?.pages) ? ocrData.pages : [];
+      const pageData = pages.find(page => page?.pageIndex === currentPage);
+      return Array.isArray(pageData?.words) ? pageData.words : [];
     } catch (err) {
       console.error('Failed to parse OCR data:', err);
-      setOcrWords([]);
+      return [];
     }
-  }, [source, currentPage]);
+  }, [rawOcr, currentPage]);
 
   // Find word at point (x, y in %)
   const findWordAtPoint = useCallback((x, y) => {
     for (const word of ocrWords) {
-      const { bbox } = word;
+      const bbox = word?.bbox;
+      if (!bbox) continue;
       if (
         x >= bbox.x &&
         x <= bbox.x + bbox.width &&
@@ -45,7 +40,6 @@ export function useOcrWords(source, currentPage) {
 
   return {
     ocrWords,
-    setOcrWords,
     findWordAtPoint,
   };
 }

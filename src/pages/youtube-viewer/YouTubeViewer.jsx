@@ -159,7 +159,6 @@ export default function YouTubeViewer() {
   // Track if video was playing before pause (to resume on menu close)
   const wasPlayingRef = useRef(false);
   const [isGrammarMode, setIsGrammarMode] = useState(false);
-  const [selectedSentenceText, setSelectedSentenceText] = useState(null);
 
   useEffect(() => {
     async function loadSource() {
@@ -320,7 +319,6 @@ export default function YouTubeViewer() {
     const anchor = computeMenuAnchor(rect, 340);
     setSelectedWord(sentenceText);
     setIsGrammarMode(true);
-    setSelectedSentenceText(sentenceText);
     setWordPosition({ x: anchor.x, y: anchor.y });
     setMenuPlacement(anchor.placement);
     setSelectedSegmentIndex(scene.storedIndex);
@@ -343,7 +341,6 @@ export default function YouTubeViewer() {
     setSelectedSceneEnd(null);
     setExistingAnnotationForWord(null);
     setIsGrammarMode(false);
-    setSelectedSentenceText(null);
 
     // Resume playback if it was playing before
     if (wasPlayingRef.current) {
@@ -425,8 +422,8 @@ export default function YouTubeViewer() {
     try {
       await deleteSource(id);
       navigate('/');
-    } catch {
-      alert('삭제에 실패했습니다');
+    } catch (error) {
+      alert(error?.message || '삭제에 실패했습니다. 다시 시도해 주세요.');
     }
   };
 

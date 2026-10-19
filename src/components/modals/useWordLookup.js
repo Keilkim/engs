@@ -44,7 +44,7 @@ export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, 
     setPhonetic(typeof data.phonetic === 'string' ? data.phonetic : '');
   }, []);
 
-  async function handleLookup() {
+  const handleLookup = useCallback(async () => {
     if (!word) return;
     const seq = ++lookupSeqRef.current; // supersedes any earlier in-flight lookup
     setDefinition(''); // clear stale so nothing old flashes while loading
@@ -72,7 +72,7 @@ export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, 
     } finally {
       if (seq === lookupSeqRef.current) setLoading(false);
     }
-  }
+  }, [word]);
 
   async function handleSave() {
     if (!word || loading) return;
@@ -154,7 +154,9 @@ export function useWordLookup({ word, wordBbox, sourceId, currentPage, onSaved, 
       // keep the menu open, show the error and alert the user so they can retry.
       setError('saveFailed');
       setLoading(false);
-      alert('저장에 실패했습니다. 네트워크를 확인하고 다시 시도해 주세요.');
+      alert(err?.code === 'ANNOTATION_CLEANUP_PENDING'
+        ? err.message
+        : '저장에 실패했습니다. 네트워크를 확인하고 다시 시도해 주세요.');
     }
   }
 

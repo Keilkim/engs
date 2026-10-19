@@ -102,7 +102,7 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
     setGrammarData(data);
   }, []);
 
-  async function handleAnalyze() {
+  const handleAnalyze = useCallback(async () => {
     if (!word) return;
     const seq = ++analyzeSeqRef.current; // supersedes any earlier in-flight analysis
     setError('');
@@ -129,7 +129,7 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
     } finally {
       if (seq === analyzeSeqRef.current) setLoading(false);
     }
-  }
+  }, [word]);
 
   function togglePattern(index) {
     setCheckedPatterns(prev =>
@@ -184,9 +184,8 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
         }),
       };
 
-      // Await persistence so createAnnotation + its review_items insert either
-      // both succeed (hand the real row to the optimistic list) or the failure
-      // is surfaced to the user — no more silent data loss.
+      // The service confirms both writes and compensates a failed review insert
+      // before this row can enter the displayed annotation list.
       const saved = await createAnnotation(annotationData);
       onSaved?.(saved);
       onClose(true);
@@ -196,7 +195,9 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
       // open and alert the user so they can retry.
       setError('saveFailed');
       setLoading(false);
-      alert('저장에 실패했습니다. 네트워크를 확인하고 다시 시도해 주세요.');
+      alert(err?.code === 'ANNOTATION_CLEANUP_PENDING'
+        ? err.message
+        : '저장에 실패했습니다. 네트워크를 확인하고 다시 시도해 주세요.');
     }
   }
 

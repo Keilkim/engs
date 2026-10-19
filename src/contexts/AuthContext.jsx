@@ -1,8 +1,10 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, Fragment, useContext, useEffect, useState } from 'react';
 import { supabase } from '../services/supabase';
 
 const AuthContext = createContext({});
 
+// This hook only reads the stable module context; it does not hold refresh state.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   return useContext(AuthContext);
 }
@@ -12,27 +14,32 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
+    let authEvents = 0;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        authEvents += 1;
+        if (active) setUser(session?.user ?? null);
+      }
+    );
+    const initialVersion = authEvents;
     // 현재 세션 확인 — 실패(예: env 미설정)해도 로딩이 멈추지 않도록 catch/finally
     supabase.auth
       .getSession()
       .then(({ data: { session } }) => {
-        setUser(session?.user ?? null);
+        if (active && authEvents === initialVersion) setUser(session?.user ?? null);
       })
       .catch(() => {
-        setUser(null);
+        if (active && authEvents === initialVersion) setUser(null);
       })
       .finally(() => {
-        setLoading(false);
+        if (active) setLoading(false);
       });
 
-    // 인증 상태 변화 구독
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user ?? null);
-      }
-    );
-
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const value = {
@@ -43,7 +50,9 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {loading ? <div className="loading-screen">Loading...</div> : children}
+      {loading ? <div className="loading-screen">Loading...</div> : (
+        <Fragment key={user?.id ?? 'signed-out'}>{children}</Fragment>
+      )}
     </AuthContext.Provider>
   );
 }

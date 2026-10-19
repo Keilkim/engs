@@ -249,7 +249,12 @@ button:not(:disabled):active { transform: scale(.98); }
 .source-pin-btn { left: 10px; top: 10px; font-size: 20px; }
 .source-delete-btn { right: 10px; top: 10px; font-size: 21px; }
 .source-pin-btn.active { background: var(--dust-orange); color: #302E2B; }
-.source-pin-btn:hover, .source-delete-btn:hover { background: var(--color-base-sub); color: var(--dust-ink); }
+/* Touch browsers keep :hover after a tap. Selection must stay readable while
+   hovered/focused, with the keyboard focus ring preserved. */
+@media (hover: hover) and (pointer: fine) {
+  .source-pin-btn:not(.active):hover, .source-delete-btn:hover { background: var(--color-base-sub); color: var(--dust-ink); }
+}
+.prepare-cancel-button { display: block; margin: 12px auto 0; padding: 8px 16px; border: 1px solid var(--color-text-sub); border-radius: 8px; color: var(--color-text); }
 .source-select-checkbox { z-index: 4; pointer-events: none; }
 .delete-confirm-overlay { z-index: 6; }
 .source-card.select-mode.selected { box-shadow: var(--focus-ring); }

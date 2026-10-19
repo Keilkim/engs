@@ -62,7 +62,7 @@ export function useVoiceInput({ onAutoSend } = {}) {
 
     // Clean up existing recognition if any (allows restart without waiting for state)
     if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch {}
+      try { recognitionRef.current.abort(); } catch { /* Already stopped by the browser. */ }
       recognitionRef.current = null;
     }
 

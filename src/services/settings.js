@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import { safeJsonParse } from '../utils/errors';
-import { storagePathFromPublicUrl } from './source';
+import { storagePathFromPublicUrl, clearSourceCaptionsCache } from './source';
+import { captureSessionScope, assertSessionScope } from './sessionScope';
+import { removeUserStorageFiles } from '../lib/storageCleanup';
 
 // Max ids per PostgREST .in() filter to avoid URL length limits on large deletes
 const DELETE_CHUNK_SIZE = 200;
@@ -81,61 +83,51 @@ export function getAllSettings() {
 
 // Reset all sources for user
 export async function resetAllSources() {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('User not authenticated');
-
-  // Collect uploaded storage objects before removing rows so we can delete the
-  // actual files afterwards (otherwise they linger and keep accruing storage cost).
-  const { data: sourceRows } = await supabase
-    .from('sources')
-    .select('type, file_path')
-    .eq('user_id', user.id);
-
-  // Delete chat logs. sources.source_id is ON DELETE SET NULL, so deleting sources
-  // alone would leave orphaned chat rows haunting the general AI-tutor history.
-  const { error: chatError } = await supabase
-    .from('chat_logs')
-    .delete()
-    .eq('user_id', user.id);
-
-  if (chatError) throw chatError;
-
-  // Delete all annotations first (foreign key constraint)
-  const { error: annotationError } = await supabase
-    .from('annotations')
-    .delete()
-    .eq('user_id', user.id);
-
-  if (annotationError) throw annotationError;
-
-  // Delete all review items
-  const { error: reviewError } = await supabase
-    .from('review_items')
-    .delete()
-    .eq('user_id', user.id);
-
-  if (reviewError) throw reviewError;
-
-  // Delete all sources
-  const { error: sourceError } = await supabase
-    .from('sources')
-    .delete()
-    .eq('user_id', user.id);
-
-  if (sourceError) throw sourceError;
-
-  // Best-effort storage cleanup for uploaded pdf/image objects.
-  const paths = (sourceRows || [])
-    .filter((r) => r.type === 'pdf' || r.type === 'image')
-    .map((r) => storagePathFromPublicUrl(r.file_path))
-    .filter(Boolean);
-
-  if (paths.length > 0) {
-    for (let i = 0; i < paths.length; i += DELETE_CHUNK_SIZE) {
-      await supabase.storage.from('sources').remove(paths.slice(i, i + DELETE_CHUNK_SIZE));
+  const scope = await captureSessionScope();
+  clearSourceCaptionsCache();
+  // Includes files left by failed imports, which have no source row to enumerate.
+  await removeUserStorageFiles(supabase, scope.userId);
+  assertSessionScope(scope);
+  let previousBatch = '';
+  // Re-read the first batch after each deletion, so PostgREST's row limit cannot
+  // hide files and deleting rows never shifts an offset past unprocessed rows.
+  while (true) {
+    const { data: rows, error } = await supabase.from('sources')
+      .select('id, type, file_path').eq('user_id', scope.userId)
+      .order('id', { ascending: true }).limit(DELETE_CHUNK_SIZE);
+    assertSessionScope(scope);
+    if (error) throw error;
+    if (!rows?.length) break;
+    const batch = rows.map(row => row.id).join(',');
+    if (batch === previousBatch) throw new Error('자료 삭제가 완료되지 않았어요. 다시 시도해 주세요.');
+    previousBatch = batch;
+    const paths = [...new Set(rows
+      .filter(row => row.type === 'pdf' || row.type === 'image')
+      .map(row => storagePathFromPublicUrl(row.file_path)).filter(Boolean))];
+    if (paths.length) {
+      const { error: storageError } = await supabase.storage.from('sources').remove(paths);
+      assertSessionScope(scope);
+      if (storageError) throw storageError;
     }
+    const ids = rows.map(row => row.id);
+    const { error: chatError } = await supabase.from('chat_logs').delete()
+      .eq('user_id', scope.userId).in('source_id', ids);
+    assertSessionScope(scope);
+    if (chatError) throw chatError;
+    const { error: sourceError } = await supabase.from('sources').delete()
+      .eq('user_id', scope.userId).in('id', ids);
+    assertSessionScope(scope);
+    if (sourceError) throw sourceError;
   }
 
+  // Source annotations/reviews cascade. The project reset also clears manual
+  // dictionary entries and the general tutor history, as before.
+  for (const table of ['annotations', 'review_items', 'chat_logs']) {
+    const { error } = await supabase.from(table).delete().eq('user_id', scope.userId);
+    assertSessionScope(scope);
+    if (error) throw error;
+  }
+  clearSourceCaptionsCache();
   return true;
 }
 

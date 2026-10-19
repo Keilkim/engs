@@ -2,6 +2,8 @@ import { getSetting, SETTINGS_KEYS } from '../settings';
 import { getVocabulary, getGrammarPatterns } from '../annotation';
 import { fetchGemini, fetchGeminiStream, LANGUAGE_NAMES } from './config';
 import { safeJsonParse, logError } from '../../utils/errors';
+import { captureSessionScope, assertSessionScope, subscribeSessionScope } from '../sessionScope';
+import { abortable } from '../../utils/abort';
 
 /**
  * Extract text from OCR data with page information
@@ -48,25 +50,40 @@ function truncateContext(context) {
 // Session cache for the My Dictionary context so we don't do 2 DB round-trips
 // on every single message. Short TTL so newly saved words still appear soon.
 const MY_DICT_TTL = 5 * 60 * 1000;
-let myDictCache = { lang: null, value: '', ts: 0 };
+let myDictCache = null;
+subscribeSessionScope(() => { myDictCache = null; });
+
+async function chatScope(options = {}) {
+  const sessionScope = options.sessionScope || await captureSessionScope();
+  assertSessionScope(sessionScope);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, sessionScope.signal])
+    : sessionScope.signal;
+  signal.throwIfAborted();
+  return { sessionScope, signal };
+}
 
 /**
  * Build context from user's My Dictionary (vocabulary + grammar patterns)
  */
-async function buildMyDictionaryContext(chatLang) {
+async function buildMyDictionaryContext(chatLang, { sessionScope, signal }) {
+  assertSessionScope(sessionScope);
+  signal.throwIfAborted();
   const now = Date.now();
-  if (myDictCache.lang === chatLang && now - myDictCache.ts < MY_DICT_TTL) {
+  if (myDictCache?.sessionScope === sessionScope && myDictCache.lang === chatLang && now - myDictCache.ts < MY_DICT_TTL) {
     return myDictCache.value;
   }
 
   try {
-    const [vocabItems, grammarItems] = await Promise.all([
+    const [vocabItems, grammarItems] = await abortable(Promise.all([
       getVocabulary(),
       getGrammarPatterns(),
-    ]);
+    ]), signal);
+    assertSessionScope(sessionScope);
+    signal.throwIfAborted();
 
     if (vocabItems.length === 0 && grammarItems.length === 0) {
-      myDictCache = { lang: chatLang, value: '', ts: now };
+      myDictCache = { sessionScope, lang: chatLang, value: '', ts: now };
       return '';
     }
 
@@ -113,9 +130,11 @@ Saved grammar patterns: ${grammarList.join(' / ') || 'None'}
     };
 
     const value = contextByLang[chatLang] || contextByLang.Korean;
-    myDictCache = { lang: chatLang, value, ts: now };
+    myDictCache = { sessionScope, lang: chatLang, value, ts: now };
     return value;
   } catch (err) {
+    assertSessionScope(sessionScope);
+    signal.throwIfAborted();
     logError('buildMyDictionaryContext', err);
     return '';
   }
@@ -295,10 +314,11 @@ Format your response as:
 /**
  * AI chat (with conversation history support)
  */
-export async function chat(message, context = '', conversationHistory = []) {
+export async function chat(message, context = '', conversationHistory = [], options = {}) {
+  const requestScope = await chatScope(options);
   const chatLang = getSetting(SETTINGS_KEYS.AI_CHAT_LANGUAGE, 'Korean');
   const level = getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate');
-  const myDictContext = await buildMyDictionaryContext(chatLang);
+  const myDictContext = await buildMyDictionaryContext(chatLang, requestScope);
 
   const systemPrompts = getSystemPrompts(truncateContext(context), level);
   const systemPrompt = (systemPrompts[chatLang] || systemPrompts.Korean) + myDictContext;
@@ -317,18 +337,21 @@ export async function chat(message, context = '', conversationHistory = []) {
       temperature: 0.7,
       maxOutputTokens: 1024,
     },
-  });
+  }, requestScope);
 
+  requestScope.signal.throwIfAborted();
   return data.candidates[0].content.parts[0].text;
 }
 
 /**
  * Streaming AI chat (real-time typing effect)
  */
-export async function chatStream(message, context = '', conversationHistory = [], onChunk, { languageOverride, conversationMode } = {}) {
+export async function chatStream(message, context = '', conversationHistory = [], onChunk, { languageOverride, conversationMode, ...options } = {}) {
+  const requestScope = await chatScope(options);
+  const { signal } = requestScope;
   const chatLang = languageOverride || getSetting(SETTINGS_KEYS.AI_CHAT_LANGUAGE, 'Korean');
   const level = getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate');
-  const myDictContext = await buildMyDictionaryContext(chatLang);
+  const myDictContext = await buildMyDictionaryContext(chatLang, requestScope);
 
   const systemPrompts = getSystemPrompts(truncateContext(context), level);
   let systemPrompt = (systemPrompts[chatLang] || systemPrompts.Korean) + myDictContext;
@@ -357,7 +380,9 @@ You are having a real-time voice conversation with the user for English practice
       temperature: 0.7,
       maxOutputTokens: 1024,
     },
-  });
+  }, requestScope);
+
+  signal.throwIfAborted();
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -367,6 +392,7 @@ You are having a real-time voice conversation with the user for English practice
   // Parse a single SSE line ("data: {...}"). Tolerant of trailing \r and
   // keep-alive/comment lines.
   const processLine = (rawLine) => {
+    signal.throwIfAborted();
     const line = rawLine.replace(/\r$/, '');
     if (!line.startsWith('data: ')) return;
 
@@ -387,7 +413,8 @@ You are having a real-time voice conversation with the user for English practice
 
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await abortable(reader.read(), signal);
+      signal.throwIfAborted();
       if (done) break;
 
       // Carry an incomplete trailing line over to the next read so a line split
@@ -405,6 +432,9 @@ You are having a real-time voice conversation with the user for English practice
       for (const line of buffer.split('\n')) processLine(line);
     }
   } finally {
+    // Cancelling the reader also settles any pending read in browsers whose
+    // fetch implementation does not interrupt it immediately on abort.
+    if (signal.aborted) await reader.cancel(signal.reason).catch(() => {});
     reader.releaseLock();
   }
 

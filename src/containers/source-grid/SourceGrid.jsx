@@ -10,6 +10,7 @@ export default function SourceGrid({ sources, loading, columnCount = 2, onSource
   const navigate = useNavigate();
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   // 즐겨찾기 토글
   const handlePinToggle = useCallback((e, source) => {
@@ -61,19 +62,21 @@ export default function SourceGrid({ sources, loading, columnCount = 2, onSource
   function handleDeleteClick(e, source) {
     e.stopPropagation();
     setDeleteConfirm(source.id);
+    setDeleteError('');
   }
 
   async function handleConfirmDelete(e, sourceId) {
     e.stopPropagation();
     setDeleting(true);
+    setDeleteError('');
     try {
       await deleteSource(sourceId);
       setDeleteConfirm(null);
       if (onSourceDeleted) {
         onSourceDeleted();
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      setDeleteError(error?.message || '삭제하지 못했어요. 다시 시도해 주세요.');
     } finally {
       setDeleting(false);
     }
@@ -161,6 +164,7 @@ export default function SourceGrid({ sources, loading, columnCount = 2, onSource
               {isConfirming && (
                 <div className="delete-confirm-overlay">
                   <p><TranslatableText textKey="source.deleteConfirm">Delete this source?</TranslatableText></p>
+                  {deleteError && <p role="alert">{deleteError}</p>}
                   <div className="delete-confirm-actions">
                     <button
                       className="cancel-btn"

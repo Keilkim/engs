@@ -15,8 +15,6 @@ export default function PenCanvas({
   penColor,
   strokeWidth = 2,
   currentPage,
-  zoomScale = 1,
-  panOffset = { x: 0, y: 0 },
   strokes = [],
   onStrokeComplete,
   onStrokesDelete,

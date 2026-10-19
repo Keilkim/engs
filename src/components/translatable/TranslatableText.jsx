@@ -1,3 +1,4 @@
+import { createElement } from 'react';
 import { useTranslation } from '../../i18n';
 
 export default function TranslatableText({
@@ -10,9 +11,5 @@ export default function TranslatableText({
   const { t } = useTranslation();
   const displayText = children || t(textKey);
 
-  return (
-    <Component className={className} style={style}>
-      {displayText}
-    </Component>
-  );
+  return createElement(Component, { className, style }, displayText);
 }

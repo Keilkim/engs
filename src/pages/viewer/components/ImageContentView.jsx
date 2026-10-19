@@ -301,10 +301,12 @@ export default function ImageContentView({
           className="article-content"
           dangerouslySetInnerHTML={{
             // Sanitize the external article HTML (after highlight <mark>s are
-            // inserted) to prevent stored XSS. mark/sup + data-* attributes used
-            // by the highlight click handlers are preserved.
+            // inserted). Legacy article links become plain text so tapping,
+            // long-pressing or keyboard activation cannot leave the lesson.
+            // Saved vocabulary/pattern marks remain interactive.
             __html: DOMPurify.sanitize(highlightVocabularyWords(source.content), {
-              ADD_ATTR: ['data-vocab-id', 'data-pattern-id', 'data-pattern-idx', 'target'],
+              ADD_ATTR: ['data-vocab-id', 'data-pattern-id', 'data-pattern-idx'],
+              FORBID_TAGS: ['a', 'form', 'input', 'button', 'select', 'textarea'],
             }),
           }}
         />

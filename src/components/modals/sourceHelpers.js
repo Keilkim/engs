@@ -1,4 +1,32 @@
-import { extractTextWithWordPositions, terminateOcrWorker } from '../../services/ai/ocr';
+import { extractTextWithWordPositions, createOcrSession } from '../../services/ai/ocr';
+import { captureWebpageScreenshot } from '../../services/source';
+import { loadImage, readBlobAsDataURL } from '../../utils/abort';
+
+// Build the same learning material for new links and legacy article recovery.
+// Prepare everything before writing, so a failed capture/OCR leaves saved data intact.
+export async function prepareWebCapture(url, onProgress, signal) {
+  signal?.throwIfAborted();
+  onProgress?.('Capturing screenshot...');
+  const { image } = await captureWebpageScreenshot(url.trim(), signal);
+  signal?.throwIfAborted();
+  const pages = [image];
+
+  onProgress?.('Generating thumbnail...');
+  const screenshot = await generateThumbnailFromPage(image, signal);
+  if (!screenshot) throw new Error('웹페이지 이미지를 읽지 못했어요. 다시 시도해 주세요.');
+
+  const ocrData = await ocrAllPages(pages, onProgress, signal);
+  if (!ocrData.pages.some(page => page.words.length > 0)) {
+    throw new Error('웹페이지에서 글자를 인식하지 못했어요. 다시 시도해 주세요.');
+  }
+
+  return {
+    type: 'screenshot',
+    pages: JSON.stringify(pages),
+    screenshot,
+    ocr_data: ocrData,
+  };
+}
 
 // Crop image to 3:4 thumbnail (matching card aspect-ratio)
 export function cropThumbnailFromImage(img) {
@@ -19,41 +47,38 @@ export function cropThumbnailFromImage(img) {
 // Generate thumbnail from image file.
 // Resolves null on load/decode failure so callers can proceed without a thumbnail
 // instead of hanging forever on an unresolved promise.
-export async function generateImageThumbnail(file) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => resolve(cropThumbnailFromImage(img));
-      img.onerror = () => resolve(null);
-      img.src = e.target.result;
-    };
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(file);
-  });
+export async function generateImageThumbnail(file, signal) {
+  const image = await readBlobAsDataURL(file, signal);
+  return generateThumbnailFromPage(image, signal);
 }
 
 // Generate thumbnail from base64 page image.
 // Resolves null on load/decode failure (see note above).
-export function generateThumbnailFromPage(pageImage) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve(cropThumbnailFromImage(img));
-    img.onerror = () => resolve(null);
-    img.src = pageImage;
-  });
+export async function generateThumbnailFromPage(pageImage, signal) {
+  try {
+    const img = await loadImage(pageImage, signal);
+    signal?.throwIfAborted();
+    return cropThumbnailFromImage(img);
+  } catch {
+    signal?.throwIfAborted();
+    return null;
+  }
 }
 
 // OCR all pages and extract word positions
-export async function ocrAllPages(pages, onProgress) {
+export async function ocrAllPages(pages, onProgress, signal) {
+  signal?.throwIfAborted();
   const ocrData = { pages: [] };
+  const session = createOcrSession(signal);
 
   try {
     for (let i = 0; i < pages.length; i++) {
+      signal?.throwIfAborted();
       onProgress?.(`OCR ${i + 1}/${pages.length}...`);
 
       try {
-        const result = await extractTextWithWordPositions(pages[i]);
+        const result = await extractTextWithWordPositions(pages[i], session, signal);
+        signal?.throwIfAborted();
         if (result && result.words) {
           ocrData.pages.push({
             pageIndex: i,
@@ -71,14 +96,13 @@ export async function ocrAllPages(pages, onProgress) {
           ocrData.pages.push({ pageIndex: i, words: [] });
         }
       } catch {
+        signal?.throwIfAborted();
         ocrData.pages.push({ pageIndex: i, words: [] });
       }
     }
 
     return ocrData;
   } finally {
-    // Terminate the shared OCR worker once, after all pages are done or on failure,
-    // so the Web Worker + traineddata WASM memory is always released.
-    await terminateOcrWorker();
+    await session.terminate();
   }
 }

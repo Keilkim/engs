@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { createSource, createYouTubeSource, uploadFile, captureWebpageScreenshot, captureScreenshot } from '../../services/source';
+import { createSource, createYouTubeSource, uploadFile, deleteSource, removeUploadedFile } from '../../services/source';
 import { convertPdfToImages } from '../../utils/pdfUtils';
-import { generateImageThumbnail, generateThumbnailFromPage, ocrAllPages } from './sourceHelpers';
-import { parseYouTubeUrl, getYouTubeMetadata, fetchYouTubeCaptions, transcribeYouTubeWithWhisper, calculateWhisperCost, isWhisperAvailable, buildWhisperConfirmText, mapWhisperError } from '../../services/ai/youtube';
+import { generateThumbnailFromPage, ocrAllPages, prepareWebCapture } from './sourceHelpers';
+import { parseYouTubeUrl, getYouTubeMetadata, fetchYouTubeCaptions, transcribeYouTubeWithWhisper, isWhisperAvailable, buildWhisperConfirmText, mapWhisperError } from '../../services/ai/youtube';
 import { TranslatableText } from '../translatable';
 import { apiFetch } from '../../services/apiFetch';
+import { readBlobAsDataURL } from '../../utils/abort';
+import { createImportTask } from './importTask';
+import { captureSessionScope, assertSessionScope } from '../../services/sessionScope';
 
 // Discovery-added PDFs ingest only an OVERVIEW (keeps the inline `pages` insert small;
 // interest-matching needs only the top pages). Manual uploads still ingest every page.
@@ -46,6 +49,8 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
   const [loadingStatus, setLoadingStatus] = useState('');
   const [error, setError] = useState('');
   const fileInputRef = useRef(null);
+  const taskRef = useRef(null);
+  const [cancelling, setCancelling] = useState(false);
 
   // Link state (a single link input; YouTube is auto-detected from the URL)
   const [youtubePreview, setYoutubePreview] = useState(null); // { videoId, title, author, thumbnail }
@@ -60,6 +65,19 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
   // stale titleTouched closure). Cleared the moment the user edits the URL manually.
   const kindOverrideRef = useRef(null);
   const forcedTitleRef = useRef(null);
+
+  // Covers parent-driven closing, navigation, and unmount as well as our buttons.
+  useEffect(() => {
+    const sequence = linkSeqRef;
+    return () => {
+      taskRef.current?.cancel();
+      taskRef.current = null;
+      sequence.current++;
+      setLoading(false);
+      setCancelling(false);
+      setLoadingStatus('');
+    };
+  }, [isOpen]);
 
   // Prefill from a shelf (decode or discovery): switch to the link tab and run the
   // same preview flow as a manual paste. Must stay above the early return so hook
@@ -85,73 +103,113 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
     (parseYouTubeUrl(url) ? 'youtube' : isPdfUrl(url) ? 'pdf' : 'web');
   const isYoutube = linkKind === 'youtube';
 
+  async function runImport(work, closeOnSuccess = true) {
+    if (taskRef.current) return;
+    const task = createImportTask({
+      removeSource: id => {
+        assertSessionScope(task.sessionScope);
+        return deleteSource(id, task.sessionScope);
+      },
+      removeUpload: path => {
+        assertSessionScope(task.sessionScope);
+        return removeUploadedFile(path, undefined, task.sessionScope);
+      },
+    });
+    taskRef.current = task;
+    setLoading(true);
+    setCancelling(false);
+    setError('');
+    setWarning('');
+    const report = status => {
+      if (taskRef.current === task && !task.signal.aborted) setLoadingStatus(status);
+    };
+    let succeeded = false;
+    let failure = null;
+    let sessionSignal;
+    try {
+      task.sessionScope = await captureSessionScope();
+      task.signal.throwIfAborted();
+      assertSessionScope(task.sessionScope);
+      sessionSignal = task.sessionScope.signal;
+      sessionSignal.addEventListener('abort', task.cancel, { once: true });
+      await work(task, report);
+      assertSessionScope(task.sessionScope);
+      task.signal.throwIfAborted();
+      succeeded = true;
+    } catch (err) {
+      // A real failure after cancellation (e.g. storage cleanup) still needs to
+      // be shown. AbortError alone is the expected, silent cancellation outcome.
+      if (err?.name !== 'AbortError') failure = err;
+      try {
+        await task.rollback();
+      } catch (cleanupError) {
+        failure = new Error(`저장된 자료를 정리하지 못했어요. 연결을 확인해 주세요. ${cleanupError.message || ''}`);
+      }
+    } finally {
+      sessionSignal?.removeEventListener('abort', task.cancel);
+      if (taskRef.current === task) {
+        taskRef.current = null;
+        setLoading(false);
+        setCancelling(false);
+        setLoadingStatus('');
+        if (failure) setError(failure.message || '자료를 추가하지 못했어요.');
+        else if (succeeded && closeOnSuccess) {
+          onSuccess();
+          handleClose();
+        } else if (task.closeWhenDone) handleClose();
+      }
+    }
+  }
+
+  function cancelImport(closeWhenDone = false) {
+    const task = taskRef.current;
+    if (!task) {
+      if (closeWhenDone) handleClose();
+      return;
+    }
+    task.closeWhenDone ||= closeWhenDone;
+    task.cancel();
+    setCancelling(true);
+    setLoadingStatus('취소 중...');
+  }
+
   async function handleFileUpload(e) {
     const input = e.target;
     const file = input.files[0];
-    // Reset immediately so re-selecting the same file re-fires onChange (allows retry).
     input.value = '';
     if (!file) return;
 
-    setLoading(true);
-    setError('');
-    setWarning('');
-
-    try {
+    await runImport(async (task, report) => {
+      const { signal } = task;
       const fileType = file.type.includes('pdf') ? 'pdf' : 'image';
-      setLoadingStatus('Uploading file...');
-      const { url: fileUrl } = await uploadFile(file);
-
-      let screenshot = null;
-      let pages = null;
-      let ocrData = null;
-
-      if (fileType === 'image') {
-        setLoadingStatus('Generating preview...');
-        screenshot = await generateImageThumbnail(file);
-
-        const fullImage = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = (ev) => resolve(ev.target.result);
-          reader.readAsDataURL(file);
-        });
-        pages = [fullImage];
-        ocrData = await ocrAllPages(pages, setLoadingStatus);
-      } else if (fileType === 'pdf') {
-        try {
-          pages = await convertPdfToImages(file, setLoadingStatus);
-          // Soft warning: large PDFs are stored inline and may exceed the request size limit.
-          if (pages.length > 30) {
-            setWarning(`이 PDF는 ${pages.length}페이지로 용량이 커서 저장에 실패할 수 있어요. 실패하면 더 적은 페이지로 나눠서 올려보세요.`);
-          }
-          if (pages.length > 0) {
-            setLoadingStatus('Generating thumbnail...');
-            screenshot = await generateThumbnailFromPage(pages[0]);
-          }
-          ocrData = await ocrAllPages(pages, setLoadingStatus);
-        } catch (captureErr) {
-          console.warn('Could not convert PDF pages:', captureErr);
-        }
+      // Prepare locally first: conversion failures/cancellation leave no upload.
+      report('Generating preview...');
+      const pages = fileType === 'image'
+        ? [await readBlobAsDataURL(file, signal)]
+        : await convertPdfToImages(file, report, undefined, signal);
+      signal.throwIfAborted();
+      if (!pages.length) throw new Error('파일에서 페이지를 읽지 못했어요.');
+      if (pages.length > 30) {
+        setWarning(`이 PDF는 ${pages.length}페이지로 용량이 커서 저장에 실패할 수 있어요. 실패하면 더 적은 페이지로 나눠서 올려보세요.`);
       }
-
-      setLoadingStatus('Saving source...');
-      await createSource({
+      report('Generating thumbnail...');
+      const screenshot = await generateThumbnailFromPage(pages[0], signal);
+      const ocrData = await ocrAllPages(pages, report, signal);
+      signal.throwIfAborted();
+      report('Uploading file...');
+      const uploaded = await uploadFile(file, undefined, signal, task.sessionScope);
+      task.trackUpload(uploaded.path);
+      signal.throwIfAborted();
+      report('Saving source...');
+      await task.save(() => createSource({
         title: title || file.name,
         type: fileType,
-        file_path: fileUrl,
+        file_path: uploaded.url,
         screenshot,
-        pages: pages ? JSON.stringify(pages) : null,
+        pages: JSON.stringify(pages),
         ocr_data: ocrData,
-      });
-
-      onSuccess();
-      handleClose();
-    } catch (err) {
-      // Surface the real cause (auth expiry, oversized PDF insert, etc.) instead of a generic message.
-      setError(err?.message || 'Failed to upload file');
-    } finally {
-      setLoading(false);
-      setLoadingStatus('');
-    }
+      }, task.sessionScope));
+    });
   }
 
   // Single link input: detect YouTube vs. web page. YouTube links load a
@@ -215,152 +273,77 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
     }
   }
 
-  async function saveYoutube() {
-    setLoading(true);
-    setError('');
-    setWarning('');
-    try {
-      setLoadingStatus('Saving YouTube source...');
-      await createYouTubeSource({
-        title: title || youtubePreview.title,
-        youtubeData: {
-          video_id: youtubePreview.videoId,
-          channel: youtubePreview.author,
-          channel_id: youtubePreview.channelId || undefined,
-          author_url: youtubePreview.authorUrl || undefined,
-          duration: youtubePreview.duration || undefined,
-          has_captions: !!youtubeCaptions,
-          caption_source: youtubeCaptions?.source || 'manual',
-          thumbnail_url: youtubePreview.thumbnail,
-        },
-        captionsData: youtubeCaptions,
-        toRead: fromShelf,
-      });
-      onSuccess();
-      handleClose();
-    } catch {
-      setError('Failed to save YouTube source');
-    } finally {
-      setLoading(false);
-      setLoadingStatus('');
-    }
+  async function saveYoutube(task, report) {
+    report('Saving YouTube source...');
+    await task.save(() => createYouTubeSource({
+      title: title || youtubePreview.title,
+      youtubeData: {
+        video_id: youtubePreview.videoId,
+        channel: youtubePreview.author,
+        channel_id: youtubePreview.channelId || undefined,
+        author_url: youtubePreview.authorUrl || undefined,
+        duration: youtubePreview.duration || undefined,
+        has_captions: !!youtubeCaptions,
+        caption_source: youtubeCaptions?.source || 'manual',
+        thumbnail_url: youtubePreview.thumbnail,
+      },
+      captionsData: youtubeCaptions,
+      toRead: fromShelf,
+    }, task.sessionScope));
   }
 
-  async function captureWeb() {
-    setLoading(true);
-    setError('');
-    setWarning('');
-    try {
-      setLoadingStatus('Capturing screenshot...');
-      const result = await captureWebpageScreenshot(url);
-      const pages = [result.image];
-
-      setLoadingStatus('Generating thumbnail...');
-      const thumbnail = await generateThumbnailFromPage(result.image);
-
-      const ocrData = await ocrAllPages(pages, setLoadingStatus);
-
-      setLoadingStatus('Saving source...');
-      await createSource({
-        title: title || result.title,
-        type: 'screenshot',
-        file_path: url,
-        pages: JSON.stringify(pages),
-        screenshot: thumbnail,
-        ocr_data: ocrData,
-        to_read: fromShelf,
-      });
-      onSuccess();
-      handleClose();
-    } catch (err) {
-      setError(err?.message || 'Failed to capture screenshot');
-    } finally {
-      setLoading(false);
-      setLoadingStatus('');
-    }
+  async function captureWeb(task, report) {
+    const capture = await prepareWebCapture(url, report, task.signal);
+    report('Saving source...');
+    await task.save(() => createSource({
+      ...capture,
+      title: title || url.trim(),
+      file_path: url.trim(),
+      to_read: fromShelf,
+    }, task.sessionScope));
   }
 
-  // Remote PDF (e.g. a discovery card) → saved as a real type:'pdf' source. The bytes
-  // are proxied (arbitrary hosts send no CORS header), turned into a File, then rendered
-  // + OCR'd IN THE BROWSER (so the ~10s function budget doesn't apply). Only an OVERVIEW
-  // is ingested. On any failure we fall back to the screenshot path so the add still lands.
-  async function savePdfFromUrl() {
-    setLoading(true);
-    setError('');
-    setWarning('');
+  // Prepare a remote PDF overview. Only preparation failures can fall back to a
+  // screenshot; cancellation or a failed database write must never start another import.
+  async function savePdfFromUrl(task, report) {
+    const { signal } = task;
+    let source;
     try {
-      setLoadingStatus('Fetching PDF...');
+      report('Fetching PDF...');
       const res = await apiFetch('/api/pdf-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
+        signal,
+        sessionScope: task.sessionScope,
       });
       if (!res.ok) throw new Error(`pdf proxy ${res.status}`);
       const blob = await res.blob();
+      signal.throwIfAborted();
       const file = new File([blob], `${title || 'document'}.pdf`, { type: 'application/pdf' });
-
-      const pages = await convertPdfToImages(file, setLoadingStatus, OVERVIEW_PAGES);
-      let screenshot = null;
-      if (pages.length > 0) {
-        setLoadingStatus('Generating thumbnail...');
-        screenshot = await generateThumbnailFromPage(pages[0]);
-      }
-      const ocrData = await ocrAllPages(pages, setLoadingStatus);
-
-      setLoadingStatus('Saving source...');
-      await createSource({
+      const pages = await convertPdfToImages(file, report, OVERVIEW_PAGES, signal);
+      signal.throwIfAborted();
+      if (!pages.length) throw new Error('PDF에서 페이지를 읽지 못했어요.');
+      report('Generating thumbnail...');
+      const screenshot = await generateThumbnailFromPage(pages[0], signal);
+      const ocrData = await ocrAllPages(pages, report, signal);
+      source = {
         title: title || 'PDF',
         type: 'pdf',
-        file_path: url, // store the remote URL (matches how url/screenshot/youtube keep external links)
+        file_path: url,
         screenshot,
-        pages: pages.length ? JSON.stringify(pages) : null,
+        pages: JSON.stringify(pages),
         ocr_data: ocrData,
         to_read: fromShelf,
-      });
-      onSuccess();
-      handleClose();
+      };
     } catch (err) {
-      // Fallback: screenshot the PDF-hosting page so the discovery add still succeeds.
-      console.warn('PDF-by-URL ingest failed, falling back to screenshot:', err);
-      await captureWeb();
-    } finally {
-      setLoading(false);
-      setLoadingStatus('');
+      signal.throwIfAborted();
+      console.warn('PDF-by-URL preparation failed, falling back to screenshot:', err);
+      await captureWeb(task, report);
+      return;
     }
-  }
-
-  // Web article (e.g. a discovery card) → saved as type:'url' with Readability content,
-  // lighting up the existing article renderer. The edge fn fetches server-side (no client
-  // CORS). If there's no extractable article body, fall back to a full-page screenshot.
-  async function saveArticle() {
-    setLoading(true);
-    setError('');
-    setWarning('');
-    try {
-      setLoadingStatus('Capturing...');
-      const { screenshot, title: pageTitle, content } = await captureScreenshot(url);
-      if (content) {
-        setLoadingStatus('Saving source...');
-        await createSource({
-          title: title || pageTitle || url,
-          type: 'url',
-          file_path: url,
-          content,
-          screenshot,
-          to_read: fromShelf,
-        });
-        onSuccess();
-        handleClose();
-      } else {
-        await captureWeb(); // no article body → screenshot fallback
-      }
-    } catch (err) {
-      console.warn('Article ingest failed, falling back to screenshot:', err);
-      await captureWeb();
-    } finally {
-      setLoading(false);
-      setLoadingStatus('');
-    }
+    report('Saving source...');
+    await task.save(() => createSource(source, task.sessionScope));
   }
 
   // Routes by URL type so YouTube ≠ screenshot can never be mixed up.
@@ -375,11 +358,11 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
         setError('유튜브 정보를 불러오는 중이거나 유효하지 않은 링크예요. 잠시 후 다시 시도해 주세요.');
         return;
       }
-      await saveYoutube();
+      await runImport(saveYoutube);
     } else if (linkKind === 'pdf') {
-      await savePdfFromUrl();
+      await runImport(savePdfFromUrl);
     } else {
-      await saveArticle();
+      await runImport(captureWeb);
     }
   }
 
@@ -391,33 +374,27 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
     const confirmed = window.confirm(buildWhisperConfirmText(videoDuration));
     if (!confirmed) return;
 
-    setLoading(true);
-    setError('');
-    setWarning('');
-
-    try {
-      const result = await transcribeYouTubeWithWhisper(
-        youtubePreview.videoId,
-        'en',
-        setLoadingStatus,
-        videoDuration
-      );
-
-      if (result && result.segments.length > 0) {
+    await runImport(async (task, report) => {
+      try {
+        const result = await transcribeYouTubeWithWhisper(
+          youtubePreview.videoId, 'en', report, videoDuration, task.signal
+        );
+        task.signal.throwIfAborted();
+        if (!result?.segments.length) throw new Error('Transcription returned no results');
         setYoutubeCaptions(result);
         setCaptionStatus('found');
-      } else {
-        setError('Transcription returned no results');
+      } catch (err) {
+        task.signal.throwIfAborted();
+        throw new Error(mapWhisperError(err));
       }
-    } catch (err) {
-      setError(mapWhisperError(err));
-    } finally {
-      setLoading(false);
-      setLoadingStatus('');
-    }
+    }, false);
   }
 
   function handleClose() {
+    linkSeqRef.current++;
+    setLoading(false);
+    setCancelling(false);
+    setLoadingStatus('');
     setUrl('');
     setTitle('');
     setError('');
@@ -433,16 +410,14 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
     onClose();
   }
 
-  // Block closing while an upload/OCR is in flight so the user doesn't lose progress
-  // (and re-upload duplicates). Overlay taps are ignored; the ✕ button confirms first.
+  // Accidental overlay taps keep progress; explicit cancel/close stops the task.
   function handleOverlayClick() {
     if (loading) return;
     handleClose();
   }
 
   function handleCloseButton() {
-    if (loading && !window.confirm('업로드가 진행 중입니다. 창을 닫으면 진행이 취소돼요. 닫을까요?')) return;
-    handleClose();
+    cancelImport(true);
   }
 
   return (
@@ -450,7 +425,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2><TranslatableText textKey="addSource.addNewSource">Add New Source</TranslatableText></h2>
-          <button className="modal-close" onClick={handleCloseButton}>
+          <button className="modal-close" onClick={handleCloseButton} aria-label={loading ? '작업 취소하고 닫기' : '닫기'}>
             ✕
           </button>
         </div>
@@ -458,12 +433,14 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
         <div className="modal-tabs">
           <button
             className={`tab ${activeTab === 'file' ? 'active' : ''}`}
+            disabled={loading}
             onClick={() => setActiveTab('file')}
           >
             <TranslatableText textKey="addSource.uploadFile">Upload File</TranslatableText>
           </button>
           <button
             className={`tab ${activeTab === 'link' ? 'active' : ''}`}
+            disabled={loading}
             onClick={() => setActiveTab('link')}
           >
             링크 (YouTube / 웹)
@@ -479,7 +456,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
           {loading && (() => {
             const { label, percent } = formatStep(loadingStatus);
             return (
-              <div className="prepare-progress">
+              <div className="prepare-progress" role="status" aria-live="polite">
                 <div className="prepare-progress-bar">
                   <div
                     className={`prepare-progress-fill${percent == null ? ' indeterminate' : ''}`}
@@ -490,6 +467,9 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
                   <span>{label}</span>
                   {percent != null && <span>{percent}%</span>}
                 </div>
+                <button type="button" className="prepare-cancel-button" onClick={() => cancelImport()} disabled={cancelling}>
+                  {cancelling ? '취소 중...' : '작업 취소'}
+                </button>
               </div>
             );
           })()}
@@ -501,6 +481,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
             <input
               id="title"
               type="text"
+              disabled={loading}
               value={title}
               onChange={(e) => { setTitle(e.target.value); setTitleTouched(true); }}
               placeholder="Enter a title"
@@ -536,6 +517,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
                 <input
                   id="link-url"
                   type="url"
+                  disabled={loading}
                   value={url}
                   onChange={(e) => {
                     // Manual edit drops the discovery hints so sniffing takes over.
@@ -555,7 +537,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess, initialUrl 
                     ? '유튜브 영상으로 인식했어요 — 자막과 함께 저장돼요.'
                     : linkKind === 'pdf'
                       ? 'PDF 자료로 인식했어요 — 문서로 저장돼요.'
-                      : '웹 아티클로 인식했어요 — 본문을 읽어 저장돼요.')
+                      : '웹페이지로 인식했어요 — 화면을 캡처해 단어와 문장을 학습할 수 있어요.')
                   : '유튜브·PDF·웹 링크를 붙여넣으면 종류에 맞게 저장돼요.'}
               </p>
 

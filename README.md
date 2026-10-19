@@ -33,6 +33,15 @@ npm run dev
 
 ### 4. Vercel 배포
 
+계정 삭제 API(`/api/delete-account`)에는 Vercel 서버 환경 변수
+`SUPABASE_URL`과 `SUPABASE_SERVICE_ROLE_KEY`가 필요합니다.
+서비스 역할 키는 브라우저에 노출되면 안 되므로 `VITE_` 접두사를 붙이지 마세요.
+설정이 없으면 삭제 API는 자료를 지우지 않고 오류를 반환합니다.
+삭제 시 사용자의 `sources` Storage 폴더(연결이 끊긴 업로드 포함)를 먼저 정리한 뒤
+Auth 계정을 삭제합니다. 앱 데이터는 `supabase-schema.sql`의
+`auth.users ... ON DELETE CASCADE` 제약으로 함께 삭제되므로 해당 스키마를 적용해야 합니다.
+파일 정리에 실패하거나 한 번의 처리 한도를 넘으면 계정은 유지되며 재시도로 정리를 이어갑니다.
+
 ```bash
 npm run build
 vercel

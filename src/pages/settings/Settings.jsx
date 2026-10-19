@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { updateProfile, updatePassword, signOut, deleteAccount } from '../../services/auth';
@@ -107,7 +107,7 @@ export default function Settings() {
       await updateProfile({ nickname });
       setMessage({ type: 'success', text: 'Profile updated' });
       setActiveSection(null);
-    } catch (err) {
+    } catch {
       setMessage({ type: 'error', text: 'Failed to update profile' });
     } finally {
       setLoading(false);
@@ -135,7 +135,7 @@ export default function Settings() {
       setMessage({ type: 'success', text: 'Password changed' });
       setPasswords({ current: '', new: '', confirm: '' });
       setActiveSection(null);
-    } catch (err) {
+    } catch {
       setMessage({ type: 'error', text: 'Failed to change password' });
     } finally {
       setLoading(false);
@@ -207,7 +207,7 @@ export default function Settings() {
     try {
       await signOut();
       navigate('/login');
-    } catch (err) {
+    } catch {
       setMessage({ type: 'error', text: 'Failed to logout' });
       setLoading(false);
     }
@@ -227,12 +227,12 @@ export default function Settings() {
     setLoading(true);
     setMessage({ type: '', text: '' });
     try {
-      await deleteAccount();
-      setMessage({ type: 'success', text: 'Your data has been deleted. Signing out...' });
+      await deleteAccount(user?.id);
+      setMessage({ type: 'success', text: 'Your account and data have been deleted.' });
       navigate('/login');
     } catch (err) {
       console.error('Delete account error:', err);
-      setMessage({ type: 'error', text: 'Failed to delete account. Please try again.' });
+      setMessage({ type: 'error', text: err.message || 'Failed to delete account. Please try again.' });
       setLoading(false);
     }
   }

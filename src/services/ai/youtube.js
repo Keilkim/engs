@@ -106,7 +106,8 @@ export async function fetchYouTubeCaptions(videoId, lang = 'en') {
  * Full Whisper transcription flow via server-side API route
  * Audio extraction + transcription happens entirely on the server
  */
-export async function transcribeYouTubeWithWhisper(videoId, language = 'en', onProgress, durationSec = 0) {
+export async function transcribeYouTubeWithWhisper(videoId, language = 'en', onProgress, durationSec = 0, signal) {
+  signal?.throwIfAborted();
   onProgress?.(durationSec > 1200 ? '긴 영상을 나눠 음성 인식 중... (시간이 좀 걸려요)' : '오디오 추출 + 음성 인식 중...');
 
   const response = await apiFetch('/api/whisper', {
@@ -114,6 +115,7 @@ export async function transcribeYouTubeWithWhisper(videoId, language = 'en', onP
     headers: { 'Content-Type': 'application/json' },
     // durationSec lets the server chunk long videos under Whisper's 25MB limit.
     body: JSON.stringify({ videoId, language, durationSec }),
+    signal,
   });
 
   if (!response.ok) {

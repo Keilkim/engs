@@ -10,6 +10,7 @@ import { useChat } from '../../hooks';
 import { extractOcrText } from '../../services/ai/chat';
 import { useSourceData, useOcrWords, useSentenceFinder, useMinimap, useAnnotationHelpers, useModalState, useVocabularyPanel, usePageNavigation, useDesktopGestures, useTouchStateMachine } from './hooks';
 import { ImageContentView, VocabPanel } from './components';
+import WebCaptureRecovery from './components/WebCaptureRecovery';
 import { getMobileSafeAreaBottom } from '../../utils/positioning';
 
 export default function Viewer() {
@@ -85,10 +86,9 @@ const zoomOrigin = { x: 0, y: 0 };
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Pen mode state
-  const [penModeActive, setPenModeActive] = useState(false);
-  const [penColor, setPenColor] = useState('#0A84FF');
-  const [penStrokeWidth, setPenStrokeWidth] = useState(1);
-  const [showColorPalette, setShowColorPalette] = useState(false);
+  const penModeActive = false;
+  const penColor = '#0A84FF';
+  const penStrokeWidth = 1;
   const { strokes: penStrokes, addStroke: addPenStroke, removeStrokes: removePenStrokes } = usePenStrokes(id);
 
   // Note: Drawing mode removed - using tap/long-press for word selection instead
@@ -107,9 +107,7 @@ const zoomOrigin = { x: 0, y: 0 };
     showVocabPanel, setShowVocabPanel,
     deletingVocab, setDeletingVocab,
     showVocabWord,
-    highlightVocabularyWords,
     highlightAllContent,
-    patternDefs,
   } = useVocabularyPanel(openModal, vocabulary, sentencePatterns);
 
   // OCR word data (from custom hook)
@@ -703,6 +701,7 @@ const zoomOrigin = { x: 0, y: 0 };
       navigate('/');
     } catch (err) {
       console.error('Failed to delete source:', err);
+      alert(err?.message || '삭제하지 못했어요. 다시 시도해 주세요.');
       setDeleting(false);
       setShowDeleteConfirm(false);
     }
@@ -741,6 +740,18 @@ const zoomOrigin = { x: 0, y: 0 };
       </header>
 
       <main className="viewer-content">
+        {source.type === 'url' && source.file_path && (
+          <WebCaptureRecovery
+            key={source.id}
+            source={source}
+            onRecovered={(updated) => {
+              setSource(current => current?.id === updated.id ? updated : current);
+              setCurrentPage(0);
+              setZoomScale(1);
+              setPanOffset({ x: 0, y: 0 });
+            }}
+          />
+        )}
         <ImageContentView
           source={source}
           annotations={annotations}
@@ -811,23 +822,6 @@ const zoomOrigin = { x: 0, y: 0 };
           1:1
         </button>
       )}
-
-      {/* Pen Mode Toggle Button - temporarily hidden */}
-      {/* <PenModeToggle
-        isActive={penModeActive}
-        onToggle={() => setPenModeActive(!penModeActive)}
-        onLongPress={() => setShowColorPalette(true)}
-        penColor={penColor}
-      />
-
-      <ColorPalette
-        isOpen={showColorPalette}
-        selectedColor={penColor}
-        onColorSelect={setPenColor}
-        strokeWidth={penStrokeWidth}
-        onStrokeWidthChange={setPenStrokeWidth}
-        onClose={() => setShowColorPalette(false)}
-      /> */}
 
       <VocabPanel
         getVocabularyAnnotations={getVocabularyAnnotations}

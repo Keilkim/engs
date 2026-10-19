@@ -4,14 +4,8 @@ import { useCallback, useRef } from 'react';
  * Hook for image gesture handling (tap, long-press, pinch, pan)
  */
 export function useImageGestures({
-  zoomScale,
-  panOffset,
-  setPanOffset,
-  setZoomScale,
-  setZoomOrigin,
   imageContainerRef,
   zoomWrapperRef,
-  penModeActive,
   findWordAtPoint,
   findAnnotationAtPoint,
   findSentenceFromWord,
@@ -21,7 +15,6 @@ export function useImageGestures({
   showVocabWord,
   isVocabularyAnnotation,
   isGrammarAnnotation,
-  currentPage,
 }) {
   // Refs for gesture tracking
   const isPanning = useRef(false);

@@ -1,6 +1,7 @@
 // API Configuration - keys are now server-side only
 
 import { apiFetch } from '../apiFetch';
+import { abortable } from '../../utils/abort';
 
 // Language name mapping for prompts
 export const LANGUAGE_NAMES = {
@@ -34,8 +35,10 @@ export const GRAMMAR_COLORS = {
 const RETRYABLE_STATUSES = [429, 503];
 const MAX_RETRIES = 2;
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function sleep(ms, signal) {
+  let timeout;
+  return abortable(new Promise(resolve => { timeout = setTimeout(resolve, ms); }), signal)
+    .finally(() => clearTimeout(timeout));
 }
 
 /**
@@ -62,20 +65,23 @@ async function buildGeminiError(response, fallbackLabel) {
 /**
  * Call Gemini API via server-side proxy (non-streaming)
  */
-export async function fetchGemini(body) {
+export async function fetchGemini(body, { signal, sessionScope } = {}) {
   let lastError;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    signal?.throwIfAborted();
     const response = await apiFetch('/api/gemini', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
+      sessionScope,
     });
 
     if (response.ok) return response.json();
 
     lastError = await buildGeminiError(response, 'Gemini API request failed');
     if (RETRYABLE_STATUSES.includes(response.status) && attempt < MAX_RETRIES) {
-      await sleep(400 * 2 ** attempt); // 400ms, 800ms
+      await sleep(400 * 2 ** attempt, signal); // 400ms, 800ms
       continue;
     }
     throw lastError;
@@ -86,20 +92,23 @@ export async function fetchGemini(body) {
 /**
  * Call Gemini API via server-side proxy (streaming SSE)
  */
-export async function fetchGeminiStream(body) {
+export async function fetchGeminiStream(body, { signal, sessionScope } = {}) {
   let lastError;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    signal?.throwIfAborted();
     const response = await apiFetch('/api/gemini-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
+      sessionScope,
     });
 
     if (response.ok) return response;
 
     lastError = await buildGeminiError(response, 'Gemini streaming request failed');
     if (RETRYABLE_STATUSES.includes(response.status) && attempt < MAX_RETRIES) {
-      await sleep(400 * 2 ** attempt); // 400ms, 800ms
+      await sleep(400 * 2 ** attempt, signal); // 400ms, 800ms
       continue;
     }
     throw lastError;

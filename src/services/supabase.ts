@@ -54,3 +54,32 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
   },
 });
+
+// storage-js upload() currently drops AbortSignal. Use the same authenticated
+// Storage endpoint directly so cancelling an import stops sending file bytes.
+export async function uploadStorageObject(bucket: string, path: string, file: File, signal?: AbortSignal, expectedUserId?: string) {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  if (!session) throw new Error('로그인이 만료되었습니다. 다시 로그인해 주세요.');
+  if (expectedUserId && session.user.id !== expectedUserId) {
+    throw new DOMException('로그인 계정이 변경되었습니다.', 'AbortError');
+  }
+  signal?.throwIfAborted();
+  const objectPath = [bucket, ...path.split('/')].map(encodeURIComponent).join('/');
+  const response = await fetch(`${supabaseUrl}/storage/v1/object/${objectPath}`, {
+    method: 'POST',
+    signal,
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': file.type || 'application/octet-stream',
+      'Cache-Control': 'max-age=3600',
+      'x-upsert': 'false',
+    },
+    body: file,
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.message || detail?.error || `파일 업로드 실패 (${response.status})`);
+  }
+}

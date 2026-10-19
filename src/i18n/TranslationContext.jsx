@@ -1,8 +1,8 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import uiTranslations from './translations/ui.json';
 import onboardingTranslations from './translations/onboarding.json';
 
-const TranslationContext = createContext(null);
+import TranslationContext from './context';
 
 const allTranslations = {
   ...uiTranslations,
@@ -66,13 +66,3 @@ export function TranslationProvider({ children }) {
     </TranslationContext.Provider>
   );
 }
-
-export function useTranslation() {
-  const context = useContext(TranslationContext);
-  if (!context) {
-    throw new Error('useTranslation must be used within TranslationProvider');
-  }
-  return context;
-}
-
-export default TranslationContext;

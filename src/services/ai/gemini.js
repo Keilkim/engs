@@ -21,7 +21,7 @@ export async function callGemini(prompt, options = {}) {
 /**
  * Gemini API call with image (Vision)
  */
-export async function callGeminiVision(prompt, base64Image, options = {}) {
+export async function callGeminiVision(prompt, base64Image) {
   const imageData = base64Image.replace(/^data:image\/\w+;base64,/, '');
 
   const data = await fetchGemini({

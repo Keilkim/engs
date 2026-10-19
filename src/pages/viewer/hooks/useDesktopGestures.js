@@ -29,7 +29,7 @@ export function useDesktopGestures({
   panOffset, setPanOffset,
   handleWordTap,
   // Shared refs (owned by Viewer.jsx)
-  isPanning, spacebarHeld, panStartRef,
+  isPanning: isPanningRef, spacebarHeld, panStartRef,
   pinchStartRef, twoFingerPanRef, touchStartRef,
 }) {
   const mouseClickStart = useRef(null);
@@ -104,7 +104,7 @@ export function useDesktopGestures({
     // Middle mouse button - start panning
     if (e.button === 1) {
       e.preventDefault();
-      isPanning.current = true;
+      isPanningRef.current = true;
       panStartRef.current = {
         clientX: e.clientX,
         clientY: e.clientY,
@@ -117,7 +117,7 @@ export function useDesktopGestures({
     // Spacebar held + left click - start panning
     if (spacebarHeld.current && e.button === 0) {
       e.preventDefault();
-      isPanning.current = true;
+      isPanningRef.current = true;
       panStartRef.current = {
         clientX: e.clientX,
         clientY: e.clientY,
@@ -178,12 +178,12 @@ export function useDesktopGestures({
         }
       }, 500);
     }
-  }, [imageContainerRef, zoomScale, panOffset, handleWordTap, isPanning, spacebarHeld, panStartRef, pinchStartRef, twoFingerPanRef, touchStartRef]);
+  }, [imageContainerRef, zoomScale, panOffset, handleWordTap, isPanningRef, spacebarHeld, panStartRef, pinchStartRef, twoFingerPanRef, touchStartRef]);
 
   // Mouse/Touch pointer move
   const handleImagePointerMove = useCallback((e) => {
     // Desktop panning (middle button or spacebar + drag)
-    if (isPanning.current && panStartRef.current) {
+    if (isPanningRef.current && panStartRef.current) {
       const { clientX, clientY } = getEventCoords(e);
       const deltaX = clientX - panStartRef.current.clientX;
       const deltaY = clientY - panStartRef.current.clientY;
@@ -240,13 +240,13 @@ export function useDesktopGestures({
         }
       }
     }
-  }, [imageContainerRef, clampPanOffset, zoomScale, setZoomScale, setPanOffset, isPanning, panStartRef, pinchStartRef, twoFingerPanRef, touchStartRef]);
+  }, [imageContainerRef, clampPanOffset, zoomScale, setZoomScale, setPanOffset, isPanningRef, panStartRef, pinchStartRef, touchStartRef]);
 
   // Mouse/Touch pointer up
   const handleImagePointerUp = useCallback((e) => {
     // Reset panning state
-    if (isPanning.current) {
-      isPanning.current = false;
+    if (isPanningRef.current) {
+      isPanningRef.current = false;
       panStartRef.current = null;
       return;
     }
@@ -276,7 +276,7 @@ export function useDesktopGestures({
     }
 
     touchStartRef.current = null;
-  }, [handleWordTap, isPanning, panStartRef, pinchStartRef, twoFingerPanRef, touchStartRef]);
+  }, [handleWordTap, isPanningRef, panStartRef, pinchStartRef, twoFingerPanRef, touchStartRef]);
 
   return {
     handleImagePointerDown,

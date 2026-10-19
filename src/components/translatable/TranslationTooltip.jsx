@@ -1,13 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from '../../i18n';
 
 export default function TranslationTooltip() {
   const { activeTooltip, hideTooltip } = useTranslation();
   const tooltipRef = useRef(null);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
+  const position = useMemo(() => {
     if (activeTooltip) {
       const { rect } = activeTooltip;
       const tooltipWidth = 200;
@@ -28,17 +25,15 @@ export default function TranslationTooltip() {
         top = rect.top - tooltipHeight - padding;
       }
 
-      setPosition({ top, left });
-      setVisible(true);
-
-      const timer = setTimeout(() => {
-        hideTooltip();
-      }, 3000);
-
-      return () => clearTimeout(timer);
-    } else {
-      setVisible(false);
+      return { top, left };
     }
+    return null;
+  }, [activeTooltip]);
+
+  useEffect(() => {
+    if (!activeTooltip) return;
+    const timer = setTimeout(hideTooltip, 3000);
+    return () => clearTimeout(timer);
   }, [activeTooltip, hideTooltip]);
 
   useEffect(() => {
@@ -54,7 +49,7 @@ export default function TranslationTooltip() {
     }
   }, [activeTooltip, hideTooltip]);
 
-  if (!activeTooltip || !visible) {
+  if (!activeTooltip || !position) {
     return null;
   }
 

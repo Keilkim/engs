@@ -1,4 +1,6 @@
 import { supabase } from './supabase';
+import { apiFetch } from './apiFetch';
+import { captureSessionScope, assertSessionScope } from './sessionScope';
 
 export async function signUp(email: string, password: string, nickname: string) {
   const { data, error } = await supabase.auth.signUp({
@@ -65,43 +67,19 @@ export async function updateProfile(updates: Record<string, unknown>) {
   return data;
 }
 
-/**
- * Deletes the current user's data and signs them out.
- *
- * Removes every row owned by the user across the app's tables, in
- * foreign-key-safe order (children before parents), then ends the session.
- *
- * NOTE: The `auth.users` record itself CANNOT be deleted from the client with
- * the anon key — that requires the service-role key (`auth.admin.deleteUser`),
- * which must never be exposed in the browser. For this personal-use app,
- * purging all owned data + signing out is sufficient; wiring up a server-side
- * endpoint to remove the auth record is a possible future enhancement.
- */
-export async function deleteAccount(): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
-
-  const uid = user.id;
-
-  // Children first, then parents, to respect FK constraints.
-  // review_items -> annotations -> chat_logs -> sources -> user_stats
-  const orderedTables = [
-    'review_items',
-    'annotations',
-    'chat_logs',
-    'sources',
-    'user_stats',
-  ];
-
-  for (const table of orderedTables) {
-    const { error } = await supabase.from(table).delete().eq('user_id', uid);
-    if (error) throw error;
+/** The server removes storage objects, application data, and the Auth identity. */
+export async function deleteAccount(expectedUserId?: string): Promise<void> {
+  const scope = await captureSessionScope();
+  if (expectedUserId && scope.userId !== expectedUserId) {
+    throw new Error('로그인 계정이 변경됐어요. 삭제할 계정을 다시 확인해 주세요.');
+  }
+  const response = await apiFetch('/api/delete-account', { method: 'POST', sessionScope: scope });
+  const result = await response.json().catch(() => null);
+  assertSessionScope(scope);
+  if (!response.ok || result?.deleted !== true) {
+    throw new Error(result?.error || '계정 삭제를 완료하지 못했어요. 다시 시도해 주세요.');
   }
 
-  // user_settings is not used in every environment; best-effort so a missing
-  // table doesn't abort the whole deletion.
-  await supabase.from('user_settings').delete().eq('user_id', uid);
-
-  const { error: signOutError } = await supabase.auth.signOut();
-  if (signOutError) throw signOutError;
+  const { error } = await supabase.auth.signOut({ scope: 'local' });
+  if (error) throw new Error('계정은 삭제됐지만 로그아웃하지 못했어요. 페이지를 새로고침해 주세요.');
 }
