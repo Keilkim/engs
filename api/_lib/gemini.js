@@ -4,7 +4,7 @@
 // as paid search grounding, cachedContent, ...) is dropped.
 const ALLOWED_FIELDS = ['contents', 'systemInstruction', 'generationConfig', 'safetySettings'];
 const MAX_OUTPUT_TOKENS = 8192;
-const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+const DEFAULT_MODEL = 'gemini-3.8-flash';
 
 // Gemini 3 models that reject thinkingLevel 'minimal' (lowest they take: 'low').
 const NO_MINIMAL_THINKING = /^gemini-3\.8-flash|-pro/;

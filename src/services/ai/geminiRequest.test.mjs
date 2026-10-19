@@ -16,10 +16,15 @@ function withModel(t, model) {
 
 const sent = (request) => JSON.parse(request.init.body);
 
-test('defaults to gemini-3.5-flash-lite and forwards thinkingLevel as-is', (t) => {
+test('defaults to gemini-3.8-flash', (t) => {
   withModel(t, undefined);
+  const request = buildGeminiRequest({ contents }, 'generateContent');
+  assert.match(request.url, /models\/gemini-3\.8-flash:generateContent$/);
+});
+
+test("models that take 'minimal' get thinkingLevel as-is", (t) => {
+  withModel(t, 'gemini-3.5-flash-lite');
   const request = buildGeminiRequest({ contents, generationConfig: { thinkingConfig: { thinkingLevel: 'minimal' } } }, 'generateContent');
-  assert.match(request.url, /models\/gemini-3\.5-flash-lite:generateContent$/);
   assert.deepEqual(sent(request).generationConfig.thinkingConfig, { thinkingLevel: 'minimal' });
 });
 
