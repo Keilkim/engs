@@ -447,6 +447,8 @@ const zoomOrigin = { x: 0, y: 0 };
       placement,
       word: word.text,
       wordBbox: word.bbox,
+      // Context for the lookup (picks the sense used here) and the saved card.
+      sentence: findSentenceFromWord(word)?.text,
       existingAnnotation: null,
       isGrammarMode: false,
     });
@@ -936,6 +938,7 @@ const zoomOrigin = { x: 0, y: 0 };
         word={activeModal.data.word || ''}
         wordBbox={activeModal.data.wordBbox || null}
         sentenceWords={activeModal.data.sentenceWords || null}
+        sentence={activeModal.data.sentence}
         sourceId={id}
         currentPage={currentPage}
         existingAnnotation={activeModal.data.existingAnnotation || null}

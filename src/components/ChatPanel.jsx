@@ -33,6 +33,7 @@ export default function ChatPanel({ chat, sourceTitle }) {
   const [selectedWord, setSelectedWord] = useState(null);
   const [wordPosition, setWordPosition] = useState(null);
   const [wordAnchorRect, setWordAnchorRect] = useState(null);
+  const [selectedSentence, setSelectedSentence] = useState(null);
   const [isGrammarMode, setIsGrammarMode] = useState(false);
   const inputRef = useRef(null);
   const prevStreamingRef = useRef('');
@@ -272,10 +273,11 @@ export default function ChatPanel({ chat, sourceTitle }) {
   }, [startListening, managedSetTimeout]);
 
   // Chat message word short press → vocabulary lookup
-  const handleChatWordPress = useCallback((word, rect) => {
+  const handleChatWordPress = useCallback((word, rect, sentence) => {
     if (!word) return;
     pauseConversation();
     setSelectedWord(word);
+    setSelectedSentence(sentence || null);
     setIsGrammarMode(false);
     setWordPosition({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
     setWordAnchorRect({ top: rect.top, bottom: rect.bottom });
@@ -286,6 +288,7 @@ export default function ChatPanel({ chat, sourceTitle }) {
     if (!text) return;
     pauseConversation();
     setSelectedWord(text);
+    setSelectedSentence(null);
     setIsGrammarMode(true);
     setWordPosition({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
     setWordAnchorRect({ top: rect.top, bottom: rect.bottom });
@@ -296,6 +299,7 @@ export default function ChatPanel({ chat, sourceTitle }) {
     setSelectedWord(null);
     setWordPosition(null);
     setWordAnchorRect(null);
+    setSelectedSentence(null);
     setIsGrammarMode(false);
     resumeConversation();
   }, [resumeConversation]);
@@ -470,6 +474,7 @@ export default function ChatPanel({ chat, sourceTitle }) {
               position={wordPosition}
               placement="below"
               anchorRect={wordAnchorRect}
+              sentence={selectedSentence || undefined}
               word={selectedWord || ''}
               wordBbox={null}
               sentenceWords={null}

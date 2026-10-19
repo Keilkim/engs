@@ -1,5 +1,7 @@
 import { getSetting, SETTINGS_KEYS } from '../settings';
-import { LANG_CODES } from './config';
+import { LANG_CODES, LANGUAGE_NAMES, fetchGemini } from './config';
+import { parseGeminiJSON } from './gemini';
+import { buildWordLookupPrompt, formatWordDefinition } from './wordDefinition';
 import { logError } from '../../utils/errors';
 
 /**
@@ -16,13 +18,33 @@ export async function googleTranslate(text, targetLang = 'ko', { signal } = {}) 
 }
 
 /**
- * Word lookup using Free Dictionary API + Google Translate.
+ * Gemini lookup that reads the surrounding sentence, so "run" in "run a
+ * company" gets that sense and an idiom around the word is caught.
+ * Returns null when the reply is unusable.
+ */
+async function lookupWordWithGemini(word, sentence, translationLang) {
+  const langName = LANGUAGE_NAMES[translationLang] || LANGUAGE_NAMES.Korean;
+  const data = await fetchGemini({
+    contents: [{ parts: [{ text: buildWordLookupPrompt(word, sentence, langName) }] }],
+    generationConfig: {
+      // A tap should answer fast; this is a lookup, not a reasoning task.
+      thinkingConfig: { thinkingLevel: 'low' },
+      responseMimeType: 'application/json',
+    },
+  });
+  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return formatWordDefinition(parseGeminiJSON(responseText), translationLang);
+}
+
+/**
+ * Word lookup: Gemini (in context) first, then Free Dictionary API + Google
+ * Translate if the AI call fails.
  *
  * Contract: the returned `definition` is ALWAYS a string. On failure the
  * result carries a non-empty `error` code and an empty `definition` so callers
  * can surface the error instead of persisting an empty/garbage card.
  */
-export async function lookupWord(word) {
+export async function lookupWord(word, { sentence } = {}) {
   const cleanWord = word.replace(/[.,;:!?"'()[\]{}]/g, '').trim();
   if (!cleanWord) {
     return { word, phonetic: '', definition: '', error: 'UNRECOGNIZED_WORD' };
@@ -30,6 +52,13 @@ export async function lookupWord(word) {
 
   const translationLang = getSetting(SETTINGS_KEYS.TRANSLATION_LANGUAGE, 'Korean');
   const langCode = LANG_CODES[translationLang] || 'ko';
+
+  try {
+    const result = await lookupWordWithGemini(cleanWord, sentence, translationLang);
+    if (result) return { word: cleanWord, ...result };
+  } catch (err) {
+    logError('lookupWord.gemini', err);
+  }
 
   try {
     const dictResponse = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleanWord)}`);
