@@ -4,7 +4,16 @@
 // as paid search grounding, cachedContent, ...) is dropped.
 const ALLOWED_FIELDS = ['contents', 'systemInstruction', 'generationConfig', 'safetySettings'];
 const MAX_OUTPUT_TOKENS = 8192;
-const DEFAULT_MODEL = 'gemini-3.8-flash';
+
+// gemini-3.8-flash doubles in price on 2027-01-01 ($0.75/$3.75 → $1.50/$7.50
+// per 1M tokens in/out), so the default drops to 3.5 Flash-Lite ($0.30/$2.50)
+// at the start of that day in Korea — earlier than the change in UTC or US
+// Pacific time, so no request is billed at the new 3.8 price.
+const PRICE_CHANGE_AT = Date.parse('2027-01-01T00:00:00+09:00');
+
+export function defaultModel(now = Date.now()) {
+  return now < PRICE_CHANGE_AT ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
+}
 
 // Gemini 3 models that reject thinkingLevel 'minimal' (lowest they take: 'low').
 const NO_MINIMAL_THINKING = /^gemini-3\.8-flash|-pro/;
@@ -37,7 +46,7 @@ export function buildGeminiRequest(rawBody, method) {
   if (!Array.isArray(body.contents) || body.contents.length === 0) return null;
 
   // Override in Vercel env (GEMINI_MODEL) without a code change if needed.
-  const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
+  const model = process.env.GEMINI_MODEL || defaultModel();
 
   if (body.generationConfig && typeof body.generationConfig === 'object') {
     const requested = Number(body.generationConfig.maxOutputTokens) || MAX_OUTPUT_TOKENS;
