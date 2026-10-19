@@ -87,7 +87,7 @@ export default function InteractiveMessageText({
         // Long press → grammar analysis on the tapped sentence only
         // (not the entire multi-paragraph message).
         const rect = target.getBoundingClientRect();
-        onLongPress?.(extractSentenceAt(text, touchStateRef.current.partIndex), rect);
+        onLongPress?.(extractSentenceAt(text, touchStateRef.current.partIndex), rect, target);
       }
     }, LONG_PRESS_DURATION);
   }, [text, onLongPress, onPressStart]);
@@ -122,7 +122,7 @@ export default function InteractiveMessageText({
       // Short tap on a word → vocabulary lookup
       if (word) {
         const rect = target.getBoundingClientRect();
-        onWordPress?.(word, rect, extractSentenceAt(text, partIndex));
+        onWordPress?.(word, rect, extractSentenceAt(text, partIndex), target);
       } else {
         // Tapped non-word area, no menu
         onPressEndNoMenu?.();

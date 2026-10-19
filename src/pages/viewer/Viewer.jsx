@@ -518,6 +518,12 @@ const zoomOrigin = { x: 0, y: 0 };
     pinchStartRef, twoFingerPanRef, touchStartRef,
   });
 
+  // Dragging outside the word menu while zoomed pans the page (the menu
+  // follows its word via panOffset).
+  const handleWordMenuPan = useCallback((dx, dy) => {
+    setPanOffset((prev) => clampPanOffset(prev.x + dx, prev.y + dy, zoomScale));
+  }, [clampPanOffset, zoomScale]);
+
   const triggerShake = useCallback(() => _triggerShake(setIsShaking), [_triggerShake]);
 
   // Get the display image (screenshot or original)
@@ -946,6 +952,7 @@ const zoomOrigin = { x: 0, y: 0 };
         containerRef={zoomWrapperRef}
         zoomScale={zoomScale}
         panOffset={panOffset}
+        onBackdropPan={zoomScale > 1 ? handleWordMenuPan : undefined}
         onClose={closeWordMenu}
         onSaved={handleWordMenuSaved}
         onDeleted={handleWordMenuDelete}

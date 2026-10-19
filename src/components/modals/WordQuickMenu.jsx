@@ -7,13 +7,32 @@ import { useGrammarAnalysis } from './useGrammarAnalysis';
 import VocabModeContent from './VocabModeContent';
 import GrammarModeContent from './GrammarModeContent';
 
+// Finger travel that turns a touch on the backdrop from a tap into a drag.
+const DRAG_THRESHOLD = 10;
+
+// What would scroll at (x, y) if the backdrop weren't covering it.
+function findScrollerAt(backdrop, x, y) {
+  backdrop.style.pointerEvents = 'none';
+  const below = document.elementFromPoint(x, y);
+  backdrop.style.pointerEvents = '';
+  for (let node = below; node && node !== document.documentElement; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node);
+    if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight) return node;
+  }
+  return document.scrollingElement;
+}
+
 export default function WordQuickMenu({
   isOpen,
   position,
   placement = 'below',
-  // Viewport-px { top, bottom } of the tapped word/row, for callers without a
-  // wordBbox. Lets the menu flip to the other side without covering the word.
-  anchorRect,
+  // The tapped word/row element, for callers without a wordBbox. The menu
+  // tracks it, so it can flip sides without covering the word and follow it
+  // when the content scrolls.
+  anchorEl,
+  // Viewer only: move the zoomed page by (dx, dy) when the user drags the
+  // backdrop (there is no native scroll to forward to while zoomed).
+  onBackdropPan,
   word,
   wordBbox,
   sentenceWords,
@@ -71,31 +90,126 @@ export default function WordQuickMenu({
     if (isOpen) openTimeRef.current = Date.now();
   }, [isOpen]);
 
-  // The backdrop closes the menu on ANY outside touch — a single tap, or the
-  // first finger of a pinch (the user wants the tooltip to disappear when they
-  // zoom, not ride along and land in a weird spot). We do NOT preventDefault, so
-  // if the gesture is a two-finger pinch the browser's native zoom still runs
-  // after the menu closes. The synthetic mouse a closing tap emits is rejected by
-  // the container's touch-recency guard (useDesktopGestures), so it can't start a
-  // fresh lookup once the backdrop unmounts. (React 19 registers the delegated
-  // touch listener as passive, hence a native listener here.)
+  // Latest callbacks for the native backdrop listeners below, which must not
+  // re-subscribe (and lose an in-progress drag) when a parent re-renders.
+  const onCloseRef = useRef(onClose);
+  const onBackdropPanRef = useRef(onBackdropPan);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    onBackdropPanRef.current = onBackdropPan;
+  });
+
+  // Outside the menu: a tap closes it; a drag moves the content underneath
+  // (scrolls it, or pans the zoomed Viewer page) and the menu follows its
+  // word, so a long menu near the bottom can be brought fully into view. A
+  // flick keeps gliding like native scrolling. A second finger (pinch) closes
+  // the menu so it doesn't ride along the zoom and land in a weird spot; we
+  // don't preventDefault that, so the browser's native zoom still runs.
+  // Closing on touchend with preventDefault also stops the synthetic
+  // mouse/click from landing on the page and starting a fresh lookup.
+  // (React 19 registers delegated touch listeners as passive, hence native.)
   useEffect(() => {
     const el = backdropRef.current;
     if (!isOpen || !el) return;
+    let gesture = null;
+    let glideFrame = null;
+
+    const stopGlide = () => {
+      if (glideFrame) cancelAnimationFrame(glideFrame);
+      glideFrame = null;
+    };
+    const moveContent = (scroller, dx, dy) => {
+      if (onBackdropPanRef.current) onBackdropPanRef.current(dx, dy);
+      else scroller?.scrollBy(-dx, -dy);
+    };
+
     const onTouchStart = (e) => {
       e.stopPropagation();
-      onClose();
+      stopGlide();
+      if (e.touches.length > 1) {
+        gesture = null;
+        onCloseRef.current();
+        return;
+      }
+      const t = e.touches[0];
+      gesture = {
+        startX: t.clientX, startY: t.clientY,
+        x: t.clientX, y: t.clientY, time: e.timeStamp,
+        vx: 0, vy: 0, dragging: false,
+        scroller: findScrollerAt(el, t.clientX, t.clientY),
+      };
     };
+    const onTouchMove = (e) => {
+      if (!gesture || e.touches.length > 1) return;
+      const t = e.touches[0];
+      if (!gesture.dragging) {
+        if (Math.hypot(t.clientX - gesture.startX, t.clientY - gesture.startY) < DRAG_THRESHOLD) return;
+        gesture.dragging = true;
+      }
+      if (e.cancelable) e.preventDefault();
+      const dx = t.clientX - gesture.x;
+      const dy = t.clientY - gesture.y;
+      const dt = Math.max(1, e.timeStamp - gesture.time);
+      gesture.vx = dx / dt;
+      gesture.vy = dy / dt;
+      gesture.x = t.clientX;
+      gesture.y = t.clientY;
+      gesture.time = e.timeStamp;
+      moveContent(gesture.scroller, dx, dy);
+    };
+    const onTouchEnd = (e) => {
+      if (!gesture) return;
+      const g = gesture;
+      gesture = null;
+      if (e.cancelable) e.preventDefault();
+      if (!g.dragging) {
+        onCloseRef.current();
+        return;
+      }
+      // Glide only after a flick (finger still moving when it lifted).
+      if (e.timeStamp - g.time > 80 || Math.hypot(g.vx, g.vy) < 0.2) return;
+      let { vx, vy } = g;
+      let last = performance.now();
+      const step = (now) => {
+        const dt = now - last;
+        last = now;
+        moveContent(g.scroller, vx * dt, vy * dt);
+        const decay = Math.pow(0.95, dt / 16);
+        vx *= decay;
+        vy *= decay;
+        glideFrame = Math.hypot(vx, vy) > 0.02 ? requestAnimationFrame(step) : null;
+      };
+      glideFrame = requestAnimationFrame(step);
+    };
+    const onTouchCancel = () => { gesture = null; };
+    // Desktop: the wheel over the backdrop scrolls what's underneath too.
+    const onWheel = (e) => {
+      e.preventDefault();
+      const scale = e.deltaMode === 1 ? 16 : 1; // lines → px
+      findScrollerAt(el, e.clientX, e.clientY)?.scrollBy(e.deltaX * scale, e.deltaY * scale);
+    };
+
     el.addEventListener('touchstart', onTouchStart, { passive: true });
-    return () => el.removeEventListener('touchstart', onTouchStart);
-  }, [isOpen, onClose]);
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: false });
+    el.addEventListener('touchcancel', onTouchCancel);
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      stopGlide();
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchCancel);
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [isOpen]);
 
   // Record the most recent touch anywhere on the page so the backdrop's mouse
   // handler can reject the synthetic mouse events that follow a touch. Without
   // this, a long-press (which opens the menu while the finger is still down)
   // fires a synthetic mousedown on the finger-lift that closes the menu it just
-  // opened ("손 떼면 사라진다"). Real touch taps close via the native touchstart
-  // listener above; real desktop clicks (no preceding touch) still close.
+  // opened ("손 떼면 사라진다"). Real touch taps close via the native touch
+  // listeners above; real desktop clicks (no preceding touch) still close.
   useEffect(() => {
     if (!isOpen) return;
     const mark = () => { lastTouchRef.current = Date.now(); };
@@ -112,8 +226,16 @@ export default function WordQuickMenu({
   const { reset: resetVocab, loadExisting: loadVocab, handleLookup } = vocab;
   const { reset: resetGrammar, loadExisting: loadGrammar, handleAnalyze } = grammar;
 
-  // Anchor update (wordBbox % → viewport coords of the word's top/bottom edges)
+  // Anchor update: the tracked element's rect, or wordBbox % → viewport coords
+  // of the word's top/bottom edges.
   const updatePosition = useCallback(() => {
+    if (anchorEl) {
+      // A re-rendered list may have replaced the element; keep the last anchor.
+      if (!anchorEl.isConnected) return;
+      const rect = anchorEl.getBoundingClientRect();
+      setDynamicAnchor({ x: rect.left + rect.width / 2, top: rect.top, bottom: rect.bottom });
+      return;
+    }
     if (!wordBbox || !containerRef?.current) {
       setDynamicAnchor(null);
       return;
@@ -127,7 +249,7 @@ export default function WordQuickMenu({
       top: containerRect.top + (wordBbox.y * containerRect.height / 100),
       bottom: containerRect.top + ((wordBbox.y + wordBbox.height) * containerRect.height / 100),
     });
-  }, [wordBbox, containerRef]);
+  }, [anchorEl, wordBbox, containerRef]);
 
   // The transformed DOM bounds are only available after commit. Measure before
   // paint so opening/repositioning the menu cannot flash its previous location.
@@ -161,8 +283,8 @@ export default function WordQuickMenu({
     return () => observer.disconnect();
   });
 
-  // Callers without a wordBbox still need a re-layout when the viewport
-  // changes (e.g. the mobile browser bar collapsing).
+  // Callers without an anchor to track still need a re-layout when the
+  // viewport changes (e.g. the mobile browser bar collapsing).
   useEffect(() => {
     if (!isOpen) return;
     const handleResize = () => setViewportTick((t) => t + 1);
@@ -172,7 +294,7 @@ export default function WordQuickMenu({
 
   // Update position on scroll/resize
   useEffect(() => {
-    if (!isOpen || !wordBbox || !containerRef?.current) return;
+    if (!isOpen || (!anchorEl && (!wordBbox || !containerRef?.current))) return;
 
     const handleUpdate = (e) => {
       // Scrolling the menu's own body doesn't move the word.
@@ -189,7 +311,7 @@ export default function WordQuickMenu({
       window.removeEventListener('resize', handleUpdate);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [isOpen, wordBbox, containerRef, updatePosition]);
+  }, [isOpen, anchorEl, wordBbox, containerRef, updatePosition]);
 
   // Load data on open / reset on close
   useEffect(() => {
@@ -227,14 +349,10 @@ export default function WordQuickMenu({
   const vh = window.innerHeight;
   const menuWidth = isGrammarMode ? Math.min(340, vw - 24) : Math.min(300, vw - 24);
   const gap = 12;
-  // Without a wordBbox/anchorRect the caller's position is already offset by
+  // Until the anchor is measured, the caller's position is already offset by
   // `gap` from the word's near edge; the far edge is unknown.
   const fallbackEdge = position && (placement === 'below' ? position.y - gap : position.y + gap);
-  const anchor = dynamicAnchor || (position && {
-    x: position.x,
-    top: anchorRect?.top ?? fallbackEdge,
-    bottom: anchorRect?.bottom ?? fallbackEdge,
-  });
+  const anchor = dynamicAnchor || (position && { x: position.x, top: fallbackEdge, bottom: fallbackEdge });
   const positionReady = Boolean(anchor) && menuHeight !== null;
 
   const { left, arrowLeft } = calculateModalPosition({
