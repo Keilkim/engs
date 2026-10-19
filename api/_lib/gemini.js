@@ -4,17 +4,29 @@
 // as paid search grounding, cachedContent, ...) is dropped.
 const ALLOWED_FIELDS = ['contents', 'systemInstruction', 'generationConfig', 'safetySettings'];
 const MAX_OUTPUT_TOKENS = 8192;
-const DEFAULT_MODEL = 'gemini-3.8-flash';
+const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 
-// Clients send Gemini 3's `thinkingLevel`. The 2.x models reject it and only
-// understand `thinkingBudget` (0 = off), so translate it there. This keeps a
-// rollback via GEMINI_MODEL=gemini-2.5-flash working without a client change.
+// Gemini 3 models that reject thinkingLevel 'minimal' (lowest they take: 'low').
+const NO_MINIMAL_THINKING = /^gemini-3\.8-flash|-pro/;
+
+// Clients send Gemini 3's `thinkingLevel`, usually 'minimal' (fastest). Adapt
+// it to the configured model so switching GEMINI_MODEL needs no client change:
+// 2.x models only understand `thinkingBudget` (0 = off), and some Gemini 3
+// models start at 'low'.
 function adaptThinkingConfig(generationConfig, model) {
   const thinkingConfig = generationConfig.thinkingConfig;
-  if (!thinkingConfig?.thinkingLevel || !/^gemini-2\./.test(model)) return generationConfig;
-  const { thinkingLevel, ...rest } = thinkingConfig;
-  const off = thinkingLevel === 'minimal' || thinkingLevel === 'low';
-  return { ...generationConfig, thinkingConfig: off ? { ...rest, thinkingBudget: 0 } : rest };
+  const level = thinkingConfig?.thinkingLevel;
+  if (!level) return generationConfig;
+
+  if (/^gemini-2\./.test(model)) {
+    const { thinkingLevel: _level, ...rest } = thinkingConfig;
+    const off = level === 'minimal' || level === 'low';
+    return { ...generationConfig, thinkingConfig: off ? { ...rest, thinkingBudget: 0 } : rest };
+  }
+  if (level === 'minimal' && NO_MINIMAL_THINKING.test(model)) {
+    return { ...generationConfig, thinkingConfig: { ...thinkingConfig, thinkingLevel: 'low' } };
+  }
+  return generationConfig;
 }
 
 export function buildGeminiRequest(rawBody, method) {

@@ -16,16 +16,25 @@ function withModel(t, model) {
 
 const sent = (request) => JSON.parse(request.init.body);
 
-test('defaults to gemini-3.8-flash and forwards thinkingLevel as-is', (t) => {
+test('defaults to gemini-3.5-flash-lite and forwards thinkingLevel as-is', (t) => {
   withModel(t, undefined);
-  const request = buildGeminiRequest({ contents, generationConfig: { thinkingConfig: { thinkingLevel: 'low' } } }, 'generateContent');
-  assert.match(request.url, /models\/gemini-3\.8-flash:generateContent$/);
-  assert.deepEqual(sent(request).generationConfig.thinkingConfig, { thinkingLevel: 'low' });
+  const request = buildGeminiRequest({ contents, generationConfig: { thinkingConfig: { thinkingLevel: 'minimal' } } }, 'generateContent');
+  assert.match(request.url, /models\/gemini-3\.5-flash-lite:generateContent$/);
+  assert.deepEqual(sent(request).generationConfig.thinkingConfig, { thinkingLevel: 'minimal' });
 });
 
-test('rolling back to a 2.x model maps a low thinkingLevel to thinkingBudget 0', (t) => {
+test("models without 'minimal' (3.8 Flash, Pro) get 'low' instead", (t) => {
+  withModel(t, undefined); // restores GEMINI_MODEL after the loop below
+  for (const model of ['gemini-3.8-flash', 'gemini-3.1-pro-preview']) {
+    process.env.GEMINI_MODEL = model;
+    const request = buildGeminiRequest({ contents, generationConfig: { thinkingConfig: { thinkingLevel: 'minimal' } } }, 'generateContent');
+    assert.deepEqual(sent(request).generationConfig.thinkingConfig, { thinkingLevel: 'low' }, model);
+  }
+});
+
+test('rolling back to a 2.x model maps a minimal thinkingLevel to thinkingBudget 0', (t) => {
   withModel(t, 'gemini-2.5-flash');
-  const request = buildGeminiRequest({ contents, generationConfig: { thinkingConfig: { thinkingLevel: 'low' } } }, 'streamGenerateContent');
+  const request = buildGeminiRequest({ contents, generationConfig: { thinkingConfig: { thinkingLevel: 'minimal' } } }, 'streamGenerateContent');
   assert.match(request.url, /models\/gemini-2\.5-flash:streamGenerateContent\?alt=sse$/);
   assert.deepEqual(sent(request).generationConfig.thinkingConfig, { thinkingBudget: 0 });
 });
