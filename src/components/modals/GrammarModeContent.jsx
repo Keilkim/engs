@@ -27,26 +27,28 @@ export default function GrammarModeContent({
   if (existingAnnotation && grammarData) {
     return (
       <>
-        {grammarData.translation && (
-          <p className="grammar-translation">{grammarData.translation}</p>
-        )}
-        <div className="grammar-patterns">
-          {grammarData.patterns?.map((pattern, i) => (
-            <div key={i} className="pattern-item">
-              <div className="pattern-content">
-                <span className="pattern-words">{pattern.words?.join(' ')}</span>
-                <span className="pattern-explanation">{pattern.explanation}</span>
+        <div className="word-menu-body">
+          {grammarData.translation && (
+            <p className="grammar-translation">{grammarData.translation}</p>
+          )}
+          <div className="grammar-patterns">
+            {grammarData.patterns?.map((pattern, i) => (
+              <div key={i} className="pattern-item">
+                <div className="pattern-content">
+                  <span className="pattern-words">{pattern.words?.join(' ')}</span>
+                  <span className="pattern-explanation">{pattern.explanation}</span>
+                </div>
+                <button
+                  className={`save-pattern-btn${savedPatternIds.has(i) ? ' saved' : ''}`}
+                  onClick={() => handleSaveAsPattern(pattern, i)}
+                  disabled={savedPatternIds.has(i)}
+                  title="Save as sentence pattern"
+                >
+                  {savedPatternIds.has(i) ? '✓' : '+P'}
+                </button>
               </div>
-              <button
-                className={`save-pattern-btn${savedPatternIds.has(i) ? ' saved' : ''}`}
-                onClick={() => handleSaveAsPattern(pattern, i)}
-                disabled={savedPatternIds.has(i)}
-                title="Save as sentence pattern"
-              >
-                {savedPatternIds.has(i) ? '✓' : '+P'}
-              </button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
         <div className="word-menu-actions">
           <button className="delete-btn" onClick={onDelete} disabled={loading}>
@@ -68,45 +70,47 @@ export default function GrammarModeContent({
     const hasPatterns = grammarData.patterns?.length > 0;
     return (
       <>
-        {grammarData.translation && (
-          <p className="grammar-translation">{grammarData.translation}</p>
-        )}
-        {hasPatterns ? (
-          <div className="grammar-patterns">
-            {grammarData.patterns.map((pattern, i) => (
-              <div key={i} className="pattern-checkbox-row">
-                <label className="pattern-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={checkedPatterns.includes(i)}
-                    onChange={() => onTogglePattern(i)}
-                  />
-                  <div className="pattern-content">
-                    <span className="pattern-words">{pattern.words?.join(' ')}</span>
-                    <span className="pattern-explanation">{pattern.explanation}</span>
-                  </div>
-                </label>
-                <button
-                  className={`save-pattern-btn${savedPatternIds.has(i) ? ' saved' : ''}`}
-                  onClick={() => handleSaveAsPattern(pattern, i)}
-                  disabled={savedPatternIds.has(i)}
-                  title="Save as sentence pattern"
-                >
-                  {savedPatternIds.has(i) ? '✓' : '+P'}
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">
-            {grammarData.degraded
-              ? ko('wordMenu.aiUnavailable')
-              : (grammarData.translation ? ko('wordMenu.translationOnly') : ko('wordMenu.noPatterns'))}
-            {grammarData.degraded && grammarData.reason && (
-              <span className="empty-reason">{grammarData.reason}</span>
-            )}
-          </div>
-        )}
+        <div className="word-menu-body">
+          {grammarData.translation && (
+            <p className="grammar-translation">{grammarData.translation}</p>
+          )}
+          {hasPatterns ? (
+            <div className="grammar-patterns">
+              {grammarData.patterns.map((pattern, i) => (
+                <div key={i} className="pattern-checkbox-row">
+                  <label className="pattern-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={checkedPatterns.includes(i)}
+                      onChange={() => onTogglePattern(i)}
+                    />
+                    <div className="pattern-content">
+                      <span className="pattern-words">{pattern.words?.join(' ')}</span>
+                      <span className="pattern-explanation">{pattern.explanation}</span>
+                    </div>
+                  </label>
+                  <button
+                    className={`save-pattern-btn${savedPatternIds.has(i) ? ' saved' : ''}`}
+                    onClick={() => handleSaveAsPattern(pattern, i)}
+                    disabled={savedPatternIds.has(i)}
+                    title="Save as sentence pattern"
+                  >
+                    {savedPatternIds.has(i) ? '✓' : '+P'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">
+              {grammarData.degraded
+                ? ko('wordMenu.aiUnavailable')
+                : (grammarData.translation ? ko('wordMenu.translationOnly') : ko('wordMenu.noPatterns'))}
+              {grammarData.degraded && grammarData.reason && (
+                <span className="empty-reason">{grammarData.reason}</span>
+              )}
+            </div>
+          )}
+        </div>
         <div className="word-menu-actions">
           {grammarData.degraded && onRetry && (
             <button className="retry-btn" onClick={onRetry} disabled={loading}>

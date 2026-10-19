@@ -32,6 +32,7 @@ export default function ChatPanel({ chat, sourceTitle }) {
   // Word quick menu state
   const [selectedWord, setSelectedWord] = useState(null);
   const [wordPosition, setWordPosition] = useState(null);
+  const [wordAnchorRect, setWordAnchorRect] = useState(null);
   const [isGrammarMode, setIsGrammarMode] = useState(false);
   const inputRef = useRef(null);
   const prevStreamingRef = useRef('');
@@ -277,6 +278,7 @@ export default function ChatPanel({ chat, sourceTitle }) {
     setSelectedWord(word);
     setIsGrammarMode(false);
     setWordPosition({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
+    setWordAnchorRect({ top: rect.top, bottom: rect.bottom });
   }, [pauseConversation]);
 
   // Chat message long press → grammar analysis
@@ -286,12 +288,14 @@ export default function ChatPanel({ chat, sourceTitle }) {
     setSelectedWord(text);
     setIsGrammarMode(true);
     setWordPosition({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
+    setWordAnchorRect({ top: rect.top, bottom: rect.bottom });
   }, [pauseConversation]);
 
   // Close word modal → resume conversation
   const closeWordModal = useCallback(() => {
     setSelectedWord(null);
     setWordPosition(null);
+    setWordAnchorRect(null);
     setIsGrammarMode(false);
     resumeConversation();
   }, [resumeConversation]);
@@ -465,6 +469,7 @@ export default function ChatPanel({ chat, sourceTitle }) {
               isOpen={!!selectedWord}
               position={wordPosition}
               placement="below"
+              anchorRect={wordAnchorRect}
               word={selectedWord || ''}
               wordBbox={null}
               sentenceWords={null}

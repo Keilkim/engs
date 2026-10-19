@@ -31,11 +31,13 @@ export default function VocabModeContent({
             {speaking ? '■' : '🔊'}
           </button>
         </div>
-        {phonetic && (
-          <div className="word-phonetic">{phonetic}</div>
-        )}
-        <div className="word-definition">
-          {safeDefinition || 'No definition'}
+        <div className="word-menu-body">
+          {phonetic && (
+            <div className="word-phonetic">{phonetic}</div>
+          )}
+          <div className="word-definition">
+            {safeDefinition || 'No definition'}
+          </div>
         </div>
         <div className="word-menu-actions">
           <button className="delete-btn" onClick={onDelete} disabled={loading}>
@@ -74,7 +76,11 @@ export default function VocabModeContent({
               )}
             </div>
           ) : (
-            safeDefinition && <div className="word-definition">{safeDefinition}</div>
+            safeDefinition && (
+              <div className="word-menu-body">
+                <div className="word-definition">{safeDefinition}</div>
+              </div>
+            )
           )}
           <div className="word-menu-actions">
             {canSave ? (

@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
-import { calculateModalPosition, getArrowClass, getMobileSafeAreaBottom } from '../../utils/positioning';
+import { calculateModalPosition, getArrowClass, getMobileSafeAreaBottom, placeAnchoredMenu } from '../../utils/positioning';
 import { cleanDisplayText } from '../../utils/textUtils';
 import { useTranslation } from '../../i18n';
 import { useWordLookup } from './useWordLookup';
@@ -11,6 +11,9 @@ export default function WordQuickMenu({
   isOpen,
   position,
   placement = 'below',
+  // Viewport-px { top, bottom } of the tapped word/row, for callers without a
+  // wordBbox. Lets the menu flip to the other side without covering the word.
+  anchorRect,
   word,
   wordBbox,
   sentenceWords,
@@ -51,7 +54,12 @@ export default function WordQuickMenu({
     || (Array.isArray(sentenceWords) && sentenceWords.length > 0
       ? sentenceWords.map((w) => (typeof w === 'string' ? w : w?.text || '')).join(' ').replace(/\s+/g, ' ').trim()
       : undefined);
-  const [dynamicPosition, setDynamicPosition] = useState(null);
+  const [dynamicAnchor, setDynamicAnchor] = useState(null);
+  // Natural (unconstrained) height of the menu, measured before paint. Drives
+  // the above/below choice instead of a fixed guess, so a long idiom list never
+  // runs off the bottom of the screen.
+  const [menuHeight, setMenuHeight] = useState(null);
+  const [, setViewportTick] = useState(0);
   const rafRef = useRef(null);
   const modalRef = useRef(null);
   const backdropRef = useRef(null);
@@ -104,25 +112,22 @@ export default function WordQuickMenu({
   const { reset: resetVocab, loadExisting: loadVocab, handleLookup } = vocab;
   const { reset: resetGrammar, loadExisting: loadGrammar, handleAnalyze } = grammar;
 
-  // Position update (wordBbox % → viewport coords)
+  // Anchor update (wordBbox % → viewport coords of the word's top/bottom edges)
   const updatePosition = useCallback(() => {
     if (!wordBbox || !containerRef?.current) {
-      setDynamicPosition(null);
+      setDynamicAnchor(null);
       return;
     }
 
     const containerRect = containerRef.current.getBoundingClientRect();
     const centerX = wordBbox.x + wordBbox.width / 2;
-    const bottomY = wordBbox.y + wordBbox.height;
-    const topY = wordBbox.y;
 
-    const newX = containerRect.left + (centerX * containerRect.width / 100);
-    const newY = placement === 'below'
-      ? containerRect.top + (bottomY * containerRect.height / 100) + 12
-      : containerRect.top + (topY * containerRect.height / 100) - 12;
-
-    setDynamicPosition({ x: newX, y: newY });
-  }, [wordBbox, containerRef, placement]);
+    setDynamicAnchor({
+      x: containerRect.left + (centerX * containerRect.width / 100),
+      top: containerRect.top + (wordBbox.y * containerRect.height / 100),
+      bottom: containerRect.top + ((wordBbox.y + wordBbox.height) * containerRect.height / 100),
+    });
+  }, [wordBbox, containerRef]);
 
   // The transformed DOM bounds are only available after commit. Measure before
   // paint so opening/repositioning the menu cannot flash its previous location.
@@ -132,11 +137,46 @@ export default function WordQuickMenu({
     updatePosition();
   }, [isOpen, updatePosition, zoomScale, panOffset]);
 
+  // Natural height = rendered height plus whatever the capped body hides, so
+  // the measurement doesn't depend on the cap. The 1px tolerance lets it settle.
+  const measureMenu = useCallback(() => {
+    const el = modalRef.current;
+    if (!el) return;
+    const body = el.querySelector('.word-menu-body');
+    const natural = el.offsetHeight + (body ? body.scrollHeight - body.clientHeight : 0);
+    setMenuHeight((prev) => (prev === null || Math.abs(natural - prev) > 1 ? natural : prev));
+  }, []);
+
+  // Re-measure after every render (content grows when the lookup/analysis
+  // arrives) and whenever the content reflows on its own — e.g. the Korean
+  // web font swapping in after the first measurement.
+  useLayoutEffect(() => {
+    const el = modalRef.current;
+    if (!el) return;
+    measureMenu();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measureMenu);
+    observer.observe(el);
+    el.querySelectorAll('.word-menu-body > *').forEach((child) => observer.observe(child));
+    return () => observer.disconnect();
+  });
+
+  // Callers without a wordBbox still need a re-layout when the viewport
+  // changes (e.g. the mobile browser bar collapsing).
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleResize = () => setViewportTick((t) => t + 1);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isOpen]);
+
   // Update position on scroll/resize
   useEffect(() => {
     if (!isOpen || !wordBbox || !containerRef?.current) return;
 
-    const handleUpdate = () => {
+    const handleUpdate = (e) => {
+      // Scrolling the menu's own body doesn't move the word.
+      if (e?.target instanceof Node && modalRef.current?.contains(e.target)) return;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(updatePosition);
     };
@@ -185,34 +225,48 @@ export default function WordQuickMenu({
   // Position calculation
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const safeAreaBottom = getMobileSafeAreaBottom();
   const menuWidth = isGrammarMode ? Math.min(340, vw - 24) : Math.min(300, vw - 24);
-  const effectivePosition = dynamicPosition || position;
-  const positionReady = Boolean(effectivePosition);
+  const gap = 12;
+  // Without a wordBbox/anchorRect the caller's position is already offset by
+  // `gap` from the word's near edge; the far edge is unknown.
+  const fallbackEdge = position && (placement === 'below' ? position.y - gap : position.y + gap);
+  const anchor = dynamicAnchor || (position && {
+    x: position.x,
+    top: anchorRect?.top ?? fallbackEdge,
+    bottom: anchorRect?.bottom ?? fallbackEdge,
+  });
+  const positionReady = Boolean(anchor) && menuHeight !== null;
 
-  const { left, top, transform, arrowLeft } = calculateModalPosition({
-    position: effectivePosition,
+  const { left, arrowLeft } = calculateModalPosition({
+    position: { x: anchor?.x ?? 0, y: 0 },
     menuWidth,
     margin: 12,
-    placement,
   });
 
-  const maxHeight = Math.min(vh * 0.6, vh - safeAreaBottom - 100);
+  const vertical = placeAnchoredMenu({
+    anchor: anchor || { top: 0, bottom: 0 },
+    menuHeight: menuHeight ?? 0,
+    preferred: placement,
+    viewportHeight: vh,
+    bottomInset: getMobileSafeAreaBottom(),
+    margin: 12,
+    gap,
+  });
 
   const menuStyle = {
     position: 'fixed',
     left,
-    top,
-    transform,
+    top: vertical.top,
     zIndex: 1000,
     width: menuWidth,
-    maxHeight,
+    // Unmeasured: let the menu take its natural height so it can be measured.
+    maxHeight: menuHeight === null ? 'none' : vertical.maxHeight,
     '--arrow-left': `${arrowLeft}%`,
     opacity: positionReady ? 1 : 0,
     visibility: positionReady ? 'visible' : 'hidden',
   };
 
-  const arrowClass = getArrowClass(placement);
+  const arrowClass = vertical.detached ? 'no-arrow' : getArrowClass(vertical.placement);
   const grammarClass = isGrammarMode ? ' grammar' : '';
   const existingClass = existingAnnotation ? ' existing' : '';
 
