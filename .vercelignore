@@ -1,0 +1,7 @@
+.env*
+.git
+docs
+personas
+supabase
+**/*.test.mjs
+**/*.sql

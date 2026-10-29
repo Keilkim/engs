@@ -1,327 +1,188 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getTodayReviewItems, getTotalReviewCount, updateReviewResult } from '../../services/review';
-import { updateTodayStats } from '../../services/stats';
-import Flashcard from '../../containers/flashcard/Flashcard';
-import ScenePlayer from '../../containers/flashcard/ScenePlayer';
-import { TranslatableText } from '../../components/translatable';
-import { safeJsonParse } from '../../utils/errors';
 import Buddy from '../../components/Buddy';
+import ScenePlayer from '../../containers/flashcard/ScenePlayer';
+import usePracticeAudio from '../../hooks/usePracticeAudio';
+import { cardContent, compareSpokenAnswer } from '../../services/reviewPractice';
+import { safeJsonParse } from '../../utils/errors';
+import useReviewPractice from './useReviewPractice';
+import ReviewLibrary from './ReviewLibrary';
+
+const MODES = [['quiet', '조용히'], ['listen', '듣기'], ['speak', '말하기']];
 
 export default function Review() {
   const navigate = useNavigate();
-  const [items, setItems] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [showAnswer, setShowAnswer] = useState(false);
-  const [stats, setStats] = useState({ correct: 0, incorrect: 0 });
-  const [totalItems, setTotalItems] = useState(0);
-  const [processing, setProcessing] = useState(false);
-  const [saveError, setSaveError] = useState(false);
-  const [exiting, setExiting] = useState(false);
-  const processingRef = useRef(false);
+  const practice = useReviewPractice();
+  const [mode, setMode] = useState('quiet');
+  const [paused, setPaused] = useState(false);
+  const [library, setLibrary] = useState(() => new URLSearchParams(window.location.search).get('library') === '1');
+  const [settings, setSettings] = useState(false);
+  const [spoken, setSpoken] = useState(null);
+  const [hintOpen, setHintOpen] = useState(false);
+  const [sceneOpen, setSceneOpen] = useState(false);
+  const [listened, setListened] = useState(false);
+  const [typedAnswer, setTypedAnswer] = useState('');
+  const card = cardContent(practice.current);
+  const audio = usePracticeAudio(text => {
+    setSpoken({ text, result: compareSpokenAnswer(text, card.word) });
+    practice.reveal();
+  });
+  const { reset: resetAudio, stop: stopAudio } = audio;
+  const heading = useRef(null);
+  const [displayedId, setDisplayedId] = useState(null);
+
+  // Reset card-local input before rendering the next card, never after paint.
+  if (displayedId !== practice.currentId) {
+    setDisplayedId(practice.currentId);
+    setSpoken(null);
+    setTypedAnswer('');
+    setHintOpen(false);
+    setSceneOpen(false);
+    setListened(false);
+  }
 
   useEffect(() => {
-    loadItems();
+    resetAudio();
+    heading.current?.focus({ preventScroll: true });
+  }, [practice.currentId, resetAudio]);
+
+  useEffect(() => {
+    const hide = () => {
+      if (document.hidden) { setPaused(true); setSceneOpen(false); }
+    };
+    document.addEventListener('visibilitychange', hide);
+    return () => document.removeEventListener('visibilitychange', hide);
   }, []);
 
-  // 카드 탭 = "몰라요": 답을 공개만 한다. 다음 카드로 넘어가는 건 수동('다음' 버튼)으로만
-  // — 자동 넘김 없음(사용자가 답/장면을 볼 시간을 스스로 조절).
-  function handleReveal() {
-    if (showAnswer || processingRef.current) return;
-    setShowAnswer(true);
-  }
-
-  async function loadItems() {
-    setLoading(true);
-    setError(false);
-    try {
-      const [data, total] = await Promise.all([
-        getTodayReviewItems(),
-        getTotalReviewCount(),
-      ]);
-      setItems(data || []);
-      setTotalItems(total || 0);
-      setCurrentIndex(0);
-      setStats({ correct: 0, incorrect: 0 });
-    } catch {
-      // 로드 실패를 '복습 완료'로 위장하지 않고 별도 에러 상태로 표시
-      setError(true);
-    } finally {
-      setLoading(false);
+  function changeMode(next) {
+    resetAudio();
+    setSceneOpen(false);
+    setSpoken(null);
+    setTypedAnswer('');
+    setMode(next);
+    if (next === 'listen' && practice.current && !practice.revealed) {
+      audio.play(card.word);
+      setListened(true);
     }
   }
 
-  async function handleEvaluation(isCorrect) {
-    // 연타 재진입 차단 (이중 처리 / index 범위 초과 크래시 방지)
-    if (processingRef.current) return;
-    const currentItem = items[currentIndex];
-    if (!currentItem) return;
-
-    processingRef.current = true;
-    setProcessing(true);
-    setSaveError(false);
-
-    try {
-      await updateReviewResult(currentItem.id, isCorrect);
-
-      // 통계 기록 (실패해도 복습 흐름은 계속 진행)
-      try {
-        await updateTodayStats('cards_reviewed');
-        if (isCorrect) await updateTodayStats('cards_correct');
-      } catch {
-        // 통계 기록 실패는 복습을 막지 않는다
-      }
-
-      setStats((prev) => ({
-        correct: prev.correct + (isCorrect ? 1 : 0),
-        incorrect: prev.incorrect + (isCorrect ? 0 : 1),
-      }));
-
-      // 다음 카드로: 역방향 회전(뒤집기 원복)은 어색하므로, 카드를 왼쪽으로
-      // 슬라이드시켜 내보낸 뒤 새 카드로 교체(key 변경 → 앞면부터 새로 등장).
-      setExiting(true);
-      setTimeout(() => {
-        setCurrentIndex((prev) => prev + 1); // 마지막이면 == length → 완료 화면
-        setShowAnswer(false);
-        setExiting(false);
-        processingRef.current = false;
-        setProcessing(false);
-      }, 260);
-    } catch {
-      // 저장 실패 시 피드백을 주고 같은 카드에서 재시도 가능하게 유지
-      setSaveError(true);
-      processingRef.current = false;
-      setProcessing(false);
-    }
+  function reveal() { stopAudio(); practice.reveal(); }
+  function evaluate(correct) {
+    stopAudio();
+    practice.evaluate(correct, spoken?.result === 'match' ? 'answer-confirmed' : 'self');
   }
+  function pause() { stopAudio(); setSceneOpen(false); setPaused(true); }
+  function leave() { stopAudio(); navigate('/'); }
+  function openLibrary() { stopAudio(); setSceneOpen(false); setLibrary(true); }
 
-  if (loading) {
-    return (
-      <div className="review-screen">
-        <div className="review-loading">
-          <div className="spinner" />
-          <p><TranslatableText textKey="review.loadingItems">Loading review items...</TranslatableText></p>
-        </div>
-      </div>
-    );
-  }
+  const completed = Boolean(practice.session && !practice.currentId);
+  const answers = Object.values(practice.session?.answers || {});
+  const recalled = answers.filter(answer => answer.correct === true).length;
+  const progress = practice.session?.ids.length ? (answers.length / practice.session.ids.length) * 100 : 0;
+  const source = practice.current?.annotation?.source;
+  const rect = safeJsonParse(practice.current?.annotation?.selection_rect, null);
+  const sceneStart = rect?.sceneStart ?? rect?.timestamp;
+  const canPlayScene = rect?.type === 'youtube_word' && source?.youtube_data?.video_id && typeof sceneStart === 'number';
+  const sourcePath = source?.id ? (source.type === 'youtube' ? `/youtube/${source.id}` : `/viewer/${source.id}`) : null;
+  const maskedDefinition = mode === 'speak' && card.vocabulary && card.word
+    ? card.definition.replace(new RegExp(card.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '____') : card.definition;
 
-  // 로드 오류: 완료 화면으로 위장하지 않고 재시도 제공
-  if (error) {
-    return (
-      <div className="review-screen">
-        <header className="review-header">
-          <button className="back-button" onClick={() => navigate('/')}>
-            <TranslatableText textKey="nav.back">Back</TranslatableText>
-          </button>
-          <h1><TranslatableText textKey="review.errorTitle">Couldn't load review</TranslatableText></h1>
-        </header>
-        <main className="review-complete">
-          <p><TranslatableText textKey="review.errorMessage">Something went wrong loading your review. Please try again.</TranslatableText></p>
-          <button className="home-button" onClick={loadItems}>
-            <TranslatableText textKey="review.retry">Retry</TranslatableText>
-          </button>
-        </main>
-      </div>
-    );
-  }
+  return <div className="practice-screen">
+    <header className="practice-header">
+      <button onClick={leave} disabled={practice.busy} aria-label="홈으로 돌아가기">← 홈</button>
+      <span>오늘의 작은 복습</span>
+      <button onClick={openLibrary} disabled={practice.busy}>내 단어</button>
+    </header>
 
-  // 세션 완료: 카드를 모두 평가했거나(방어적으로 index가 범위를 벗어나면) 완료 화면
-  if (items.length > 0 && currentIndex >= items.length) {
-    const total = stats.correct + stats.incorrect;
-    const percentage = total > 0 ? Math.round((stats.correct / total) * 100) : 0;
-
-    return (
-      <div className="review-screen">
-        <header className="review-header">
-          <button className="back-button" onClick={() => navigate('/')}>
-            <TranslatableText textKey="nav.back">Back</TranslatableText>
-          </button>
-          <h1><TranslatableText textKey="review.reviewComplete">Review Complete!</TranslatableText></h1>
-        </header>
-
-        <main className="review-complete">
-          <div className="complete-icon">Done</div>
-          <h2><TranslatableText textKey="review.completedMessage">You've completed today's review</TranslatableText></h2>
-
-          {total > 0 && (
-            <div className="review-stats">
-              <div className="stat-item">
-                <span className="stat-label">
-                  <TranslatableText textKey="review.accuracy">Accuracy</TranslatableText>
-                </span>
-                <span className="stat-value">{percentage}%</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-label correct">
-                  <TranslatableText textKey="review.iKnow">I know</TranslatableText>
-                </span>
-                <span className="stat-value">{stats.correct}</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-label incorrect">
-                  <TranslatableText textKey="review.dontKnow">Don't know</TranslatableText>
-                </span>
-                <span className="stat-value">{stats.incorrect}</span>
-              </div>
-            </div>
-          )}
-
-          <button className="home-button" onClick={() => navigate('/')}>
-            <TranslatableText textKey="review.returnHome">Return Home</TranslatableText>
-          </button>
-        </main>
-      </div>
-    );
-  }
-
-  // 복습할 카드가 없음: 신규 사용자(저장된 카드 0)와 '오늘 복습 완료'를 구분
-  if (items.length === 0) {
-    const isNewUser = totalItems === 0;
-
-    return (
-      <div className="review-screen">
-        <header className="review-header">
-          <button className="back-button" onClick={() => navigate('/')}>
-            <TranslatableText textKey="nav.back">Back</TranslatableText>
-          </button>
-          <h1>
-            {isNewUser ? (
-              <TranslatableText textKey="review.noCardsTitle">No cards to review yet</TranslatableText>
-            ) : (
-              <TranslatableText textKey="review.reviewComplete">Review Complete!</TranslatableText>
-            )}
-          </h1>
-        </header>
-
-        <main className="review-complete">
-          {isNewUser ? (
-            <>
-              <Buddy className="review-buddy" />
-              <h2><TranslatableText textKey="review.noCardsHeading">Nothing to review yet</TranslatableText></h2>
-              <p><TranslatableText textKey="review.noCardsCta">Tap a word in your sources to save it, and it'll show up here for review.</TranslatableText></p>
-            </>
-          ) : (
-            <>
-              <div className="complete-icon">Done</div>
-              <h2><TranslatableText textKey="review.allDoneToday">You're all caught up for today</TranslatableText></h2>
-            </>
-          )}
-          <button className="home-button" onClick={() => navigate('/')}>
-            <TranslatableText textKey="review.returnHome">Return Home</TranslatableText>
-          </button>
-        </main>
-      </div>
-    );
-  }
-
-  const currentItem = items[currentIndex];
-  const progress = ((currentIndex + 1) / items.length) * 100;
-
-  // 이 카드가 YouTube 장면에서 저장된 단어라면, 원본 오디오를 다시 들을 수 있게
-  // Whisper 타임스탬프로 그 장면을 재생 연결한다.
-  const annotation = currentItem?.annotation;
-  const sceneRect = safeJsonParse(annotation?.selection_rect, null);
-  const youtubeData = annotation?.source?.type === 'youtube' ? annotation.source.youtube_data : null;
-  const sceneVideoId = youtubeData?.video_id;
-  // Prefer the authoritative scene bounds saved with the annotation (pause-chunk
-  // era); fall back to the word timestamp for legacy cards. Scene playback stays
-  // gated to youtube_word cards, exactly as before.
-  const isYoutubeWord = sceneRect?.type === 'youtube_word';
-  const sceneStart = isYoutubeWord
-    ? (typeof sceneRect.sceneStart === 'number'
-        ? sceneRect.sceneStart
-        : (typeof sceneRect.timestamp === 'number' ? sceneRect.timestamp : null))
-    : null;
-  const canPlayScene = Boolean(sceneVideoId) && sceneStart != null;
-
-  return (
-    <div className="review-screen">
-      <header className="review-header">
-        <button className="back-button" onClick={() => navigate('/')}>
-          <TranslatableText textKey="nav.back">Back</TranslatableText>
-        </button>
-        <h1><TranslatableText textKey="review.reviewCenter">Review Center</TranslatableText></h1>
-        <span className="progress-text">
-          {currentIndex + 1} / {items.length}
-        </span>
-      </header>
-
-      <div className="progress-bar">
-        <div
-          className="progress-fill"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-
-      <main className="review-content">
-        <Flashcard
-          key={currentIndex}
-          item={currentItem}
-          showAnswer={showAnswer}
-          exiting={exiting}
-          onReveal={handleReveal}
-        />
-
-        {canPlayScene && (
-          <ScenePlayer
-            key={`scene-${currentIndex}`}
-            videoId={sceneVideoId}
-            sourceId={annotation.source.id}
-            segmentIndex={sceneRect.segmentIndex}
-            fallbackStart={sceneStart}
-            sceneStart={sceneRect.sceneStart}
-            sceneEnd={sceneRect.sceneEnd}
-          />
-        )}
-
-        {currentItem?.annotation?.source?.title && (
-          <p className="review-source-label">
-            <TranslatableText textKey="review.from">From</TranslatableText>
-            {': '}{currentItem.annotation.source.title}
-          </p>
-        )}
-
-        {saveError && (
-          <p className="review-save-error">
-            <TranslatableText textKey="review.saveFailed">Couldn't save. Tap to try again.</TranslatableText>
-          </p>
-        )}
-
-        {/*
-          인출 정직성: 답을 여는 행위 자체가 "몰라요"(오답)다. 사후확신 편향으로
-          "알았는데"를 누르는 걸 막는다. 넘어가는 건 오직 수동('다음' 버튼) —
-          자동 넘김 없음(답/장면을 볼 시간을 사용자가 스스로 정함).
-          - 앞면: 카드 탭 = 답 공개(=몰라요), '알아요' 버튼 = 정답 후 즉시 다음
-          - 뒷면: 직접 '다음'을 눌러 넘어감(오답 처리)
-        */}
-        {showAnswer ? (
-          <div className="advance-row">
-            <button
-              className="eval-button next"
-              onClick={() => handleEvaluation(false)}
-              disabled={processing}
-            >
-              <TranslatableText textKey="review.next">Next</TranslatableText>
-            </button>
-          </div>
-        ) : (
-          <div className="front-actions">
-            <p className="reveal-hint">
-              <TranslatableText textKey="review.tapIfUnsure">Don't know it? Tap the card to see the answer.</TranslatableText>
-            </p>
-            <button
-              className="eval-button correct know-button"
-              onClick={() => handleEvaluation(true)}
-              disabled={processing}
-            >
-              <TranslatableText textKey="review.iKnow">I know</TranslatableText>
-            </button>
-          </div>
-        )}
+    {library ? <ReviewLibrary onClose={() => { setLibrary(false); practice.load(); }} onPractice={items => {
+      setLibrary(false); setPaused(false); practice.startCheck(items);
+    }} /> : practice.loading ? <main className="practice-center"><p role="status">저장한 단어를 가져오고 있어요.</p></main>
+      : practice.error ? <main className="practice-center"><h1>잠깐, 연결을 확인해 주세요.</h1><p role="alert">{practice.error}</p>
+        <button className="practice-primary" onClick={() => practice.load()}>다시 불러오기</button></main>
+      : completed ? <main className="practice-center practice-finish">
+        <span className="practice-eyebrow">A LITTLE MORE YOURS</span>
+        <Buddy className="practice-buddy" />
+        <h1>{practice.session.kind === 'retry' ? '다시 도전했어요.' : practice.session.kind === 'sample' ? '이렇게 복습하면 돼요.' : '이번 묶음을 마쳤어요.'}</h1>
+        <p className="practice-finish-count"><strong>{answers.length}개</strong> 확인했어요.</p>
+        <div className="practice-result"><span>맞혔다고 체크 <strong>{recalled}</strong></span><span>다시 볼 표현 <strong>{answers.length - recalled}</strong></span></div>
+        <p>{practice.session.kind === 'daily' ? '오늘 헷갈린 표현은 내일 다시 만나요.' : '이번 연습은 예정된 복습 간격에 영향을 주지 않아요.'}</p>
+        <button className="practice-primary" onClick={leave}>여기서 마치기</button>
+        {practice.retryItems.length > 0 && <button className="practice-secondary" onClick={() => { setPaused(false); practice.startRetry(); }}>헷갈린 {practice.retryItems.length}개 다시 해보기</button>}
+        {practice.overview.due > 0 && <button className="practice-text-button" onClick={() => practice.load(true, practice.options)}>다음 묶음 시작 · 예정 항목 {practice.overview.due}개 남음</button>}
+        <button className="practice-text-button" onClick={openLibrary}>내가 고른 단어 따로 연습</button>
+        {practice.session.kind !== 'daily' && <p className="practice-note">방금 다시 확인한 결과와 며칠 뒤의 기억은 달라요.</p>}
       </main>
-    </div>
-  );
+      : !practice.current ? <main className="practice-center">
+        <Buddy className="practice-buddy" />
+        <h1>{practice.overview.total === 0 ? '단어 3개로 가볍게 시작해요.' : practice.overview.due ? '이번 조건에 맞는 항목이 없어요.' : '오늘 예정된 복습을 마쳤어요.'}</h1>
+        <p>{practice.overview.total === 0 ? '샘플로 먼저 해보고, 내 자료에서 단어를 저장해 보세요.' : '필요한 단어를 직접 고르거나 읽던 자료를 이어가세요.'}</p>
+        {practice.overview.total === 0 && <button className="practice-primary" onClick={practice.startSample}>샘플 3개 체험</button>}
+        {practice.overview.due > 0 && <button className="practice-primary" onClick={() => practice.load(true)}>기본 조건으로 시작</button>}
+        <button className="practice-secondary" onClick={leave}>{practice.overview.total === 0 ? '내 자료로 시작하기' : '자료 이어 읽기'}</button>
+        <button className="practice-text-button" onClick={openLibrary}>전체 목록 보기</button>
+      </main>
+      : paused ? <main className="practice-center"><span className="practice-eyebrow">TAKE YOUR TIME</span><h1>여기서 이어가면 돼요.</h1>
+        <p>이미 확인한 결과는 남아 있어요. 이번 묶음은 {practice.session.ids.length - answers.length}개 남았어요.</p>
+        <button className="practice-primary" onClick={() => setPaused(false)}>이어서 하기</button><button className="practice-secondary" onClick={leave}>오늘은 여기까지</button></main>
+      : <main className="practice-main">
+        <div className="practice-topline"><span className="practice-eyebrow">{practice.session.kind === 'retry' ? 'ONE MORE TRY' : practice.session.kind === 'check' ? 'YOUR CHOICE' : practice.session.kind === 'sample' ? 'TRY THREE WORDS' : 'A LITTLE EVERY DAY'}</span>
+          <span>{answers.length} / {practice.session.ids.length}</span></div>
+        <div className="practice-progress" role="progressbar" aria-label="이번 묶음 진행" aria-valuenow={answers.length} aria-valuemin={0} aria-valuemax={practice.session.ids.length}><span style={{ width: `${progress}%` }} /></div>
+        <div className="practice-mode-bar" aria-label="복습 방식">{MODES.map(([value, label]) =>
+          <button key={value} aria-pressed={mode === value} disabled={practice.busy} onClick={() => changeMode(value)}>{label}</button>)}</div>
+        <h1 className="practice-prompt" ref={heading} tabIndex={-1}>{practice.revealed ? '떠올린 답과 비교해 보세요.' : mode === 'listen' ? '듣고, 뜻을 떠올려 보세요.' : mode === 'speak' && card.vocabulary ? '이 뜻의 영어 표현을 말해보세요.' : '뜻을 속으로 떠올려 보세요.'}</h1>
+
+        <button className={`practice-card ${practice.revealed ? 'is-revealed' : ''}`} onClick={reveal} disabled={practice.busy || practice.revealed} aria-label={practice.revealed ? '정답' : '카드를 눌러 정답 보기'}>
+          {practice.revealed ? <><span className="practice-card-label">ANSWER</span><strong className="practice-word">{card.word}</strong>
+            {card.phonetic && <span className="practice-phonetic">{card.phonetic}</span>}
+            <span className="practice-definition">{card.definition || '원문에서 이 표현의 뜻을 다시 확인해 주세요.'}</span>
+            {card.sentence && <span className="practice-sentence">{card.sentence}</span>}</>
+            : mode === 'listen' ? <><span className="practice-card-label">LISTEN & RECALL</span><span className="practice-sound-mark" aria-hidden="true">♫</span><span>들리는 표현은 어떤 뜻일까요?</span><small>카드를 누르면 글자와 뜻을 확인해요.</small></>
+              : <><span className="practice-card-label">{mode === 'speak' && card.vocabulary ? 'SAY IT IN ENGLISH' : 'TAKE A MOMENT'}</span><strong className={mode === 'speak' && card.vocabulary ? 'practice-definition' : 'practice-word'}>{mode === 'speak' && card.vocabulary ? maskedDefinition : card.word}</strong><small>떠올린 뒤 눌러서 정답 확인</small></>}
+        </button>
+
+        {mode === 'listen' && !practice.revealed && <button className="practice-secondary" onClick={() => {
+          if (audio.speaking) { stopAudio(); return; }
+          audio.play(card.word); setListened(true);
+        }}>{audio.speaking ? '재생 멈추기' : listened ? '한 번 더 듣기' : '소리 듣기'}</button>}
+        {mode === 'speak' && !practice.revealed && <div className="practice-speech">
+          <button className="practice-secondary" onClick={audio.listening ? stopAudio : audio.listen} disabled={!audio.supported}>{audio.listening ? '듣고 있어요 · 멈추기' : '마이크로 답하기'}</button>
+          {!audio.supported && <p className="practice-note">이 브라우저에서는 글자로 답하거나 조용히 복습할 수 있어요.</p>}
+          {audio.transcript && <p role="status">들은 말: {audio.transcript}</p>}
+          <form onSubmit={event => {
+            event.preventDefault();
+            if (!typedAnswer.trim()) return;
+            stopAudio(); setSpoken({ text: typedAnswer.trim(), result: compareSpokenAnswer(typedAnswer, card.word) }); practice.reveal();
+          }}><label className="sr-only" htmlFor="practice-answer">영어 표현 입력</label><input id="practice-answer" autoComplete="off" value={typedAnswer} onChange={event => setTypedAnswer(event.target.value)} placeholder="글자로 답해도 괜찮아요" /><button disabled={!typedAnswer.trim()}>확인</button></form>
+        </div>}
+        {spoken && practice.revealed && <p className="practice-spoken" role="status">내 답: <strong>{spoken.text}</strong><br />{spoken.result === 'match' ? '저장한 표현과 일치해요. 내가 말한 답이 맞는지 확인해 주세요.' : '표현이 다르게 들어왔어요. 인식한 말과 정답을 비교해서 직접 체크해 주세요.'}</p>}
+        {audio.error && <p className="practice-message" role="status">{audio.error}</p>}
+
+        <div className="practice-context">
+          {card.source && <span className="practice-source">{card.source}</span>}
+          {!practice.revealed && card.sentence && <button className="practice-text-button" onClick={() => { setHintOpen(true); practice.hint(); }}>저장한 문장 힌트</button>}
+          {hintOpen && !practice.revealed && <p className="practice-sentence">{card.sentence}</p>}
+          {mode !== 'quiet' && practice.revealed && <button className="practice-text-button" onClick={() => audio.speaking ? stopAudio() : audio.play(card.word)}>{audio.speaking ? '재생 멈추기' : '발음 듣기'}</button>}
+          {mode !== 'quiet' && canPlayScene && <button className="practice-text-button" onClick={() => { stopAudio(); setSceneOpen(value => !value); if (!practice.revealed) practice.hint(); }}>{sceneOpen ? '장면 닫기' : '저장한 영상 장면 보기'}</button>}
+          {sceneOpen && mode !== 'quiet' && <ScenePlayer key={practice.currentId} videoId={source.youtube_data.video_id} sourceId={source.id} segmentIndex={rect.segmentIndex} fallbackStart={sceneStart} sceneStart={rect.sceneStart} sceneEnd={rect.sceneEnd} />}
+          {practice.revealed && sourcePath && <button className="practice-text-button" onClick={() => { stopAudio(); navigate(sourcePath); }}>원문에서 다시 살펴보기 ↗</button>}
+        </div>
+
+        {practice.saveError && <p role="alert" className="practice-message">{practice.saveError}</p>}
+        {practice.storageWarning && <p role="status" className="practice-note">이 브라우저에 이어하기 위치를 보관하지 못했어요. 서버에 저장된 복습 결과는 유지돼요.</p>}
+        <div className="practice-actions">{practice.revealed ? <>
+          <button className="practice-secondary" onClick={() => evaluate(false)} disabled={practice.busy}>다시 볼래요</button>
+          <button className="practice-primary" onClick={() => evaluate(true)} disabled={practice.busy}>{practice.busy ? '저장 중…' : '맞혔어요'}</button>
+        </> : <button className="practice-primary" onClick={reveal}>정답 확인</button>}</div>
+        <p className="practice-note">{practice.session.hintedIds.includes(practice.currentId) ? '힌트를 보고 확인한 답이에요. 다음에는 도움 없이 떠올려보세요.' : !practice.current.last_reviewed ? '처음 보는 표현은 답을 먼저 살펴봐도 괜찮아요.' : '답을 보기 전에 떠올렸는지 스스로 체크해 주세요.'}</p>
+        <div className="practice-footer"><button onClick={pause} disabled={practice.busy}>잠깐 쉬기</button><button onClick={() => setSettings(value => !value)} disabled={practice.busy}>분량·범위</button>{practice.session.kind !== 'sample' && <button onClick={() => { stopAudio(); practice.suspend(); }} disabled={practice.busy}>이 단어 잠시 빼기</button>}</div>
+        {settings && <section className="practice-settings" aria-label="다음 묶음 설정"><h2>다음 묶음 정하기</h2>
+          <label>한 번에<select value={practice.options.size} onChange={event => practice.setOptions({ ...practice.options, size: Number(event.target.value) })}>{[3, 5, 10, 20].map(size => <option key={size} value={size}>{size}개</option>)}</select></label>
+          <label>새 표현은 최대<select value={practice.options.newLimit} onChange={event => practice.setOptions({ ...practice.options, newLimit: Number(event.target.value) })}>{[0, 2, 5, 10, 20].map(size => <option key={size} value={size}>{size === 0 ? '지금은 복습만' : `${size}개`}</option>)}</select></label>
+          <label>자료 범위<select value={practice.options.sourceId} onChange={event => practice.setOptions({ ...practice.options, sourceId: event.target.value })}><option value="">모든 자료</option>{Array.from(new Map(practice.dueItems.filter(item => item.annotation?.source?.id).map(item => [String(item.annotation.source.id), item.annotation.source])).values()).map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+          <p className="practice-note">이번 묶음을 바꿔도 이미 기록한 결과는 남아요. 아직 확인하지 않은 항목은 다음에 다시 만나요.</p>
+          <button className="practice-secondary" onClick={() => { resetAudio(); setSettings(false); practice.load(true, practice.options); }}>이 조건으로 시작</button>
+        </section>}
+      </main>}
+  </div>;
 }

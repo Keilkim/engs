@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSources, updateSource } from '../../services/source';
-import { getTodayReviewCount } from '../../services/review';
+import { getReviewOverview } from '../../services/review';
 import SourceGrid from '../../containers/source-grid/SourceGrid';
 import ReviewCard from '../../components/cards/ReviewCard';
 import AddSourceModal from '../../components/modals/AddSourceModal';
@@ -19,6 +19,7 @@ export default function Home() {
   const navigate = useNavigate();
   const [sources, setSources] = useState([]);
   const [reviewCount, setReviewCount] = useState(0);
+  const [reviewOverview, setReviewOverview] = useState({ due: 0, total: 0, lastReviewed: null });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -161,10 +162,11 @@ export default function Home() {
     try {
       const [sourcesData, count] = await Promise.all([
         getSources(),
-        getTodayReviewCount(),
+        getReviewOverview(),
       ]);
       setSources(sourcesData || []);
-      setReviewCount(count || 0);
+      setReviewCount(count.due || 0);
+      setReviewOverview(count);
     } catch {
       // 네트워크/서버 오류를 '소스 없음'으로 위장하지 않고 명시적 오류 상태로 표시
       setLoadError(true);
@@ -205,13 +207,10 @@ export default function Home() {
       <main className="home-content">
         <section className="home-hero" aria-labelledby="home-title">
           <div className="hero-copy">
-            <span className="eyebrow"><span className="orange-dot" aria-hidden="true" /><TranslatableText textKey="home.heroEyebrow">A LITTLE CURIOSITY GOES A LONG WAY</TranslatableText></span>
-            <h1 id="home-title">Your world,<br /><span>a little wider.</span></h1>
-            <p><TranslatableText textKey="home.heroHint">Your favorite videos, stories, and ideas.<br />A new way to make English your own.</TranslatableText></p>
-            <button className="dust-primary-button" onClick={() => setShowAddModal(true)}>
-              <span aria-hidden="true">+</span><TranslatableText textKey="home.addSource">Add a source</TranslatableText><span className="button-arrow" aria-hidden="true">↗</span>
-            </button>
-            <span className="hero-small-note"><TranslatableText textKey="home.yourPace">A little every day. At your own pace.</TranslatableText></span>
+            <span className="eyebrow"><span className="orange-dot" aria-hidden="true" />YOUR WORDS, A LITTLE MORE YOURS</span>
+            <h1 id="home-title">작게 시작해도,<br /><span>기억은 남아요.</span></h1>
+            {!loadError && <ReviewCard count={reviewCount} overview={reviewOverview} loading={loading} />}
+            <button className="practice-add-source" onClick={() => setShowAddModal(true)}>+ 내 자료 추가하기</button>
           </div>
           <div className="hero-art">
             <span className="hero-hello" aria-hidden="true">hello, you<span>!</span></span>
@@ -238,9 +237,7 @@ export default function Home() {
         ) : (
         <>
         <div className="learning-overview">
-          <section className="review-section">
-            <ReviewCard count={reviewCount} loading={loading} />
-          </section>
+
         {!loading && recentSource && statusFilter === 'all' && !searchQuery.trim() && (
           <section className="continue-section">
             <div className="section-header">

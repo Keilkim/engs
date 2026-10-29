@@ -1,5 +1,33 @@
 import { supabase } from './supabase';
 import { localDateString } from '../utils/dateUtils';
+import { captureSessionScope, assertSessionScope } from './sessionScope.js';
+
+// Practice records one daily review per server-confirmed schedule update.
+// Statistics are best effort; an account change must never count against the next user.
+export async function recordReviewStats(expectedUserId, correct) {
+  const scope = await captureSessionScope();
+  if (scope.userId !== expectedUserId) throw new DOMException('Account changed', 'AbortError');
+  const date = localDateString();
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data, error } = await supabase.from('user_stats').select('id, cards_reviewed, cards_correct')
+      .eq('user_id', scope.userId).eq('date', date).abortSignal(scope.signal).maybeSingle();
+    assertSessionScope(scope);
+    if (error) throw error;
+    const counts = { cards_reviewed: (data?.cards_reviewed || 0) + 1, cards_correct: (data?.cards_correct || 0) + (correct ? 1 : 0) };
+    if (!data) {
+      const result = await supabase.from('user_stats').insert({ user_id: scope.userId, date, ...counts }).abortSignal(scope.signal);
+      assertSessionScope(scope);
+      if (!result.error) return;
+      if (result.error.code !== '23505') throw result.error;
+    } else {
+      const result = await supabase.from('user_stats').update(counts).eq('id', data.id).eq('user_id', scope.userId)
+        .eq('cards_reviewed', data.cards_reviewed || 0).select('id').abortSignal(scope.signal).maybeSingle();
+      assertSessionScope(scope);
+      if (result.error) throw result.error;
+      if (result.data) return;
+    }
+  }
+}
 
 // 사용자 통계 조회
 export async function getUserStats() {
