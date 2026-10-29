@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { makeDeleteAccountHandler } from '../../api/_lib/accountDeletion.js';
 import { removeUserStorageFiles } from '../lib/storageCleanup.js';
+import productionHandler from '../../api/delete-account.js';
 
 const OWNER = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
@@ -75,6 +76,21 @@ async function request(handler, patch = {}) {
   await handler({ method: 'POST', headers: { authorization: 'Bearer own-token' }, ...patch }, res);
   return res;
 }
+
+test('production entry denies unauthenticated requests before loading the administrative SDK', async () => {
+  const result = await request(productionHandler, { headers: {} });
+  assert.equal(result.statusCode, 401);
+});
+
+test('asynchronous administrative SDK initialization failure keeps the account and returns a recoverable error', async () => {
+  const handler = makeDeleteAccountHandler({
+    createClient: async () => { throw new Error('SDK initialization unavailable'); },
+    env: { SUPABASE_URL: 'https://project.example', SUPABASE_SERVICE_ROLE_KEY: 'server-key' },
+  });
+  const result = await request(handler);
+  assert.equal(result.statusCode, 503);
+  assert.match(result.body.error, /로그인을 확인하지 못했어요/);
+});
 
 test('storage cleanup traverses multiple pages and nested orphan files without touching another account', async () => {
   const owned = Array.from({ length: 225 }, (_, i) => `${OWNER}/upload-${i}.pdf`);

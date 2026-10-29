@@ -22,7 +22,7 @@ export function makeDeleteAccountHandler({ createClient, env = process.env }) {
 
     let stage = 'auth';
     try {
-      const client = createClient(url, key, {
+      const client = await createClient(url, key, {
         auth: { persistSession: false, autoRefreshToken: false },
         global: {
           fetch: (input, init) => fetch(input, {
