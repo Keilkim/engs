@@ -9,6 +9,7 @@ import { safeJsonParse } from '../../utils/errors';
 import useReviewPractice from './useReviewPractice';
 import ReviewLibrary from './ReviewLibrary';
 import ReviewFeedback from './ReviewFeedback';
+import TapToContinueHint from './TapToContinueHint';
 
 const MODES = [['quiet', '조용히'], ['listen', '듣기'], ['speak', '말하기']];
 
@@ -56,7 +57,7 @@ export default function Review() {
 
   useEffect(() => {
     // Fetch both poses before the first answer so the reaction can appear immediately.
-    ['/images/orange-dust-buddy-correct.webp', '/images/orange-dust-buddy-surprised.webp'].forEach(src => {
+    ['/images/orange-dust-buddy-correct.webp', '/images/orange-dust-buddy-surprised.webp', '/images/orange-dust-tap-hand.webp'].forEach(src => {
       const image = new Image();
       image.src = src;
     });
@@ -104,7 +105,7 @@ export default function Review() {
   function pick(index) {
     respond({ correct: index === choice.answer, type: 'choice', picked: choice.options[index] });
   }
-  function next() { stopAudio(); practice.evaluate(practice.result.correct, practice.result.type); }
+  function next() { stopAudio(); return practice.evaluate(practice.result.correct, practice.result.type); }
   function evaluate(correct) {
     respond({ correct, type: spoken?.result === 'match' ? 'answer-confirmed' : 'self' });
   }
@@ -193,7 +194,7 @@ export default function Review() {
       : paused ? <main className="practice-center"><span className="practice-eyebrow">TAKE YOUR TIME</span><h1>여기서 이어가면 돼요.</h1>
         <p>이미 확인한 결과는 남아 있어요. 이번 묶음은 {practice.session.ids.length - answers.length}개 남았어요.</p>
         <button className="practice-primary" onClick={() => setPaused(false)}>이어서 하기</button><button className="practice-secondary" onClick={leave}>오늘은 여기까지</button></main>
-      : <main className="practice-main">
+      : <main className={`practice-main ${feedbackActive ? 'is-feedback' : ''}`}>
         <div className="practice-topline"><span className="practice-eyebrow">{practice.session.kind === 'retry' ? 'ONE MORE TRY' : practice.session.kind === 'check' ? 'YOUR CHOICE' : practice.session.kind === 'sample' ? 'TRY THREE WORDS' : 'A LITTLE EVERY DAY'}</span>
           <span>{answers.length} / {practice.session.ids.length}</span></div>
         <div className="practice-progress" role="progressbar" aria-label="이번 묶음 진행" aria-valuenow={answers.length} aria-valuemin={0} aria-valuemax={practice.session.ids.length}><span style={{ width: `${progress}%` }} /></div>
@@ -237,8 +238,8 @@ export default function Review() {
 
         {practice.saveError && <p role="alert" className="practice-message">{practice.saveError}</p>}
         {practice.storageWarning && <p role="status" className="practice-note">이 브라우저에 이어하기 위치를 보관하지 못했어요. 서버에 저장된 복습 결과는 유지돼요.</p>}
-        <div className="practice-actions">{result ? practice.saveError ? <button className="practice-primary" onClick={next} disabled={practice.busy}>{practice.busy ? <>저장 중<DustPuffs /></> : '저장하고 다음으로'}</button>
-          : <div className="practice-auto-next"><DustPuffs /><span>{practice.busy ? '기억을 담고 있어요' : '잠시 후 다음 카드로 넘어가요'}</span></div>
+        <div className={`practice-actions ${feedbackActive ? 'practice-actions--feedback' : ''}`}>{result ? practice.saveError ? <button className="practice-primary" onClick={next} disabled={practice.busy}>{practice.busy ? <>저장 중<DustPuffs /></> : '저장하고 다음으로'}</button>
+          : <TapToContinueHint busy={practice.busy} />
           : practice.revealed ? <>
             <button className="practice-secondary" onClick={() => evaluate(false)} disabled={practice.busy}>다시 볼래요</button>
             <button className="practice-primary" onClick={() => evaluate(true)} disabled={practice.busy}>{practice.busy ? '저장 중…' : '맞혔어요'}</button>

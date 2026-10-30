@@ -16,11 +16,11 @@
 .practice-mode-bar button[aria-pressed="true"] { background: var(--color-text); color: var(--color-base); box-shadow: 0 2px 6px #00000010; }
 .practice-prompt { font-size: 18px; line-height: 1.5; text-align: center; font-weight: 500; margin: 12px 0 20px; outline: none; }
 .practice-card { width: 100%; min-height: 260px; border: 1px solid var(--color-accent); border-radius: 24px; background: var(--color-base-sub); color: var(--color-text); padding: 28px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 20px; box-shadow: 0 10px 30px #00000005; text-align: center; overflow-wrap: anywhere; }
-.practice-card.is-revealed { border-color: var(--color-signature, #ef713f); }
+.practice-card.is-revealed { border-color: var(--color-accent); }
 .practice-card.is-flipped { border-color: var(--color-text-sub); }
 .practice-card-stage { position: relative; }
 .practice-card-stage > .practice-card { animation: practice-card-enter 240ms ease-out; }
-.practice-card.is-feedback { border-color: var(--dust-orange, #F47716); position: relative; z-index: 31; animation: none; box-shadow: 0 20px 70px #21170e18; }
+.practice-card.is-feedback { position: relative; z-index: 31; animation: none; box-shadow: 0 20px 70px #21170e18; }
 .practice-choices { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 .practice-choices button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 62px; padding: 14px 16px; border: 1px solid var(--color-accent); border-radius: 16px; background: var(--color-base); color: var(--color-text); font-size: 16px; line-height: 1.5; text-align: left; overflow-wrap: anywhere; transition: border-color 150ms, background-color 150ms, box-shadow 150ms; }
 .practice-choices button:not(:disabled):hover { border-color: var(--color-signature, #ef713f); box-shadow: 0 3px 12px #21170e08; }
@@ -35,6 +35,9 @@
 .practice-answer-reveal { display: block; width: 100%; border: 1px solid var(--dust-orange, #F47716); border-radius: 16px; padding: 16px 20px; }
 .practice-answer-label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 700; }
 .practice-feedback-shade { position: fixed; inset: 0; z-index: 30; background: #21170e24; pointer-events: none; animation: practice-shade-in 180ms ease-out; }
+.practice-screen .practice-feedback-continue { position: fixed; inset: 0; z-index: 35; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; touch-action: pan-y; }
+.practice-screen .practice-feedback-continue:focus-visible { outline: 2px solid var(--color-text-sub); outline-offset: -6px; }
+.practice-screen .practice-feedback-continue:not(:disabled):active { transform: none; }
 .practice-feedback { position: absolute; bottom: calc(100% + 18px); left: 50%; translate: -50% 0; z-index: 32; display: flex; align-items: center; gap: 8px; width: min(360px, 100%); min-height: 96px; padding: 10px 20px 10px 8px; border: 1px solid color-mix(in srgb, var(--dust-orange, #F47716) 28%, var(--color-base)); border-radius: 26px; background: var(--color-base); box-shadow: 0 12px 48px #21170e1c; pointer-events: none; animation: practice-feedback-pop 420ms cubic-bezier(.2,1.4,.4,1) both; }
 .practice-feedback::after { content: ''; position: absolute; width: 14px; height: 14px; left: calc(50% - 7px); bottom: -8px; transform: rotate(45deg); background: var(--color-base); border-right: 1px solid color-mix(in srgb, var(--dust-orange, #F47716) 28%, var(--color-base)); border-bottom: 1px solid color-mix(in srgb, var(--dust-orange, #F47716) 28%, var(--color-base)); }
 .practice-feedback-buddy { width: 104px; height: 104px; margin: -28px 0 -4px; flex-shrink: 0; transform-origin: 50% 85%; }
@@ -44,7 +47,16 @@
 .practice-feedback-copy strong { font-size: 19px; font-weight: 750; letter-spacing: -.035em; }
 .practice-feedback-copy > span:not(.sr-only) { font-size: 12px; line-height: 1.6; color: var(--color-text-sub); text-wrap: balance; }
 .practice-feedback-copy .dust-puffs { --puff-size: 12px; height: 18px; margin-left: 4px; }
-.practice-auto-next { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 52px; color: var(--color-text-sub); font-size: 13px; }
+.practice-main.is-feedback .practice-context, .practice-main.is-feedback .practice-spoken,
+.practice-main.is-feedback > .practice-note, .practice-main.is-feedback .practice-footer { display: none; }
+.practice-tap-hint { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: 100%; min-height: 104px; color: #a6a8ad; font-size: 14px; font-weight: 500; letter-spacing: .02em; pointer-events: none; }
+.practice-tap-hint.is-saving { gap: 12px; }
+.practice-tap-gesture { position: relative; display: block; width: 76px; height: 78px; }
+.practice-tap-gesture > img { position: absolute; width: 64px; height: 64px; left: 6px; top: 14px; transform-origin: 50% 90%; animation: practice-hand-tap 1.8s ease-in-out infinite; }
+.practice-tap-rays { position: absolute; left: 34px; top: 17px; width: 1px; height: 1px; animation: practice-tap-rays 1.8s ease-out infinite; }
+.practice-tap-rays i { position: absolute; width: 3px; height: 8px; left: -1px; top: -20px; border-radius: 3px; background: #a6a8ad; transform-origin: 50% 20px; transform: rotate(var(--ray-angle)); }
+@keyframes practice-hand-tap { 0%, 100% { transform: translateY(4px) rotate(-9deg); } 22% { transform: translateY(0) rotate(5deg); } 40%, 50% { transform: translateY(-5px) rotate(0) scale(.96); } 76% { transform: translateY(3px) rotate(-7deg); } }
+@keyframes practice-tap-rays { 0%, 28% { opacity: 0; transform: scale(.7); } 40%, 52% { opacity: 1; transform: scale(1); } 72%, 100% { opacity: 0; transform: scale(1.2); } }
 @keyframes practice-feedback-pop { from { opacity: 0; transform: translateY(14px) scale(.78); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes practice-shade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes practice-buddy-cheer { 0% { transform: rotate(-9deg) scale(.85); } 40% { transform: translateY(-10px) rotate(7deg) scale(1.12); } 70% { transform: translateY(2px) rotate(-3deg) scale(.97); } 100% { transform: none; } }
@@ -69,6 +81,7 @@
 .practice-main > .practice-secondary { width: 100%; margin-top: 14px; }
 .practice-actions { position: sticky; bottom: 0; display: flex; gap: 12px; padding: 16px 0 max(12px, env(safe-area-inset-bottom)); background: var(--color-base); z-index: 2; }
 .practice-actions > button { flex: 1; min-width: 0; }
+.practice-actions.practice-actions--feedback { position: relative; z-index: 36; background: transparent; pointer-events: none; }
 .practice-context { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 14px 0; }
 .practice-source { max-width: 100%; font-size: 12px; color: var(--color-text-sub); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .practice-text-button { background: transparent; border: 0; color: var(--color-text-sub); text-decoration: underline; text-underline-offset: 4px; padding: 10px 4px; min-height: 44px; font-size: 13px; }
@@ -133,5 +146,21 @@
 @media (prefers-reduced-motion: reduce) {
   .practice-progress > span, .practice-choices button { transition: none; }
   .practice-card-stage > .practice-card, .practice-feedback, .practice-feedback-shade,
-  .practice-feedback:is(.is-correct, .is-incorrect) .practice-feedback-buddy, .is-answer-reveal { animation: none; transform: none; }
+  .practice-feedback:is(.is-correct, .is-incorrect) .practice-feedback-buddy, .is-answer-reveal,
+  .practice-tap-gesture > img, .practice-tap-rays { animation: none; transform: none; }
+  .practice-tap-rays { opacity: .6; }
+}
+@media (max-height: 700px) {
+  .practice-main.is-feedback { padding-top: 12px; }
+  .practice-main.is-feedback .practice-progress { margin-bottom: 14px; }
+  .practice-main.is-feedback .practice-mode-bar { margin-bottom: 0; }
+  .practice-main.is-feedback .practice-prompt { margin-top: 6px; margin-bottom: 10px; }
+  .practice-main.is-feedback .practice-card { min-height: 0; padding: 18px 20px; gap: 12px; }
+  .practice-main.is-feedback .practice-card-label { display: none; }
+  .practice-main.is-feedback .practice-word { font-size: 28px; }
+  .practice-actions.practice-actions--feedback { padding-top: 8px; }
+  .practice-tap-hint { min-height: 88px; }
+  .practice-tap-gesture { height: 62px; }
+  .practice-tap-gesture > img { width: 52px; height: 52px; left: 12px; top: 10px; }
+  .practice-tap-rays { top: 13px; }
 }

@@ -10,7 +10,8 @@
 .dust-puffs img:nth-child(3) { --puff-scale: 1.083333; animation-delay: 310ms; }
 .dust-puffs img:nth-child(4) { --puff-scale: 1.25; animation-delay: 490ms; }
 .chat-send-btn .dust-puffs { --puff-size: 8px; gap: 0; }
-.buddy-loader-art > .dust-puffs { position: absolute; left: -35px; bottom: 4px; flex-direction: row-reverse; transform: rotate(-18deg); }
+.buddy-loader-art > .dust-puffs { position: absolute; left: -35px; bottom: 8px; flex-direction: row-reverse; align-items: flex-end; }
+.buddy-loader-art > .dust-puffs img { animation-name: dust-puff-ground; transform-origin: 50% 100%; }
 .buddy-loader--compact { flex-direction: row; gap: 12px; padding: 12px 4px; }
 .buddy-loader--compact .buddy-loader-art { width: 66px; height: 58px; flex-shrink: 0; }
 .buddy-loader--compact .buddy-loader-character { width: 58px; height: 58px; left: 8px; }
@@ -27,7 +28,12 @@
   28% { opacity: .95; transform: translate(0, 0) scale(1); }
   70%, 100% { opacity: 0; transform: translate(-8px, -4px) scale(1.15); }
 }
+@keyframes dust-puff-ground {
+  0%, 8% { opacity: 0; transform: translateX(6px) scale(.3); }
+  28% { opacity: .95; transform: translateX(0) scale(1); }
+  70%, 100% { opacity: 0; transform: translateX(-10px) scale(1.15); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .buddy-loader-character, .dust-puffs img { animation: none; transform: none; }
+  .buddy-loader-character, .dust-puffs img, .buddy-loader-art > .dust-puffs img { animation: none; transform: none; }
   .dust-puffs img { opacity: .8; }
 }
