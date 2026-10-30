@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import BuddyLoader from '../../components/BuddyLoader';
 import { getReviewLibrary, setReviewStatus } from '../../services/review';
 import { cardContent } from '../../services/reviewPractice';
 
@@ -44,7 +45,7 @@ export default function ReviewLibrary({ onClose, onPractice }) {
       {[['all', '전체'], ['active', '복습 중'], ['suspended', '잠시 뺀 항목']].map(([value, label]) =>
         <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}
     </div>
-    {loading && <p role="status">목록을 불러오는 중이에요.</p>}
+    {loading && <BuddyLoader label="내 단어들을 모으고 있어요" />}
     {error && <p role="alert">{error}</p>}
     {!loading && !visible.length && <p>해당하는 항목이 없어요.</p>}
     <ul className="practice-library-list">{visible.map(item => {

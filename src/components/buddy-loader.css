@@ -1,0 +1,33 @@
+.buddy-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 32px 16px; color: var(--color-text-sub); }
+.buddy-loader--screen { min-height: 100dvh; width: 100%; background: var(--color-base); }
+.buddy-loader-art { position: relative; display: block; width: 150px; height: 116px; }
+.buddy-loader-character { position: absolute; width: 112px; height: 112px; left: 26px; top: 0; transform-origin: 55% 85%; animation: buddy-loader-bounce 1.8s ease-in-out infinite; }
+.buddy-loader-label { font-size: 14px; line-height: 1.7; text-align: center; text-wrap: balance; }
+.dust-puffs { --puff-size: 24px; display: inline-flex; align-items: center; gap: 3px; height: calc(var(--puff-size) * 1.25); vertical-align: middle; }
+.dust-puffs img { flex: none; width: calc(var(--puff-size) * var(--puff-scale)); height: calc(var(--puff-size) * var(--puff-scale)); object-fit: contain; animation: dust-puff 1.8s ease-out infinite; }
+.dust-puffs img:nth-child(1) { --puff-scale: .75; }
+.dust-puffs img:nth-child(2) { --puff-scale: .916667; animation-delay: 140ms; }
+.dust-puffs img:nth-child(3) { --puff-scale: 1.083333; animation-delay: 310ms; }
+.dust-puffs img:nth-child(4) { --puff-scale: 1.25; animation-delay: 490ms; }
+.chat-send-btn .dust-puffs { --puff-size: 8px; gap: 0; }
+.buddy-loader-art > .dust-puffs { position: absolute; left: -35px; bottom: 4px; flex-direction: row-reverse; transform: rotate(-18deg); }
+.buddy-loader--compact { flex-direction: row; gap: 12px; padding: 12px 4px; }
+.buddy-loader--compact .buddy-loader-art { width: 66px; height: 58px; flex-shrink: 0; }
+.buddy-loader--compact .buddy-loader-character { width: 58px; height: 58px; left: 8px; }
+.buddy-loader--compact .buddy-loader-art > .dust-puffs { --puff-size: 11px; left: -14px; bottom: 0; gap: 0; }
+.buddy-loader--compact .buddy-loader-label { text-align: left; font-size: 13px; }
+@keyframes buddy-loader-bounce {
+  0%, 100% { transform: translateY(0) rotate(-4deg) scale(1, 1); }
+  24% { transform: translateY(3px) rotate(-6deg) scale(1.05, .94); }
+  48% { transform: translateY(-8px) rotate(4deg) scale(.97, 1.03); }
+  72% { transform: translateY(0) rotate(1deg) scale(1.02, .98); }
+}
+@keyframes dust-puff {
+  0%, 8% { opacity: 0; transform: translate(6px, 3px) scale(.3); }
+  28% { opacity: .95; transform: translate(0, 0) scale(1); }
+  70%, 100% { opacity: 0; transform: translate(-8px, -4px) scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .buddy-loader-character, .dust-puffs img { animation: none; transform: none; }
+  .dust-puffs img { opacity: .8; }
+}

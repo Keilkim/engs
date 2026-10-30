@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from '../i18n';
+import BuddyLoader from './BuddyLoader';
 
 export default function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -14,7 +15,7 @@ export default function ProtectedRoute({ children }) {
   }
 
   if (loading) {
-    return <div className="loading-screen">{ko('common.loading')}</div>;
+    return <BuddyLoader fullScreen label={ko('common.loading')} />;
   }
 
   if (!isAuthenticated) {

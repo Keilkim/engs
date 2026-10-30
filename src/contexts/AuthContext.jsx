@@ -1,5 +1,6 @@
 import { createContext, Fragment, useContext, useEffect, useState } from 'react';
 import { supabase } from '../services/supabase';
+import BuddyLoader from '../components/BuddyLoader';
 
 const AuthContext = createContext({});
 
@@ -50,7 +51,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {loading ? <div className="loading-screen">Loading...</div> : (
+      {loading ? <BuddyLoader fullScreen /> : (
         <Fragment key={user?.id ?? 'signed-out'}>{children}</Fragment>
       )}
     </AuthContext.Provider>

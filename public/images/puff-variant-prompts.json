@@ -1,0 +1,18 @@
+{
+  "generator": "Built-in image_gen",
+  "reference": "orange-dust-loading-puff.webp",
+  "assets": [
+    {
+      "file": "orange-dust-loading-puff-round.webp",
+      "prompt": "Use case: precise-object-edit\nAsset type: transparent PNG dust-puff loading icon for the existing Orange Dust mascot.\nInput image: edit target and style reference, the existing pale apricot dust cloud. Keep exactly the same pale apricot main color #F9B67B and small orange accent #F47716, simple soft playful 2D style, no outline. Change its silhouette only into the requested distinct shape. One complete puff centered on a square canvas occupying about 75% width, generous transparent margins, genuine alpha background. Must read clearly at 16–30 pixels. No face, no eyes, no text, no scene, no additional objects, no outline or 3D.\nShape: a compact near-circular popcorn puff formed by THREE large uneven rounded lobes, one at top-left, one at top-right, one along the bottom. A short chubby clover-like silhouette, NOT the wide horizontal original cloud. Small organic orange accent near the lower left."
+    },
+    {
+      "file": "orange-dust-loading-puff-soft.webp",
+      "prompt": "Use case: precise-object-edit\nAsset type: replacement transparent PNG loading puff for the Orange Dust app, displayed at 22 pixels.\nInput image: the original apricot cloud is a color and illustration-style reference.\nPrimary request: one clean, cute, compact cloud puff formed by FOUR short, softly rounded pillow-like lobes arranged around a slightly wider center. A puffy rounded-square silhouette with gentle asymmetry, like a small airy marshmallow cloud. Every lobe stays close to the center. The full silhouette should feel light, soft, tidy and clearly cloud-like. Simple pale warm apricot #F9B67B body, one tiny solid orange #F47716 oval accent near the lower left, matching the reference palette. Flat 2D editorial illustration, crisp soft edges, no outline. Center one complete puff on a square canvas, filling about 75% width with generous margin. Genuine transparent background with alpha.\nConstraints: NO tail, no long protrusions, no tendrils, no comma or teardrop silhouette, no twisting shapes. No face, no eyes, no text, no scene, no additional objects, no 3D, no cast shadow."
+    },
+    {
+      "file": "orange-dust-loading-puff-burst.webp",
+      "prompt": "Use case: precise-object-edit\nAsset type: transparent PNG dust-puff loading icon for the existing Orange Dust mascot.\nInput image: edit target and style reference, the existing pale apricot dust cloud. Keep exactly the same pale apricot main color #F9B67B and small orange accent #F47716, simple soft playful 2D style, no outline. Change its silhouette only into the requested distinct shape. One complete puff centered on a square canvas occupying about 75% width, generous transparent margins, genuine alpha background. Must read clearly at 16–30 pixels. No face, no eyes, no text, no scene, no additional objects, no outline or 3D.\nShape: a rounded airy POP puff with FIVE soft stubby lobes spreading radially, like a very soft asymmetric five-petal flower, broader in the middle, no sharp star points. Distinctly more ruffled and expanded than the original cloud. Small organic orange accent near the lower left."
+    }
+  ]
+}

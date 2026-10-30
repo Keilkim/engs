@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createSentencePattern } from '../../services/annotation';
+import BuddyLoader from '../BuddyLoader';
 
 export default function GrammarModeContent({
   grammarData, checkedPatterns, loading,
@@ -63,7 +64,7 @@ export default function GrammarModeContent({
   }
 
   if (loading) {
-    return <div className="loading-state">{ko('wordMenu.analyzing')}</div>;
+    return <BuddyLoader compact label={ko('wordMenu.analyzing')} />;
   }
 
   if (grammarData) {

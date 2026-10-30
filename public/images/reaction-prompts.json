@@ -1,0 +1,18 @@
+{
+  "generator": "Built-in image_gen",
+  "reference": "orange-dust-buddy.png",
+  "assets": [
+    {
+      "file": "orange-dust-buddy-correct.webp",
+      "prompt": "Use case: identity-preserve\nAsset type: transparent PNG reaction mascot for the Orange Dust vocabulary app.\nInput image: the provided local image is the EDIT TARGET and character identity reference.\nKeep this exact orange irregular cloud/blob character, the silhouette proportions, two short feet, enormous oval off-white eyes and charcoal pupils, warm vivid orange, simple friendly flat illustration aesthetic. Entire character centered on a square canvas, about 80% canvas width, consistent generous transparent margins. No text, no background objects, no outline, no 3D, no shadow. Preserve actual alpha transparency.\nChange only expression and arm pose: a delighted, reassuring curved smile, eyes looking at the viewer, the raised arm on the viewer's right now clearly gives a THUMBS UP, with one upright rounded thumb and a small closed fist. The thumbs-up silhouette must be readable at 120px. Exactly one character."
+    },
+    {
+      "file": "orange-dust-buddy-surprised.webp",
+      "prompt": "Use case: identity-preserve\nAsset type: transparent PNG reaction mascot for the Orange Dust vocabulary app.\nInput image: the provided local image is the EDIT TARGET and character identity reference.\nKeep this exact orange irregular cloud/blob character, the silhouette proportions, two short feet, enormous oval off-white eyes and charcoal pupils, warm vivid orange, simple friendly flat illustration aesthetic. Entire character centered on a square canvas, about 80% canvas width, consistent generous transparent margins. No text, no background objects, no outline, no 3D, no shadow. Preserve actual alpha transparency.\nChange only expression and arm pose: a gentle surprised 'oops!' face, both eyes wide open with slightly smaller pupils, small round open O-shaped charcoal mouth, both small arms lifted outward a little in surprise. Cute and reassuring, never sad or angry. Exactly one character."
+    },
+    {
+      "file": "orange-dust-loading-puff.webp",
+      "prompt": "Use case: illustration-story\nAsset type: tiny transparent PNG loading puff for the Orange Dust mascot, repeated as three animated image dots in a polished app.\nPrimary request: exactly one small soft rounded cartoon puff of dust, a horizontally stretched cloud silhouette with 4 irregular bulbous lobes. Solid pale warm apricot #F9B67B with one small warm orange #F47716 irregular accent inside near the lower left. Very simple flat 2D icon, no outline, no shading, no texture, no eyes, no face, no text, no other objects. Center the complete puff on a square canvas filling 75% width. Must remain recognizable at 16 pixels. Genuine transparent background with alpha."
+    }
+  ]
+}

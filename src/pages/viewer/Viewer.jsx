@@ -4,6 +4,7 @@ import { deleteSource } from '../../services/source';
 import { deleteAnnotation } from '../../services/annotation';
 import WordQuickMenu from '../../components/modals/WordQuickMenu';
 import ChatPanel from '../../components/ChatPanel';
+import BuddyLoader from '../../components/BuddyLoader';
 import { TranslatableText } from '../../components/translatable';
 import { PenModeToggle, ColorPalette, usePenStrokes } from '../../components/pen-mode';
 import { useChat } from '../../hooks';
@@ -682,8 +683,7 @@ const zoomOrigin = { x: 0, y: 0 };
     return (
       <div className="viewer-screen">
         <div className="viewer-loading">
-          <div className="spinner" />
-          <p><TranslatableText textKey="viewer.loading">Loading...</TranslatableText></p>
+          <BuddyLoader label="읽던 자료를 펼치고 있어요" />
         </div>
       </div>
     );

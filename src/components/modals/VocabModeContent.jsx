@@ -1,4 +1,5 @@
 import { cleanDisplayText } from '../../utils/textUtils';
+import BuddyLoader from '../BuddyLoader';
 
 // Map internal error codes to a user-facing Korean message.
 function errorMessage(error, ko) {
@@ -63,7 +64,7 @@ export default function VocabModeContent({
         </button>
       </div>
       {loading ? (
-        <div className="loading-state">{ko('wordMenu.lookingUp')}</div>
+        <BuddyLoader compact label={ko('wordMenu.lookingUp')} />
       ) : (
         <>
           {error ? (

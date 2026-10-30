@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import BuddyLoader from './BuddyLoader';
 import {
   getVocabularyWithSource,
   getGrammarPatterns,
@@ -227,7 +228,7 @@ export default function MyDictionary({ onSelectForChat }) {
 
       <div className="dictionary-list">
         {loading ? (
-          <div className="dictionary-loading">Loading...</div>
+          <BuddyLoader label="내 단어들을 모으고 있어요" />
         ) : loadError ? (
           <div className="dictionary-empty">
             불러오기에 실패했습니다.

@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TranslationProvider } from './i18n';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
+import BuddyLoader from './components/BuddyLoader';
 import ThemeSwitcher from './components/dev/ThemeSwitcher'; // dev-only theme preview + auth bypass
 
 // Lazy-loaded pages
@@ -25,7 +26,7 @@ const Privacy = lazy(() => import('./pages/privacy/Privacy'));
 // so a typo/bookmark doesn't look like a lost session to a logged-in user.
 function NotFoundRedirect() {
   const { isAuthenticated, loading } = useAuth();
-  if (loading) return <div className="loading-screen">Loading...</div>;
+  if (loading) return <BuddyLoader fullScreen />;
   return <Navigate to={isAuthenticated ? '/' : '/login'} replace />;
 }
 
@@ -35,7 +36,7 @@ function App() {
       <TranslationProvider>
         <AuthProvider>
           <BrowserRouter>
-          <Suspense fallback={<div className="loading-screen">Loading...</div>}>
+          <Suspense fallback={<BuddyLoader fullScreen />}>
           <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />

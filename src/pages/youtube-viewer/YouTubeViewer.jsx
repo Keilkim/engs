@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import YouTube from 'react-youtube';
+import BuddyLoader from '../../components/BuddyLoader';
 import { getSource, deleteSource } from '../../services/source';
 import { getAnnotations, deleteAnnotation } from '../../services/annotation';
 import useYouTubePlayer, { PLAYBACK_SPEEDS } from '../../hooks/useYouTubePlayer';
@@ -493,8 +494,7 @@ export default function YouTubeViewer() {
   if (loading) {
     return (
       <div className="youtube-viewer-loading">
-        <div className="spinner" />
-        <p>로딩 중...</p>
+        <BuddyLoader label="영상과 표현을 준비하고 있어요" />
       </div>
     );
   }
