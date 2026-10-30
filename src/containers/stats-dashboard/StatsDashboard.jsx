@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getUserStats, getWeeklyStats } from '../../services/stats';
 import { useTranslation } from '../../i18n';
+import BuddyLoader from '../../components/BuddyLoader';
 
 export default function StatsDashboard() {
   const { ko } = useTranslation();
@@ -29,10 +30,8 @@ export default function StatsDashboard() {
 
   if (loading) {
     return (
-      <div className="stats-dashboard stats-skeleton">
-        <div className="skeleton-card" />
-        <div className="skeleton-card" />
-        <div className="skeleton-chart" />
+      <div className="stats-dashboard">
+        <BuddyLoader compact label="학습 기록을 모으고 있어요" />
       </div>
     );
   }
@@ -41,7 +40,7 @@ export default function StatsDashboard() {
 
   return (
     <div className="stats-dashboard">
-      <div className="stats-grid">
+      <div className="stats-grid" role="group" aria-label="Learning statistics">
         <div className="stat-card">
           <div className="stat-info">
             <span className="stat-value">{stats?.sourceCount || 0}</span>
@@ -65,8 +64,8 @@ export default function StatsDashboard() {
 
         <div className="stat-card">
           <div className="stat-info">
-            <span className="stat-value">{stats?.reviewRate || 0}%</span>
-            <span className="stat-label">Rate</span>
+            <span className="stat-value">{stats?.reviewRate || 0}</span>
+            <span className="stat-label">Rate (%)</span>
           </div>
         </div>
       </div>
