@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseBatch, compareSpokenAnswer, createPractice, createPracticeStorage, currentPracticeId, gradePractice,
-  isReturning, nextReviewState, reconcilePractice } from './reviewPractice.js';
+import { choiceOptions, chooseBatch, compareSpokenAnswer, createPractice, createPracticeStorage, currentPracticeId, gradePractice,
+  isReturning, markSpans, nextReviewState, practiceParts, reconcilePractice } from './reviewPractice.js';
 
 const card = (id, updates = {}) => ({ id, status: 'active', next_review_date: '2026-10-30',
   last_reviewed: null, repetitions: 0, annotation: { selected_text: `word ${id}`, source: { id: 7 } }, ...updates });
@@ -86,4 +86,60 @@ test('a week away gets a gentle return; missing dates are not lapsed users', () 
   assert.equal(isReturning('2026-10-22T12:00:00Z', now), true);
   assert.equal(isReturning('2026-10-29T12:00:00Z', now), false);
   assert.equal(isReturning(null, now), false);
+});
+
+const sentenceCard = (id, patterns, translation = '결과에 상관없이 그는 계속 달렸다.') => card(id, { annotation: {
+  selected_text: 'Regardless of the result, he kept running.',
+  ai_analysis_json: JSON.stringify({ type: 'grammar', originalText: 'Regardless of the result, he kept running.', translation, patterns }) } });
+
+test('a saved sentence is practiced one checked expression at a time, with the sentence for context', () => {
+  const parts = practiceParts(sentenceCard(1, [
+    { words: ['regardless of A'], spans: ['Regardless of'], explanation: 'A에 상관없이' },
+    { words: ['keep Ving'], spans: ['kept running'], explanation: '계속 ~하다' },
+    { words: [], spans: [], explanation: '빈 표현' },
+  ]));
+  assert.deepEqual(parts.map(part => [part.kind, part.word, part.definition]), [['pattern', 'regardless of A', 'A에 상관없이'], ['pattern', 'keep Ving', '계속 ~하다']]);
+  assert.equal(parts[1].sentence, 'Regardless of the result, he kept running.');
+  assert.equal(parts[1].translation, '결과에 상관없이 그는 계속 달렸다.');
+  const plain = practiceParts(sentenceCard(2, []));
+  assert.deepEqual(plain.map(part => [part.kind, part.definition]), [['sentence', '결과에 상관없이 그는 계속 달렸다.']]);
+  assert.equal(practiceParts(card(3))[0].kind, 'word');
+});
+
+test('only the practiced expression is emphasized inside its sentence', () => {
+  assert.deepEqual(markSpans('Nothing is not but fine', ['not', 'but']).filter(part => part.strong).map(part => part.text), ['not', 'but']);
+  assert.deepEqual(markSpans('he kept running', ['kept', 'kept running']), [{ text: 'he ', strong: false }, { text: 'kept running', strong: true }]);
+  assert.deepEqual(markSpans('plain', []), [{ text: 'plain', strong: false }]);
+});
+
+test('"remembered" is checked against a look-alike meaning that cannot also be right', () => {
+  const target = { kind: 'word', word: 'postpone', definition: '미루다, 연기하다' };
+  const pool = [
+    { kind: 'word', word: 'delay', definition: '연기하다' },
+    { kind: 'pattern', word: 'keep Ving', definition: '계속 ~하다' },
+    { kind: 'word', word: 'propose', definition: '제안하다' },
+    { kind: 'word', word: 'reservation', definition: '예약' },
+  ];
+  const first = choiceOptions(target, pool, () => 0);
+  assert.deepEqual(first, { options: ['미루다, 연기하다', '제안하다'], answer: 0 });
+  const second = choiceOptions(target, pool, () => 0.9);
+  assert.equal(second.options[second.answer], '미루다, 연기하다');
+  assert.equal(second.answer, 1);
+  assert.equal(choiceOptions(target, [{ kind: 'word', definition: '미루다, 연기하다' }]), null);
+  assert.equal(choiceOptions({ ...target, definition: '' }, pool), null);
+});
+
+test('a sentence is graded once, after its last expression, and partial progress survives reload', () => {
+  const session = { ...createPractice([card(1), card(2)]), parts: { 1: [true, false] }, revealedId: '1', result: { correct: true, type: 'choice' } };
+  const values = new Map();
+  const storage = createPracticeStorage({ getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) }, 'a');
+  storage.write(session);
+  assert.deepEqual(storage.read(), session);
+  const graded = gradePractice(session, '1', false, 'choice');
+  assert.deepEqual(graded.answers['1'].parts, [true, false]);
+  assert.deepEqual(graded.parts, {});
+  assert.equal(graded.result, null);
+  assert.equal(currentPracticeId(graded), '2');
+  const corrupt = createPracticeStorage({ getItem: () => JSON.stringify({ ...session, parts: { 1: 'yes' } }) }, 'a');
+  assert.equal(corrupt.read(), null);
 });

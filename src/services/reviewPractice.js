@@ -2,18 +2,95 @@
 export const PRACTICE_VERSION = 1;
 export const PRACTICE_MODES = ['quiet', 'listen', 'speak'];
 
+function readAnalysis(item) {
+  try { return JSON.parse(item?.annotation?.ai_analysis_json || '{}') || {}; } catch { return {}; /* legacy card */ }
+}
+const text = value => typeof value === 'string' ? value.trim() : '';
+
 export function cardContent(item) {
-  let analysis = {};
-  try { analysis = JSON.parse(item?.annotation?.ai_analysis_json || '{}') || {}; } catch { /* legacy card */ }
-  const string = value => typeof value === 'string' ? value.trim() : '';
+  const analysis = readAnalysis(item);
   return {
-    word: string(item?.annotation?.selected_text),
-    definition: string(analysis.definition || analysis.translation || item?.annotation?.memo_content),
-    sentence: string(analysis.sentence),
-    phonetic: string(analysis.phonetic),
+    word: text(item?.annotation?.selected_text),
+    definition: text(analysis.definition || analysis.translation || item?.annotation?.memo_content),
+    sentence: text(analysis.sentence),
+    phonetic: text(analysis.phonetic),
     vocabulary: analysis.isVocabulary === true,
-    source: string(item?.annotation?.source?.title),
+    source: text(item?.annotation?.source?.title),
   };
+}
+
+// A saved sentence is practiced one checked expression at a time; its schedule stays per sentence.
+export function practiceParts(item) {
+  const card = cardContent(item);
+  const analysis = readAnalysis(item);
+  if (analysis.type !== 'grammar') return [{ ...card, kind: 'word' }];
+  const sentence = text(analysis.originalText) || card.word;
+  const translation = text(analysis.translation);
+  const list = value => (Array.isArray(value) ? value : []).map(text).filter(Boolean);
+  const patterns = (Array.isArray(analysis.patterns) ? analysis.patterns : []).map(pattern => ({
+    word: list(pattern?.words).join(' / ') || list(pattern?.spans).join(' … '),
+    definition: text(pattern?.explanation),
+    spans: list(pattern?.spans),
+  })).filter(pattern => pattern.word && pattern.definition);
+  if (!patterns.length) return [{ ...card, word: sentence, definition: translation || card.definition, sentence: '', kind: 'sentence' }];
+  return patterns.map(pattern => ({ ...card, ...pattern, sentence, translation, vocabulary: false, kind: 'pattern' }));
+}
+
+// Splits a sentence so the expression being practiced can be emphasized in place.
+export function markSpans(sentence, spans = []) {
+  const isWordChar = ch => Boolean(ch) && /[\p{L}\p{N}_]/u.test(ch);
+  const lower = sentence.toLowerCase();
+  const ranges = [];
+  for (const span of spans) {
+    const needle = span.toLowerCase();
+    for (let index = needle ? lower.indexOf(needle) : -1; index !== -1; index = lower.indexOf(needle, index + needle.length)) {
+      const end = index + needle.length;
+      // "not" must not light up inside "nothing".
+      if ((isWordChar(span[0]) && isWordChar(sentence[index - 1])) || (isWordChar(span.at(-1)) && isWordChar(sentence[end]))) continue;
+      ranges.push([index, end]);
+    }
+  }
+  ranges.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const segments = [];
+  let cursor = 0;
+  for (const [start, end] of ranges) {
+    if (end <= cursor) continue;
+    if (start > cursor) segments.push({ text: sentence.slice(cursor, start), strong: false });
+    const last = segments.at(-1);
+    if (last?.strong && start <= cursor) last.text += sentence.slice(cursor, end);
+    else segments.push({ text: sentence.slice(Math.max(start, cursor), end), strong: true });
+    cursor = end;
+  }
+  if (cursor < sentence.length) segments.push({ text: sentence.slice(cursor), strong: false });
+  return segments;
+}
+
+// "I remember it" is checked against one look-alike meaning from another saved card.
+export function choiceOptions(target, pool, random = Math.random) {
+  const answer = text(target?.definition);
+  if (!answer) return null;
+  const normalize = value => value.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ');
+  const senses = value => new Set(normalize(value).split(/[,;·/]/).map(sense => sense.trim()).filter(Boolean));
+  const own = senses(answer);
+  const ending = value => normalize(value).split(/[,;·/(]/)[0].trim().at(-1);
+  const word = normalize(text(target.word));
+  const seen = new Set([normalize(answer)]);
+  const candidates = [];
+  for (const part of pool) {
+    const definition = text(part?.definition);
+    if (!definition || seen.has(normalize(definition)) || [...senses(definition)].some(sense => own.has(sense))) continue;
+    seen.add(normalize(definition));
+    const other = normalize(text(part.word));
+    let prefix = 0;
+    while (prefix < Math.min(word.length, other.length) && word[prefix] === other[prefix]) prefix += 1;
+    candidates.push({ definition, score: (part.kind === target.kind ? 4 : 0) + (ending(definition) === ending(answer) ? 1.5 : 0)
+      + Math.min(prefix, 3) * 0.5 - (Math.abs(definition.length - answer.length) / Math.max(definition.length, answer.length)) * 2 });
+  }
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => b.score - a.score);
+  const distractor = candidates[Math.floor(random() * Math.min(3, candidates.length))].definition;
+  const first = random() < 0.5;
+  return { options: first ? [answer, distractor] : [distractor, answer], answer: first ? 0 : 1 };
 }
 
 export function isReturning(lastReviewed, now = Date.now()) {
@@ -67,10 +144,13 @@ export function reconcilePractice(session, items) {
 
 export function gradePractice(session, id, correct, type = 'self', now = Date.now()) {
   if (currentPracticeId(session) !== String(id)) return session;
+  const { [id]: parts, ...pending } = session.parts || {};
   return {
     ...session,
-    answers: { ...session.answers, [id]: { correct, type, at: now, hinted: session.hintedIds.includes(String(id)) } },
+    answers: { ...session.answers, [id]: { correct, type, at: now, hinted: session.hintedIds.includes(String(id)), ...(parts ? { parts } : {}) } },
+    parts: pending,
     revealedId: null,
+    result: null,
   };
 }
 
@@ -103,6 +183,9 @@ export function createPracticeStorage(storage, userId) {
           !value.ids.every(id => typeof id === 'string') || !value.answers || Array.isArray(value.answers) ||
           typeof value.answers !== 'object' || !Array.isArray(value.hintedIds) ||
           !['daily', 'retry', 'sample', 'check'].includes(value.kind) || !Number.isFinite(value.startedAt) ||
+          (value.parts !== undefined && (!value.parts || typeof value.parts !== 'object' || Array.isArray(value.parts) ||
+            !Object.values(value.parts).every(parts => Array.isArray(parts) && parts.every(part => typeof part === 'boolean')))) ||
+          (value.result != null && typeof value.result?.correct !== 'boolean') ||
           Date.now() - value.startedAt > 7 * 86400000) return null;
         return value;
       } catch { return null; }

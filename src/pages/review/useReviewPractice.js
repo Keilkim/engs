@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { recordReviewStats } from '../../services/stats';
-import { getReviewOverview, getTodayReviewItems, getReviewItemsByIds, updateReviewResult, setReviewStatus } from '../../services/review';
-import { chooseBatch, createPractice, createPracticeStorage, currentPracticeId, gradePractice, isReturning, reconcilePractice, SAMPLE_CARDS } from '../../services/reviewPractice';
+import { getReviewOverview, getTodayReviewItems, getReviewItemsByIds, getReviewLibrary, updateReviewResult, setReviewStatus } from '../../services/review';
+import { choiceOptions, chooseBatch, createPractice, createPracticeStorage, currentPracticeId, gradePractice, isReturning, practiceParts,
+  reconcilePractice, SAMPLE_CARDS } from '../../services/reviewPractice';
 
 export default function useReviewPractice() {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [dueItems, setDueItems] = useState([]);
+  const [savedItems, setSavedItems] = useState([]);
   const [overview, setOverview] = useState({ due: 0, total: 0, lastReviewed: null });
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -74,16 +76,44 @@ export default function useReviewPractice() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Every saved card can lend a look-alike meaning; without them the batch itself is the pool.
+  useEffect(() => {
+    if (!userId) return undefined;
+    let live = true;
+    getReviewLibrary().then(rows => { if (live) setSavedItems(rows); }).catch(() => {});
+    return () => { live = false; };
+  }, [userId]);
+
   const currentId = currentPracticeId(session);
   const current = items.find(item => String(item.id) === currentId);
   const revealed = Boolean(currentId && session?.revealedId === currentId);
-  const reveal = () => { if (!inFlight.current && session) checkpoint({ ...session, revealedId: currentId }); };
+  const parts = useMemo(() => practiceParts(current), [current]);
+  const done = session?.parts?.[currentId] || [];
+  const partIndex = Math.min(done.length, parts.length - 1);
+  const result = revealed ? session.result || null : null;
+  const pool = useMemo(() => {
+    const unique = new Map([...savedItems, ...dueItems, ...items].map(item => [String(item.id), item]));
+    return [...unique.values()].flatMap(item => practiceParts(item).map(part => ({ ...part, itemId: String(item.id) })));
+  }, [savedItems, dueItems, items]);
+  // Other expressions from the same sentence would leak answers still to come.
+  const choices = () => choiceOptions(parts[partIndex], pool.filter(part => part.itemId !== currentId));
+  const reveal = (outcome = null) => {
+    if (!inFlight.current && session) checkpoint({ ...session, revealedId: currentId, result: outcome });
+  };
   const hint = () => {
     if (session && !session.hintedIds.includes(currentId)) checkpoint({ ...session, hintedIds: [...session.hintedIds, currentId] });
   };
 
   async function evaluate(correct, type = 'self') {
     if (inFlight.current || !current || !revealed) return;
+    const results = [...done, correct];
+    // Earlier expressions only move within the sentence; the sentence is scheduled once, after the last.
+    if (results.length < parts.length) {
+      checkpoint({ ...session, parts: { ...session.parts, [currentId]: results }, revealedId: null, result: null });
+      return;
+    }
+    const graded = results.length > 1 ? { ...session, parts: { ...session.parts, [currentId]: results } } : session;
+    correct = results.every(Boolean);
     inFlight.current = true;
     setBusy(true);
     setSaveError('');
@@ -95,7 +125,7 @@ export default function useReviewPractice() {
         correct = result.item.repetitions > 0;
         type = 'recovered';
       }
-      checkpoint(gradePractice(session, currentId, correct, type));
+      checkpoint(gradePractice(graded, currentId, correct, type));
       if (session.kind === 'daily') {
         setDueItems(previous => previous.filter(item => String(item.id) !== currentId));
         setOverview(previous => ({ ...previous, due: Math.max(0, previous.due - 1) }));
@@ -127,7 +157,7 @@ export default function useReviewPractice() {
     try {
       await setReviewStatus(current.id, 'suspended');
       if (!alive.current) return;
-      checkpoint({ ...session, ids: session.ids.filter(id => id !== currentId), revealedId: null });
+      checkpoint({ ...session, ids: session.ids.filter(id => id !== currentId), revealedId: null, result: null });
       if (dueItems.some(item => String(item.id) === currentId)) setOverview(previous => ({ ...previous, due: Math.max(0, previous.due - 1) }));
       setDueItems(previous => previous.filter(item => String(item.id) !== currentId));
     } catch (failure) {
@@ -137,6 +167,7 @@ export default function useReviewPractice() {
 
   const retryItems = items.filter(item => session?.answers[String(item.id)]?.correct === false);
   return { loading, error, saveError, busy, storageWarning, overview, session, current, currentId, revealed,
+    parts, partIndex, result, choices,
     options, setOptions, load, reveal, hint, evaluate, suspend, dueItems, retryItems,
     startRetry: () => practice(retryItems, 'retry'),
     startSample: () => practice(SAMPLE_CARDS, 'sample'),

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Buddy from '../../components/Buddy';
 import ScenePlayer from '../../containers/flashcard/ScenePlayer';
 import usePracticeAudio from '../../hooks/usePracticeAudio';
-import { cardContent, compareSpokenAnswer } from '../../services/reviewPractice';
+import { compareSpokenAnswer, markSpans } from '../../services/reviewPractice';
 import { safeJsonParse } from '../../utils/errors';
 import useReviewPractice from './useReviewPractice';
 import ReviewLibrary from './ReviewLibrary';
@@ -22,7 +22,11 @@ export default function Review() {
   const [sceneOpen, setSceneOpen] = useState(false);
   const [listened, setListened] = useState(false);
   const [typedAnswer, setTypedAnswer] = useState('');
-  const card = cardContent(practice.current);
+  const [choice, setChoice] = useState(null);
+  const card = practice.parts[practice.partIndex];
+  const cardKey = `${practice.currentId}:${practice.partIndex}`;
+  // Speaking already produces an answer; every other mode asks "remembered?" before showing one.
+  const recall = mode !== 'speak';
   const audio = usePracticeAudio(text => {
     setSpoken({ text, result: compareSpokenAnswer(text, card.word) });
     practice.reveal();
@@ -32,8 +36,9 @@ export default function Review() {
   const [displayedId, setDisplayedId] = useState(null);
 
   // Reset card-local input before rendering the next card, never after paint.
-  if (displayedId !== practice.currentId) {
-    setDisplayedId(practice.currentId);
+  if (displayedId !== cardKey) {
+    setDisplayedId(cardKey);
+    setChoice(null);
     setSpoken(null);
     setTypedAnswer('');
     setHintOpen(false);
@@ -44,7 +49,9 @@ export default function Review() {
   useEffect(() => {
     resetAudio();
     heading.current?.focus({ preventScroll: true });
-  }, [practice.currentId, resetAudio]);
+  }, [cardKey, resetAudio]);
+
+  useEffect(() => { if (choice) heading.current?.focus({ preventScroll: true }); }, [choice]);
 
   useEffect(() => {
     const hide = () => {
@@ -57,6 +64,7 @@ export default function Review() {
   function changeMode(next) {
     resetAudio();
     setSceneOpen(false);
+    setChoice(null);
     setSpoken(null);
     setTypedAnswer('');
     setMode(next);
@@ -67,6 +75,18 @@ export default function Review() {
   }
 
   function reveal() { stopAudio(); practice.reveal(); }
+  function forget() { stopAudio(); practice.reveal({ correct: false, type: 'forgot' }); }
+  function remember() {
+    stopAudio();
+    const options = practice.choices();
+    // With no other saved meaning to compare against, fall back to checking it yourself.
+    if (options) setChoice(options); else practice.reveal();
+  }
+  function pick(index) {
+    stopAudio();
+    practice.reveal({ correct: index === choice.answer, type: 'choice', picked: choice.options[index] });
+  }
+  function next() { stopAudio(); practice.evaluate(practice.result.correct, practice.result.type); }
   function evaluate(correct) {
     stopAudio();
     practice.evaluate(correct, spoken?.result === 'match' ? 'answer-confirmed' : 'self');
@@ -86,6 +106,25 @@ export default function Review() {
   const sourcePath = source?.id ? (source.type === 'youtube' ? `/youtube/${source.id}` : `/viewer/${source.id}`) : null;
   const maskedDefinition = mode === 'speak' && card.vocabulary && card.word
     ? card.definition.replace(new RegExp(card.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '____') : card.definition;
+  const result = practice.result;
+  const lastPart = practice.partIndex >= practice.parts.length - 1;
+  const cardLabel = card.kind === 'pattern' ? `EXPRESSION${practice.parts.length > 1 ? ` ${practice.partIndex + 1} / ${practice.parts.length}` : ''}`
+    : mode === 'speak' && card.vocabulary ? 'SAY IT IN ENGLISH' : 'TAKE A MOMENT';
+  const sentence = card.kind === 'pattern' && <span className="practice-card-sentence">
+    {markSpans(card.sentence, card.spans).map((segment, index) => segment.strong ? <strong key={index}>{segment.text}</strong> : <span key={index}>{segment.text}</span>)}
+    {practice.revealed && card.translation && <small>{card.translation}</small>}
+  </span>;
+  const face = practice.revealed ? <><span className="practice-card-label">ANSWER</span><strong className="practice-word">{card.word}</strong>
+    {card.phonetic && <span className="practice-phonetic">{card.phonetic}</span>}
+    <span className="practice-definition">{card.definition || '원문에서 이 표현의 뜻을 다시 확인해 주세요.'}</span>
+    {card.kind === 'pattern' ? sentence : card.sentence && <span className="practice-sentence">{card.sentence}</span>}</>
+    : choice ? <><span className="practice-card-label">WHICH ONE?</span><strong className="practice-word">{card.word}</strong>
+      <div className="practice-choices" role="group" aria-label="뜻 고르기">{choice.options.map((option, index) =>
+        <button key={index} onClick={() => pick(index)} disabled={practice.busy}>{option}</button>)}</div>
+      {sentence}</>
+    : mode === 'listen' ? <><span className="practice-card-label">LISTEN & RECALL</span><span className="practice-sound-mark" aria-hidden="true">♫</span><span>들리는 표현은 어떤 뜻일까요?</span></>
+    : <><span className="practice-card-label">{cardLabel}</span><strong className={mode === 'speak' && card.vocabulary ? 'practice-definition' : 'practice-word'}>{mode === 'speak' && card.vocabulary ? maskedDefinition : card.word}</strong>
+      {sentence}{!recall && <small>떠올린 뒤 눌러서 정답 확인</small>}</>;
 
   return <div className="practice-screen">
     <header className="practice-header">
@@ -130,18 +169,13 @@ export default function Review() {
         <div className="practice-progress" role="progressbar" aria-label="이번 묶음 진행" aria-valuenow={answers.length} aria-valuemin={0} aria-valuemax={practice.session.ids.length}><span style={{ width: `${progress}%` }} /></div>
         <div className="practice-mode-bar" aria-label="복습 방식">{MODES.map(([value, label]) =>
           <button key={value} aria-pressed={mode === value} disabled={practice.busy} onClick={() => changeMode(value)}>{label}</button>)}</div>
-        <h1 className="practice-prompt" ref={heading} tabIndex={-1}>{practice.revealed ? '떠올린 답과 비교해 보세요.' : mode === 'listen' ? '듣고, 뜻을 떠올려 보세요.' : mode === 'speak' && card.vocabulary ? '이 뜻의 영어 표현을 말해보세요.' : '뜻을 속으로 떠올려 보세요.'}</h1>
+        <h1 className="practice-prompt" ref={heading} tabIndex={-1}>{result ? result.correct ? '맞았어요. 한 번 더 눈에 담고 넘어가요.' : result.type === 'forgot' ? '괜찮아요. 정답을 보고 넘어가요.' : '다른 뜻이었어요. 정답을 확인해 보세요.'
+          : practice.revealed ? '떠올린 답과 비교해 보세요.' : choice ? '어느 뜻이었나요?' : mode === 'listen' ? '듣고, 뜻을 떠올려 보세요.' : mode === 'speak' && card.vocabulary ? '이 뜻의 영어 표현을 말해보세요.' : '뜻을 속으로 떠올려 보세요.'}</h1>
 
-        <button className={`practice-card ${practice.revealed ? 'is-revealed' : ''}`} onClick={reveal} disabled={practice.busy || practice.revealed} aria-label={practice.revealed ? '정답' : '카드를 눌러 정답 보기'}>
-          {practice.revealed ? <><span className="practice-card-label">ANSWER</span><strong className="practice-word">{card.word}</strong>
-            {card.phonetic && <span className="practice-phonetic">{card.phonetic}</span>}
-            <span className="practice-definition">{card.definition || '원문에서 이 표현의 뜻을 다시 확인해 주세요.'}</span>
-            {card.sentence && <span className="practice-sentence">{card.sentence}</span>}</>
-            : mode === 'listen' ? <><span className="practice-card-label">LISTEN & RECALL</span><span className="practice-sound-mark" aria-hidden="true">♫</span><span>들리는 표현은 어떤 뜻일까요?</span><small>카드를 누르면 글자와 뜻을 확인해요.</small></>
-              : <><span className="practice-card-label">{mode === 'speak' && card.vocabulary ? 'SAY IT IN ENGLISH' : 'TAKE A MOMENT'}</span><strong className={mode === 'speak' && card.vocabulary ? 'practice-definition' : 'practice-word'}>{mode === 'speak' && card.vocabulary ? maskedDefinition : card.word}</strong><small>떠올린 뒤 눌러서 정답 확인</small></>}
-        </button>
+        {recall ? <section className={`practice-card ${practice.revealed ? 'is-revealed' : choice ? 'is-flipped' : ''}`}>{face}</section>
+          : <button className={`practice-card ${practice.revealed ? 'is-revealed' : ''}`} onClick={reveal} disabled={practice.busy || practice.revealed} aria-label={practice.revealed ? '정답' : '카드를 눌러 정답 보기'}>{face}</button>}
 
-        {mode === 'listen' && !practice.revealed && <button className="practice-secondary" onClick={() => {
+        {mode === 'listen' && !practice.revealed && !choice && <button className="practice-secondary" onClick={() => {
           if (audio.speaking) { stopAudio(); return; }
           audio.play(card.word); setListened(true);
         }}>{audio.speaking ? '재생 멈추기' : listened ? '한 번 더 듣기' : '소리 듣기'}</button>}
@@ -155,12 +189,13 @@ export default function Review() {
             stopAudio(); setSpoken({ text: typedAnswer.trim(), result: compareSpokenAnswer(typedAnswer, card.word) }); practice.reveal();
           }}><label className="sr-only" htmlFor="practice-answer">영어 표현 입력</label><input id="practice-answer" autoComplete="off" value={typedAnswer} onChange={event => setTypedAnswer(event.target.value)} placeholder="글자로 답해도 괜찮아요" /><button disabled={!typedAnswer.trim()}>확인</button></form>
         </div>}
+        {result && !result.correct && typeof result.picked === 'string' && <p className="practice-spoken" role="status">내가 고른 뜻: <strong>{result.picked}</strong></p>}
         {spoken && practice.revealed && <p className="practice-spoken" role="status">내 답: <strong>{spoken.text}</strong><br />{spoken.result === 'match' ? '저장한 표현과 일치해요. 내가 말한 답이 맞는지 확인해 주세요.' : '표현이 다르게 들어왔어요. 인식한 말과 정답을 비교해서 직접 체크해 주세요.'}</p>}
         {audio.error && <p className="practice-message" role="status">{audio.error}</p>}
 
         <div className="practice-context">
           {card.source && <span className="practice-source">{card.source}</span>}
-          {!practice.revealed && card.sentence && <button className="practice-text-button" onClick={() => { setHintOpen(true); practice.hint(); }}>저장한 문장 힌트</button>}
+          {!practice.revealed && !choice && card.kind === 'word' && card.sentence && <button className="practice-text-button" onClick={() => { setHintOpen(true); practice.hint(); }}>저장한 문장 힌트</button>}
           {hintOpen && !practice.revealed && <p className="practice-sentence">{card.sentence}</p>}
           {mode !== 'quiet' && practice.revealed && <button className="practice-text-button" onClick={() => audio.speaking ? stopAudio() : audio.play(card.word)}>{audio.speaking ? '재생 멈추기' : '발음 듣기'}</button>}
           {mode !== 'quiet' && canPlayScene && <button className="practice-text-button" onClick={() => { stopAudio(); setSceneOpen(value => !value); if (!practice.revealed) practice.hint(); }}>{sceneOpen ? '장면 닫기' : '저장한 영상 장면 보기'}</button>}
@@ -170,11 +205,18 @@ export default function Review() {
 
         {practice.saveError && <p role="alert" className="practice-message">{practice.saveError}</p>}
         {practice.storageWarning && <p role="status" className="practice-note">이 브라우저에 이어하기 위치를 보관하지 못했어요. 서버에 저장된 복습 결과는 유지돼요.</p>}
-        <div className="practice-actions">{practice.revealed ? <>
-          <button className="practice-secondary" onClick={() => evaluate(false)} disabled={practice.busy}>다시 볼래요</button>
-          <button className="practice-primary" onClick={() => evaluate(true)} disabled={practice.busy}>{practice.busy ? '저장 중…' : '맞혔어요'}</button>
-        </> : <button className="practice-primary" onClick={reveal}>정답 확인</button>}</div>
-        <p className="practice-note">{practice.session.hintedIds.includes(practice.currentId) ? '힌트를 보고 확인한 답이에요. 다음에는 도움 없이 떠올려보세요.' : !practice.current.last_reviewed ? '처음 보는 표현은 답을 먼저 살펴봐도 괜찮아요.' : '답을 보기 전에 떠올렸는지 스스로 체크해 주세요.'}</p>
+        <div className="practice-actions">{result ? <button className="practice-primary" onClick={next} disabled={practice.busy}>{practice.busy ? '저장 중…' : lastPart ? '다음' : '다음 표현'}</button>
+          : practice.revealed ? <>
+            <button className="practice-secondary" onClick={() => evaluate(false)} disabled={practice.busy}>다시 볼래요</button>
+            <button className="practice-primary" onClick={() => evaluate(true)} disabled={practice.busy}>{practice.busy ? '저장 중…' : '맞혔어요'}</button>
+          </> : choice ? <button className="practice-secondary" onClick={forget}>잘 모르겠어요</button>
+          : recall ? <>
+            <button className="practice-secondary" onClick={forget}>기억 안 나요</button>
+            <button className="practice-primary" onClick={remember}>기억나요</button>
+          </> : <button className="practice-primary" onClick={reveal}>정답 확인</button>}</div>
+        <p className="practice-note">{practice.session.hintedIds.includes(practice.currentId) ? '힌트를 보고 확인한 답이에요. 다음에는 도움 없이 떠올려보세요.'
+          : !practice.current.last_reviewed ? recall ? '처음 보는 표현이면 ‘기억 안 나요’로 답부터 봐도 괜찮아요.' : '처음 보는 표현은 답을 먼저 살펴봐도 괜찮아요.'
+          : recall ? '떠올렸다면 두 뜻 중 하나를 골라 확인해요.' : '답을 보기 전에 떠올렸는지 스스로 체크해 주세요.'}</p>
         <div className="practice-footer"><button onClick={pause} disabled={practice.busy}>잠깐 쉬기</button><button onClick={() => setSettings(value => !value)} disabled={practice.busy}>분량·범위</button>{practice.session.kind !== 'sample' && <button onClick={() => { stopAudio(); practice.suspend(); }} disabled={practice.busy}>이 단어 잠시 빼기</button>}</div>
         {settings && <section className="practice-settings" aria-label="다음 묶음 설정"><h2>다음 묶음 정하기</h2>
           <label>한 번에<select value={practice.options.size} onChange={event => practice.setOptions({ ...practice.options, size: Number(event.target.value) })}>{[3, 5, 10, 20].map(size => <option key={size} value={size}>{size}개</option>)}</select></label>
