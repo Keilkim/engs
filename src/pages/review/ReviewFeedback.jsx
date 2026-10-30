@@ -25,7 +25,14 @@ export default function ReviewFeedback({ result, answer, busy, onAdvance }) {
     <div className={`practice-feedback ${result.correct ? 'is-correct' : 'is-incorrect'}`} role="status" aria-live="polite" aria-atomic="true">
       <Buddy pose={result.correct ? 'correct' : 'surprised'} className="practice-feedback-buddy" animated={false} />
       <div className="practice-feedback-copy">
-        <strong>{result.correct ? '맞았어요!' : '앗, 이 뜻이었어요!'}</strong>
+        <div className="practice-feedback-heading">
+          <strong>{result.correct ? '맞았어요!' : '앗, 이 뜻이었어요!'}</strong>
+          {!busy && <span className="practice-tap-gesture" aria-hidden="true">
+            <img src="/images/orange-dust-tap-hand.webp" alt="" width="64" height="64" draggable="false" />
+            <span className="practice-tap-rays">{[-64, -32, 0, 32, 64].map(angle =>
+              <i key={angle} style={{ '--ray-angle': `${angle}deg` }} />)}</span>
+          </span>}
+        </div>
         <span>{busy ? <>다음 카드 준비 중<DustPuffs /></> : result.correct ? '기억이 하나 더 쌓였어요' : '괜찮아요, 한 번 더 눈에 담아요'}</span>
         <span className="sr-only">정답: {answer}. 화면 아무 곳이나 터치하거나 Enter 키를 누르면 다음 카드로 넘어가요.</span>
       </div>
