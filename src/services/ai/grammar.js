@@ -190,6 +190,19 @@ export function analyzeGrammar(text) {
   };
 }
 
+// "segments" carry each piece's role; flashcards and review still read the
+// flat "spans" (fixed words) / "variableSpans" (slot words), so derive them.
+export function withSegmentSpans(pattern) {
+  const segments = (Array.isArray(pattern?.segments) ? pattern.segments : [])
+    .filter(segment => typeof segment?.text === 'string' && segment.text.trim())
+    .map(segment => ({ text: segment.text.trim(), role: segment.role === 'slot' ? 'slot' : 'fixed' }));
+  if (!segments.length) return pattern;
+  const texts = role => segments.filter(segment => segment.role === role).map(segment => segment.text);
+  // A pattern made only of slots still needs words to bold on its card.
+  const fixed = texts('fixed');
+  return { ...pattern, segments, spans: fixed.length ? fixed : texts('slot'), variableSpans: texts('slot') };
+}
+
 /**
  * AI-based grammar pattern analysis (Gemini API)
  */
@@ -213,33 +226,35 @@ Produce two things:
 2. "patterns": the most useful things to learn from this sentence. This includes BOTH:
    - Expressions worth memorizing: idioms, phrasal verbs, collocations (use A, B, C for variable parts).
    - Notable grammar structures: relative clauses, participial phrases, conditionals, passive voice, key verb tenses/modals, comparatives, "to-infinitive"/gerund usage, etc.
-   For each, put a short form in "words", a concise Korean explanation, "spans", and "variableSpans".
-   "spans": copy ONLY the FIXED expression or grammar cue word(s) FROM THE SENTENCE ABOVE,
-   verbatim — preserving the sentence's original spelling, conjugation, and capitalization.
-   Do NOT use placeholders (A/B/C, ~, V/Ving/Ved) in "spans"; those belong only in "words".
-   If the pattern is split across the sentence (e.g. "not A but B"), return each contiguous
-   piece as its own array element (e.g. ["not", "but"]). Every string in "spans" MUST appear
-   character-for-character somewhere in the sentence.
-   "variableSpans": copy the actual words filling A/B/C or other variable slots, as separate
-   contiguous substrings from the sentence. For "take A into account" in "We take this risk into account",
-   spans = ["take", "into account"] and variableSpans = ["this risk"]. For "not A but B",
-   spans = ["not", "but"] and variableSpans contains the actual A and B phrases.
-   Keep fixed and variable spans disjoint. Exclude unrelated words and clauses.
-   Use [] when there is no variable slot. NEVER use the whole sentence as a fallback span.
+   For each, put a short form in "words", a concise Korean explanation, and "segments".
+   "segments": the pattern's words AS THEY APPEAR IN THE SENTENCE ABOVE, in sentence order, each
+   piece copied verbatim (same spelling, conjugation and capitalization) and labeled with a role:
+     - "fixed": words that belong to the expression or grammar cue itself and stay the same
+       whenever the pattern is used (e.g. "take", "into account", "to", "who", "am used to").
+     - "slot": words filling a replaceable part — whatever "words" writes as A/B/C, ~, V, Ving,
+       p.p., sb/sth, one's or any other placeholder (e.g. "this risk", the verb after "to").
+   Start a new piece wherever the role changes or the pattern skips unrelated words. Examples:
+     "We take this risk into account" + "take A into account" → [{"text":"take","role":"fixed"},
+       {"text":"this risk","role":"slot"},{"text":"into account","role":"fixed"}]
+     "She decided to leave early" + "to-v" → [{"text":"to","role":"fixed"},{"text":"leave","role":"slot"}]
+     "It was not cheap but fast" + "not A but B" → [{"text":"not","role":"fixed"},{"text":"cheap","role":"slot"},
+       {"text":"but","role":"fixed"},{"text":"fast","role":"slot"}]
+   Every "text" MUST appear character-for-character in the sentence. Exclude unrelated words and
+   clauses. NEVER use the whole sentence as a fallback.
 
 RULES:
 - ALWAYS fill "translation".
 - Give 1-4 patterns, prioritizing what a learner at the level above would find genuinely useful or tricky.
 - For a grammar structure, "words" can hold the pattern form (e.g. ["who + 동사"], ["as long as"], ["have been Ving"], ["not A but B"]).
-- Only include a pattern if you can fill "spans" with real substrings copied verbatim from the sentence.
+- Only include a pattern if you can fill "segments" with real substrings copied verbatim from the sentence.
 - Only return an empty "patterns" list if the text is NOT a real sentence (e.g. a lone interjection). A normal sentence must yield at least one pattern.
 
 Return ONLY valid JSON, no markdown:
 {
   "translation": "문장 전체의 자연스러운 한국어 번역",
   "patterns": [
-    { "words": ["regardless of A"], "spans": ["regardless of"], "variableSpans": ["the result"], "explanation": "A에 상관없이 (전치사구)" },
-    { "words": ["who + 동사"], "spans": ["who"], "variableSpans": ["runs"], "explanation": "관계대명사 who: 앞의 사람 명사를 꾸며주는 절을 이끔" }
+    { "words": ["regardless of A"], "segments": [{ "text": "regardless of", "role": "fixed" }, { "text": "the result", "role": "slot" }], "explanation": "A에 상관없이 (전치사구)" },
+    { "words": ["who + 동사"], "segments": [{ "text": "who", "role": "fixed" }, { "text": "runs", "role": "slot" }], "explanation": "관계대명사 who: 앞의 사람 명사를 꾸며주는 절을 이끔" }
   ]
 }`;
 
@@ -280,7 +295,7 @@ Return ONLY valid JSON, no markdown:
     }
 
     if (parsed && (parsed.translation || parsed.patterns?.length > 0)) {
-      return { translation: parsed.translation || '', patterns: parsed.patterns || [] };
+      return { translation: parsed.translation || '', patterns: (parsed.patterns || []).map(withSegmentSpans) };
     }
     // Response arrived but was empty/unusable → fall through to translate-only.
   } catch (err) {

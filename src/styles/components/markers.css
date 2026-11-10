@@ -157,19 +157,21 @@
   }
 }
 
-/* Fixed expressions are strong; the words filling A/B slots are lighter. */
+/* Saved expressions: fixed words in dark blue dashes, the words filling
+   A/~/V slots in light blue dashes. With non-scaling-stroke the dash
+   lengths are screen pixels, so they stay even at any zoom. */
 .grammar-underline {
-  stroke: rgba(59, 130, 246, 0.95);
+  stroke: #1d4ed8;
   stroke-width: 2px;
-  stroke-linecap: round;
+  stroke-dasharray: 4 3;
+  stroke-linecap: butt;
   fill: none;
   pointer-events: none;
   vector-effect: non-scaling-stroke;
 }
 
 .grammar-underline-variable {
-  stroke: rgba(59, 130, 246, 0.38);
-  stroke-width: 1px;
+  stroke: #93c5fd;
 }
 
 .grammar-pattern-group {

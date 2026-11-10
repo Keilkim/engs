@@ -166,6 +166,8 @@ export interface GrammarPattern {
   words?: string[];
   spans?: string[];
   variableSpans?: string[];
+  /** Ordered pieces of the sentence: the expression's own words vs words filling its slots. */
+  segments?: { text: string; role: 'fixed' | 'slot' }[];
   explanation: string;
   type?: string;
   typeKr?: string;

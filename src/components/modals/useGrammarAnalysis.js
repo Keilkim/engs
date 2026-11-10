@@ -7,16 +7,20 @@ import { groupWordBoxes } from '../../utils/grammarMarkers';
 // Keep only spans that literally occur in the sentence, canonicalized to the
 // sentence's real casing so the flashcard front can bold an exact, verbatim
 // substring. Drops anything the model hallucinated or normalized away.
+// Lower case with straight apostrophes: OCR text often has ’ where the model
+// writes ' (same length, so indexes still point into the sentence).
+const fold = text => text.toLowerCase().replace(/[’‘]/g, "'");
+
 function validateSpans(spans, sentence) {
   if (!sentence) return [];
-  const low = sentence.toLowerCase();
+  const low = fold(sentence);
   const seen = new Set();
   const out = [];
   for (const s of Array.isArray(spans) ? spans : []) {
     if (typeof s !== 'string') continue;
     const t = s.trim();
     if (!t) continue;
-    const idx = low.indexOf(t.toLowerCase());
+    const idx = low.indexOf(fold(t));
     if (idx === -1) continue; // not actually in the sentence → drop
     const surface = sentence.slice(idx, idx + t.length); // preserve original casing
     const key = surface.toLowerCase();
@@ -25,6 +29,33 @@ function validateSpans(spans, sentence) {
     out.push(surface);
   }
   return out;
+}
+
+// Same rule for role-labeled segments, but order and repeats are kept: they
+// place the pattern in the sentence ("the more …, the more …").
+function validateSegments(segments, sentence) {
+  if (!sentence) return [];
+  const low = fold(sentence);
+  return (Array.isArray(segments) ? segments : []).flatMap(segment => {
+    const t = typeof segment?.text === 'string' ? segment.text.trim() : '';
+    const idx = t ? low.indexOf(fold(t)) : -1;
+    if (idx === -1) return [];
+    return [{ text: sentence.slice(idx, idx + t.length), role: segment.role === 'slot' ? 'slot' : 'fixed' }];
+  });
+}
+
+function validatePattern(pattern, sentence) {
+  const segments = validateSegments(pattern?.segments, sentence);
+  if (segments.length) {
+    const fixed = segments.filter(s => s.role === 'fixed').map(s => s.text);
+    const slots = segments.filter(s => s.role === 'slot').map(s => s.text);
+    // Cards bold "spans"; a pattern made only of slots still needs some.
+    return { ...pattern, segments, spans: validateSpans(fixed.length ? fixed : slots, sentence),
+      variableSpans: validateSpans(slots, sentence) };
+  }
+  const { segments: _dropped, ...rest } = pattern || {};
+  return { ...rest, spans: validateSpans(pattern?.spans, sentence),
+    variableSpans: validateSpans(pattern?.variableSpans, sentence) };
 }
 
 /**
@@ -104,8 +135,7 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
       const selectedPatterns = checkedPatterns
         .map(i => grammarData.patterns[i])
         .filter(Boolean)
-        .map(p => ({ ...p, spans: validateSpans(p?.spans, grammarData.originalText),
-          variableSpans: validateSpans(p?.variableSpans, grammarData.originalText) }));
+        .map(p => validatePattern(p, grammarData.originalText));
 
       let selectionRect;
       if (isYouTube) {
