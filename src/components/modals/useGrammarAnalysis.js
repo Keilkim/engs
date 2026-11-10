@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { analyzeGrammarPatterns } from '../../services/ai';
 import { createAnnotation } from '../../services/annotation';
 import { logError } from '../../utils/errors';
+import { groupWordBoxes } from '../../utils/grammarMarkers';
 
 // Keep only spans that literally occur in the sentence, canonicalized to the
 // sentence's real casing so the flashcard front can bold an exact, verbatim
@@ -24,53 +25,6 @@ function validateSpans(spans, sentence) {
     out.push(surface);
   }
   return out;
-}
-
-// Build line groups from sentenceWords for selection_rect storage
-function buildLineGroups(sentenceWords) {
-  if (!sentenceWords || sentenceWords.length === 0) return [];
-
-  const sorted = [...sentenceWords].sort((a, b) => {
-    const yDiff = a.bbox.y - b.bbox.y;
-    const avgHeight = (a.bbox.height + b.bbox.height) / 2;
-    if (Math.abs(yDiff) > avgHeight * 0.5) return yDiff;
-    return a.bbox.x - b.bbox.x;
-  });
-
-  const lineGroups = [];
-  let currentLine = [];
-  let lastY = null;
-  let lastHeight = null;
-
-  for (const w of sorted) {
-    const lineGap = lastY !== null ? Math.abs(w.bbox.y - lastY) : 0;
-    const avgHeight = lastHeight !== null ? (w.bbox.height + lastHeight) / 2 : w.bbox.height;
-
-    if (lastY === null || lineGap <= avgHeight * 0.5) {
-      currentLine.push(w);
-    } else {
-      if (currentLine.length > 0) {
-        const minX = Math.min(...currentLine.map(w => w.bbox.x));
-        const maxX = Math.max(...currentLine.map(w => w.bbox.x + w.bbox.width));
-        const minY = Math.min(...currentLine.map(w => w.bbox.y));
-        const maxY = Math.max(...currentLine.map(w => w.bbox.y + w.bbox.height));
-        lineGroups.push({ x: minX, y: minY, width: maxX - minX, height: maxY - minY });
-      }
-      currentLine = [w];
-    }
-    lastY = w.bbox.y;
-    lastHeight = w.bbox.height;
-  }
-
-  if (currentLine.length > 0) {
-    const minX = Math.min(...currentLine.map(w => w.bbox.x));
-    const maxX = Math.max(...currentLine.map(w => w.bbox.x + w.bbox.width));
-    const minY = Math.min(...currentLine.map(w => w.bbox.y));
-    const maxY = Math.max(...currentLine.map(w => w.bbox.y + w.bbox.height));
-    lineGroups.push({ x: minX, y: minY, width: maxX - minX, height: maxY - minY });
-  }
-
-  return lineGroups;
 }
 
 /**
@@ -150,7 +104,8 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
       const selectedPatterns = checkedPatterns
         .map(i => grammarData.patterns[i])
         .filter(Boolean)
-        .map(p => ({ ...p, spans: validateSpans(p?.spans, grammarData.originalText) }));
+        .map(p => ({ ...p, spans: validateSpans(p?.spans, grammarData.originalText),
+          variableSpans: validateSpans(p?.variableSpans, grammarData.originalText) }));
 
       let selectionRect;
       if (isYouTube) {
@@ -163,10 +118,11 @@ export function useGrammarAnalysis({ word, wordBbox, sentenceWords, sourceId, cu
           ...(typeof sceneEnd === 'number' ? { sceneEnd } : {}),
         });
       } else {
-        const lineGroups = buildLineGroups(sentenceWords);
+        const lineGroups = groupWordBoxes(sentenceWords || []);
         selectionRect = JSON.stringify({
           bounds: wordBbox,
           lines: lineGroups.length > 0 ? lineGroups : null,
+          words: sentenceWords?.map(({ text, bbox }) => ({ text, bbox })) || null,
           page: currentPage,
         });
       }

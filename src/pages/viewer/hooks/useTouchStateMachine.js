@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { isBookmarkSwipe } from '../../../utils/readingBookmark';
 
 /**
  * Hook for mobile touch state machine
@@ -13,6 +14,7 @@ export function useTouchStateMachine({
   clampPanOffset,
   activeModal,
   handleWordTap,
+  onBookmarkSwipe,
   handleImagePointerDown,
   handleImagePointerMove,
   // Shared refs (owned by Viewer.jsx)
@@ -46,6 +48,7 @@ export function useTouchStateMachine({
     clampPanOffset,
     activeModal,
     handleWordTap,
+    onBookmarkSwipe,
     handleImagePointerDown,
     handleImagePointerMove,
     singleFingerPanRef,
@@ -61,6 +64,7 @@ export function useTouchStateMachine({
       clampPanOffset,
       activeModal,
       handleWordTap,
+      onBookmarkSwipe,
       handleImagePointerDown,
       handleImagePointerMove,
       singleFingerPanRef,
@@ -74,6 +78,7 @@ export function useTouchStateMachine({
   useEffect(() => {
     const container = imageContainerRef.current;
     if (!container) return;
+    const gestureState = touchState.current;
 
     const LONG_PRESS_DURATION = 500;
     const TAP_MOVE_THRESHOLD = 10;
@@ -83,9 +88,19 @@ export function useTouchStateMachine({
     const handleTouchStart = (e) => {
       const p = propsRef.current;
       const state = touchState.current;
+      if (e.target.closest?.('[data-reading-bookmark]')) {
+        clearTimeout(state.timer);
+        state.timer = null;
+        state.ignored = true;
+        return;
+      }
+      state.ignored = false;
 
       // 2손가락 → pinch zoom
       if (e.touches.length >= 2) {
+        lastTapRef.current = null;
+        state.multiTouch = true;
+        state.actionExecuted = true;
         e.preventDefault();
         if (state.timer) {
           clearTimeout(state.timer);
@@ -109,7 +124,10 @@ export function useTouchStateMachine({
       }
 
       // 모달 열려있으면 탭 감지 안함
-      if (p.activeModal.type === 'wordMenu') {
+      if (p.activeModal.type) {
+        clearTimeout(state.timer);
+        state.timer = null;
+        state.ignored = true;
         return;
       }
 
@@ -120,6 +138,8 @@ export function useTouchStateMachine({
       state.startY = touch.clientY;
       state.moved = false;
       state.actionExecuted = false;
+      state.multiTouch = false;
+      state.startZoomScale = p.zoomScale;
 
       // 롱프레스 타이머 (500ms)
       state.timer = setTimeout(() => {
@@ -134,9 +154,12 @@ export function useTouchStateMachine({
     const handleTouchMove = (e) => {
       const p = propsRef.current;
       const state = touchState.current;
+      if (state.ignored) return;
 
       // 2손가락 → pinch zoom
       if (e.touches.length >= 2) {
+        state.multiTouch = true;
+        state.actionExecuted = true;
         e.preventDefault();
         p.singleFingerPanRef.current = null;
         p.handleImagePointerMove(e);
@@ -169,7 +192,11 @@ export function useTouchStateMachine({
       // 움직임 감지 → 탭/롱프레스 취소
       const deltaX = Math.abs(touch.clientX - state.startX);
       const deltaY = Math.abs(touch.clientY - state.startY);
+      if (!state.multiTouch && state.startZoomScale <= 1 && p.zoomScale <= 1 && deltaX > 10 && deltaX > deltaY * 2) {
+        e.preventDefault();
+      }
       if (deltaX > TAP_MOVE_THRESHOLD || deltaY > TAP_MOVE_THRESHOLD) {
+        lastTapRef.current = null;
         state.moved = true;
         if (state.timer) {
           clearTimeout(state.timer);
@@ -181,6 +208,7 @@ export function useTouchStateMachine({
     const handleTouchEnd = (e) => {
       const p = propsRef.current;
       const state = touchState.current;
+      if (state.ignored) return;
 
       // 타이머 취소
       if (state.timer) {
@@ -254,6 +282,18 @@ export function useTouchStateMachine({
       }
 
       // 스와이프 감지 (움직임 있고, 확대 안된 상태)
+      const end = e.changedTouches?.[0];
+      if (state.moved && end && isBookmarkSwipe({
+        dx: end.clientX - state.startX, dy: end.clientY - state.startY,
+        elapsed: Date.now() - state.startTime,
+        zoomScale: Math.max(state.startZoomScale, p.zoomScale), multiTouch: state.multiTouch,
+      })) {
+        e.preventDefault();
+        lastTapRef.current = null;
+        p.singleFingerPanRef.current = null;
+        p.onBookmarkSwipe?.(state.startX, state.startY);
+        return;
+      }
       const pages = p.getPages();
       const isMultiPage = pages && pages.length > 1;
       if (state.moved && isMultiPage && p.zoomScale <= 1) {
@@ -261,7 +301,8 @@ export function useTouchStateMachine({
         if (touch) {
           const deltaY = touch.clientY - state.startY;
           const deltaTime = Date.now() - state.startTime;
-          if (deltaTime < 300 && Math.abs(deltaY) > 50) {
+          const deltaX = touch.clientX - state.startX;
+          if (deltaTime < 300 && Math.abs(deltaY) > 50 && Math.abs(deltaY) > Math.abs(deltaX)) {
             if (deltaY > 0 && p.currentPage > 0) {
               p.setCurrentPage(p.currentPage - 1);
             } else if (deltaY < 0 && pages && p.currentPage < pages.length - 1) {
@@ -276,17 +317,30 @@ export function useTouchStateMachine({
       p.singleFingerPanRef.current = null;
     };
 
+    const handleTouchCancel = () => {
+      const state = touchState.current;
+      clearTimeout(state.timer);
+      state.timer = null;
+      state.actionExecuted = true;
+      lastTapRef.current = null;
+      const p = propsRef.current;
+      p.singleFingerPanRef.current = null;
+      p.pinchStartRef.current = null;
+      p.twoFingerPanRef.current = null;
+    };
+
     container.addEventListener('touchstart', handleTouchStart, { passive: false });
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
     container.addEventListener('touchend', handleTouchEnd, { passive: false });
+    container.addEventListener('touchcancel', handleTouchCancel, { passive: false });
 
     return () => {
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
-      if (touchState.current.timer) {
-        clearTimeout(touchState.current.timer);
-      }
+      container.removeEventListener('touchcancel', handleTouchCancel);
+      clearTimeout(gestureState.timer);
+      lastTapRef.current = null;
     };
     // Re-register when the container node mounts or the layout swaps it.
     // (Keyed on containerNode, not the stable ref object, so listeners actually

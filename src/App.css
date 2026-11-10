@@ -765,6 +765,62 @@
   transition: transform 0.1s ease-out;
 }
 
+.reading-bookmark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.reading-bookmark-line {
+  position: absolute;
+  width: 100%;
+  border-top: 1px solid var(--color-highlight, #f59b45);
+}
+
+.reading-bookmark-label {
+  position: absolute;
+  right: 4px;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 10px;
+  transform: translateY(-50%);
+  border: 1px solid var(--color-highlight, #f59b45);
+  border-radius: 6px;
+  color: var(--color-text);
+  background: var(--color-base);
+  font-size: 12px;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.reading-bookmark-label svg { color: var(--color-highlight, #f59b45); }
+
+.reading-bookmark-message {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 100;
+  max-width: calc(100vw - 32px);
+  width: max-content;
+  padding: 10px 16px;
+  border: 1px solid var(--color-accent);
+  border-radius: 10px;
+  background: var(--color-base);
+  color: var(--color-text);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  pointer-events: none;
+}
+
 .screenshot-image {
   max-width: 100%;
   max-height: calc(100vh - 100px);

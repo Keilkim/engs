@@ -201,7 +201,7 @@ export async function getGrammarPatterns() {
     .select('*, sources(title)')
     .eq('user_id', scope.userId)
     .eq('type', 'highlight')
-    .not('ai_analysis_json', 'is', null)
+    .ilike('ai_analysis_json', '%"type":"grammar"%')
     .order('created_at', { ascending: false })
     .limit(200);
 

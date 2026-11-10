@@ -13,9 +13,14 @@ import { useSourceData, useOcrWords, useSentenceFinder, useMinimap, useAnnotatio
 import { ImageContentView, VocabPanel } from './components';
 import WebCaptureRecovery from './components/WebCaptureRecovery';
 import { getMobileSafeAreaBottom } from '../../utils/positioning';
+import useDocumentBookmark from './hooks/useDocumentBookmark';
 
 export default function Viewer() {
   const { id } = useParams();
+  return <SourceViewer key={id} id={id} />;
+}
+
+function SourceViewer({ id }) {
   const navigate = useNavigate();
 
   // Source data (from custom hook)
@@ -114,6 +119,10 @@ const zoomOrigin = { x: 0, y: 0 };
   // OCR word data (from custom hook)
   const { ocrWords, findWordAtPoint } = useOcrWords(source, currentPage);
   const { findSentenceFromWord } = useSentenceFinder(ocrWords);
+  const readingBookmark = useDocumentBookmark({
+    sourceId: id, source, containerNode, zoomWrapperRef, scrollContainerRef,
+    zoomScale, currentPage, setCurrentPage, totalPages,
+  });
 
   // Annotation helpers (from custom hook)
   const {
@@ -668,6 +677,7 @@ const zoomOrigin = { x: 0, y: 0 };
     clampPanOffset,
     activeModal,
     handleWordTap,
+    onBookmarkSwipe: readingBookmark.saveAtPoint,
     handleImagePointerDown,
     handleImagePointerMove,
     singleFingerPanRef,
@@ -762,10 +772,12 @@ const zoomOrigin = { x: 0, y: 0 };
         )}
         <ImageContentView
           source={source}
+          ocrWords={ocrWords}
+          readingBookmark={readingBookmark.bookmark}
+          onRemoveBookmark={readingBookmark.remove}
           annotations={annotations}
           currentPage={currentPage}
           setCurrentPage={setCurrentPage}
-          imageContainerRef={imageContainerRef}
           setImageContainer={setImageContainer}
           zoomWrapperRef={zoomWrapperRef}
           scrollContainerRef={scrollContainerRef}
@@ -785,7 +797,6 @@ const zoomOrigin = { x: 0, y: 0 };
           onStrokeComplete={addPenStroke}
           onStrokesDelete={removePenStrokes}
           activeModal={activeModal}
-          openModal={openModal}
           highlightedVocabId={highlightedVocabId}
           isVocabularyAnnotation={isVocabularyAnnotation}
           isGrammarAnnotation={isGrammarAnnotation}
@@ -806,6 +817,7 @@ const zoomOrigin = { x: 0, y: 0 };
           sidebarCollapsed={sidebarCollapsed}
           setSidebarCollapsed={setSidebarCollapsed}
         />
+        {readingBookmark.message && <div className="reading-bookmark-message" role="status">{readingBookmark.message}</div>}
 
         {/* Memo markers displayed as floating indicators */}
         {annotations

@@ -18,10 +18,16 @@ import WhisperUpgradeBanner from '../../components/youtube/WhisperUpgradeBanner'
 import useWhisperUpgrade from '../../hooks/useWhisperUpgrade';
 import { getWordTimeline } from '../../utils/captionWords';
 import { buildPauseChunks } from '../../utils/pauseChunker';
+import useReadingBookmark from '../../hooks/useReadingBookmark';
+import PlaybackBookmarkControl from '../../components/youtube/PlaybackBookmarkControl';
 import '../../styles/pages/youtube-viewer.css';
 
 export default function YouTubeViewer() {
   const { id } = useParams();
+  return <VideoSourceViewer key={id} id={id} />;
+}
+
+function VideoSourceViewer({ id }) {
   const navigate = useNavigate();
 
   // Caption-translation preference — read once at mount (settings only change on
@@ -144,6 +150,8 @@ export default function YouTubeViewer() {
   }, [isDragging, layout]);
 
   const player = useYouTubePlayer();
+  const readingBookmark = useReadingBookmark(id);
+  const restoredBookmarkFor = useRef(null);
   const {
     currentTime,
     isPlaying,
@@ -264,6 +272,17 @@ export default function YouTubeViewer() {
   const virtualClockLive = gap.virtualActive && gap.virtualState !== 'loading';
   const displayTime = virtualClockLive ? gap.virtualTime : currentTime;
   const displayIsPlaying = virtualClockLive ? gap.virtualIsPlaying : isPlaying;
+
+  useEffect(() => {
+    if (!readingBookmark.ready || !player.isReady || String(source?.id) !== String(id)
+      || restoredBookmarkFor.current === id) return;
+    restoredBookmarkFor.current = id;
+    const bookmark = readingBookmark.bookmark;
+    if (bookmark?.kind === 'video') {
+      const duration = player.duration || source?.youtube_data?.duration;
+      handleSeek(duration > 0 ? Math.min(bookmark.time, duration) : bookmark.time);
+    }
+  }, [id, source?.id, source?.youtube_data?.duration, readingBookmark.ready, readingBookmark.bookmark, player.isReady, player.duration, handleSeek]);
 
   // Press start → pause playback (engine or video) only if playing
   const handlePressStart = useCallback(() => {
@@ -549,6 +568,9 @@ export default function YouTubeViewer() {
         </div>
 
         <div className="youtube-side">
+        <PlaybackBookmarkControl currentTime={displayTime}
+          duration={player.duration || source.youtube_data?.duration || 0}
+          onSeek={handleSeek} reading={readingBookmark} />
         <div className="speed-control">
           <span className="speed-label">속도</span>
           <div className="speed-buttons">

@@ -100,6 +100,7 @@ export function useDesktopGestures({
   // Mouse/Touch pointer down
   const handleImagePointerDown = useCallback((e) => {
     if (!imageContainerRef.current) return;
+    if (e.target.closest?.('[data-reading-bookmark]')) return;
 
     // Middle mouse button - start panning
     if (e.button === 1) {

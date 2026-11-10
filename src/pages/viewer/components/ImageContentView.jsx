@@ -3,6 +3,7 @@ import { TranslatableText } from '../../../components/translatable';
 import { PenCanvas } from '../../../components/pen-mode';
 import { GrammarPatternRenderer } from './index';
 import { safeJsonParse } from '../../../utils/errors';
+import ReadingBookmark from './ReadingBookmark';
 
 // Convert path points to SVG path string
 function pathToSvg(points) {
@@ -174,36 +175,22 @@ function renderRegularAnnotations(annotations, isVocabularyAnnotation, isGrammar
 }
 
 // Render grammar pattern arcs
-function renderGrammarPatterns(grammarAnnotations, imageContainerRef, openModal) {
-  return grammarAnnotations.map(annotation => {
-    try {
-      const analysisData = JSON.parse(annotation.ai_analysis_json);
-      return analysisData.patterns?.map((_, idx) =>
-        <GrammarPatternRenderer
-          key={`${annotation.id}-${idx}`}
-          annotation={annotation}
-          patternIdx={idx}
-          imageContainerRef={imageContainerRef}
-          openModal={openModal}
-        />
-      );
-    } catch {
-      return null;
-    }
-  });
+function renderGrammarPatterns(grammarAnnotations, ocrWords) {
+  return grammarAnnotations.map(annotation => (
+    <GrammarPatternRenderer key={annotation.id} annotation={annotation} ocrWords={ocrWords} />
+  ));
 }
 
 // Shared SVG overlay for all image variants
 function SvgOverlay({
-  annotations, currentPage, highlightedVocabId, activeModal, openModal,
+  annotations, currentPage, highlightedVocabId, activeModal, ocrWords,
   isVocabularyAnnotation, isGrammarAnnotation, getVocabularyAnnotations, getGrammarAnnotations,
-  imageContainerRef,
 }) {
   return (
     <svg className="highlighter-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
       {renderRegularAnnotations(annotations, isVocabularyAnnotation, isGrammarAnnotation, currentPage)}
       {renderVocabMarkers(getVocabularyAnnotations(currentPage), highlightedVocabId)}
-      {renderGrammarPatterns(getGrammarAnnotations(currentPage), imageContainerRef, openModal)}
+      {renderGrammarPatterns(getGrammarAnnotations(currentPage), ocrWords)}
       {renderSelectionHighlight(activeModal)}
       {renderGrammarTooltipHighlight(activeModal)}
     </svg>
@@ -238,8 +225,9 @@ function PenCanvasSection({
  */
 export default function ImageContentView({
   source, annotations, currentPage, setCurrentPage,
+  ocrWords, readingBookmark, onRemoveBookmark,
   // Refs
-  imageContainerRef, setImageContainer, zoomWrapperRef, scrollContainerRef, contentRef, mobileNavRef,
+  setImageContainer, zoomWrapperRef, scrollContainerRef, contentRef, mobileNavRef,
   // Zoom/Pan
   zoomScale, zoomOrigin, panOffset, isShaking,
   // Mouse handlers
@@ -248,7 +236,7 @@ export default function ImageContentView({
   penModeActive, penColor, penStrokeWidth, penStrokes,
   onStrokeComplete, onStrokesDelete,
   // Modal
-  activeModal, openModal, highlightedVocabId,
+  activeModal, highlightedVocabId,
   // Annotation helpers
   isVocabularyAnnotation, isGrammarAnnotation, getVocabularyAnnotations, getGrammarAnnotations,
   highlightVocabularyWords,
@@ -262,9 +250,8 @@ export default function ImageContentView({
   sidebarCollapsed, setSidebarCollapsed,
 }) {
   const svgProps = {
-    annotations, currentPage, highlightedVocabId, activeModal, openModal,
+    annotations, currentPage, highlightedVocabId, activeModal, ocrWords,
     isVocabularyAnnotation, isGrammarAnnotation, getVocabularyAnnotations, getGrammarAnnotations,
-    imageContainerRef,
   };
 
   const penProps = {
@@ -345,6 +332,8 @@ export default function ImageContentView({
     <div ref={zoomWrapperRef} className="zoom-wrapper" style={zoomStyle}>
       <img src={displayImage} alt={source.title} className="screenshot-image" draggable={false} />
       <SvgOverlay {...svgProps} />
+      <ReadingBookmark bookmark={readingBookmark?.kind === 'document' && readingBookmark.page === currentPage ? readingBookmark : null}
+        onRemove={onRemoveBookmark} />
       <PenCanvasSection {...penProps} />
     </div>
   );

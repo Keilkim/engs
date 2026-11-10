@@ -10,6 +10,44 @@
 }
 
 /* Header */
+.playback-bookmark-control {
+  flex-shrink: 0;
+  padding: 7px 12px 4px;
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.playback-time-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.playback-time, .playback-saved-bookmark {
+  min-height: 36px;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  touch-action: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  cursor: pointer;
+}
+.playback-time span, .playback-bookmark-hint { opacity: .6; }
+.playback-time.bookmarked, .playback-saved-bookmark { color: var(--color-highlight, #f59b45); }
+.playback-saved-bookmark { display: flex; align-items: center; gap: 6px; }
+.playback-bookmark-hint { font-size: 11px; }
+.playback-bookmark-track { position: relative; height: 24px; display: flex; align-items: center; }
+.playback-bookmark-track input { width: 100%; margin: 0; accent-color: var(--color-highlight, #f59b45); }
+.playback-bookmark-tick {
+  position: absolute;
+  top: 2px;
+  width: 3px;
+  height: 20px;
+  background: var(--color-highlight, #f59b45);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.playback-bookmark-message { margin: 2px 0 4px; font-size: 12px; color: var(--color-text-sub, #aaa); }
+
 .youtube-viewer-header {
   display: flex;
   align-items: center;

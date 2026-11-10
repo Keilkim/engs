@@ -129,6 +129,7 @@ export interface BBox {
 export interface SelectionRect {
   bounds?: BBox;
   lines?: BBox[];
+  words?: OcrWord[];
   page?: number;
   // Pen stroke fields
   type?: 'pen_stroke' | 'youtube_word' | 'youtube_grammar';
@@ -163,6 +164,8 @@ export interface GrammarAnalysis {
 
 export interface GrammarPattern {
   words?: string[];
+  spans?: string[];
+  variableSpans?: string[];
   explanation: string;
   type?: string;
   typeKr?: string;
