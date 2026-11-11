@@ -4,7 +4,7 @@
 .buddy-loader-character { position: absolute; width: 112px; height: 112px; left: 26px; top: 0; transform-origin: 55% 85%; animation: buddy-loader-bounce 1.8s ease-in-out infinite; }
 .buddy-loader-label { font-size: 14px; line-height: 1.7; text-align: center; text-wrap: balance; }
 .dust-puffs { --puff-size: 24px; display: inline-flex; align-items: center; gap: 3px; height: calc(var(--puff-size) * 1.25); vertical-align: middle; }
-.dust-puffs img { flex: none; width: calc(var(--puff-size) * var(--puff-scale)); height: calc(var(--puff-size) * var(--puff-scale)); object-fit: contain; animation: dust-puff 1.8s ease-out infinite; }
+.dust-puffs img { flex: none; width: calc(var(--puff-size) * var(--puff-scale)); height: calc(var(--puff-size) * var(--puff-scale)); object-fit: contain; animation: dust-puff 1.8s ease-out infinite backwards; }
 .dust-puffs img:nth-child(1) { --puff-scale: .75; }
 .dust-puffs img:nth-child(2) { --puff-scale: .916667; animation-delay: 140ms; }
 .dust-puffs img:nth-child(3) { --puff-scale: 1.083333; animation-delay: 310ms; }
