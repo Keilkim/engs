@@ -166,8 +166,11 @@ export interface GrammarPattern {
   words?: string[];
   spans?: string[];
   variableSpans?: string[];
-  /** Ordered pieces of the sentence: the expression's own words vs words filling its slots. */
-  segments?: { text: string; role: 'fixed' | 'slot' }[];
+  /**
+   * Ordered pieces of the sentence: the expression's own words vs words filling its slots.
+   * A slot's label is the placeholder it fills, as written in `words` ("A", "~", "V-ing").
+   */
+  segments?: { text: string; role: 'fixed' | 'slot'; label?: string }[];
   explanation: string;
   type?: string;
   typeKr?: string;

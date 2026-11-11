@@ -309,6 +309,45 @@
   color: var(--color-text);
 }
 
+/* The pattern as it appears in the sentence, marked like the page underlines. */
+.pattern-pieces {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 2px 0.35em;
+  margin: 2px 0 4px;
+  font-size: var(--font-sm);
+  line-height: 1.35;
+}
+
+.pattern-piece {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pattern-piece-text {
+  padding-bottom: 3px;
+  color: var(--color-text);
+  /* 7px dash, 4px gap, 1.2px thick: the page underline's dash. */
+  background: linear-gradient(to right, var(--piece-line) 7px, transparent 7px) left bottom / 11px 1.2px repeat-x;
+}
+
+.pattern-piece.is-fixed { --piece-line: #1d4ed8; }
+.pattern-piece.is-slot { --piece-line: #93c5fd; }
+
+.pattern-piece-label {
+  margin-top: 1px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: #3b82f6;
+}
+
+.pattern-piece-gap {
+  color: var(--color-text-sub, #8a8f98);
+}
+
 .pattern-explanation::before {
   content: '→ ';
 }

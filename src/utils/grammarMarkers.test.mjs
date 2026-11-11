@@ -272,3 +272,99 @@ test('translation-only and malformed saves render no sentence-wide fallback', ()
     assert.deepEqual(buildGrammarMarkers(item), []);
   }
 });
+
+// ---- Slot labels: the template's own text for the part each slot fills ----
+import { prepareSentence, sentencePieces } from './grammarRoles.js';
+
+const labelsOf = (sentence, pattern) => buildGrammarMarkers(annotation(words(sentence), [pattern]))
+  .filter(m => m.label).map(m => m.label);
+
+test('slot labels come from the template text at that position, whatever the notation', () => {
+  const cases = [
+    ['We take this risk into account today.', { words: ['take A into account'], spans: ['take this risk into account'] }, ['A']],
+    ['It was not cheap but fast.', { words: ['not A but B'], spans: ['not cheap but fast'] }, ['A', 'B']],
+    ['Regardless of the result we stay.', { words: ['regardless of ~'], spans: ['Regardless of the result'] }, ['~']],
+    ['She decided to leave early.', { words: ['to-v'], spans: ['to leave'] }, ['v']],
+    ['She decided to leave early.', { words: ['to부정사'], spans: ['to leave'] }, ['부정사']],
+    ['I am used to working late.', { words: ['be used to V-ing'], spans: ['am used to working'] }, ['V-ing']],
+    ['The man who runs fast won.', { words: ['who + 동사'], spans: ['who runs'] }, ['동사']],
+    ['She made up her mind.', { words: ["make up one's mind"], spans: ['made up her mind'] }, ["one's"]],
+    ['She asked him to come.', { words: ['ask sb to V'], spans: ['asked him to come'] }, ['sb', 'V']],
+    ['It was given to me.', { words: ['be p.p.'], spans: ['was given'] }, ['p.p.']],
+    ['She will pick it up.', { words: ['pick up A'], spans: ['pick it up'] }, ['A']],
+    ['We take this risk into account today.', { words: ['take A into account'], spans: ['take', 'into account'], variableSpans: ['this risk'] }, ['A']],
+    ['As long as you are quiet, stay.', { words: ['as long as'], spans: ['As long as you are quiet'] }, []],
+  ];
+  for (const [sentence, pattern, expected] of cases) {
+    assert.deepEqual(labelsOf(sentence, pattern), expected, `${pattern.words[0]} / ${sentence}`);
+  }
+});
+
+test('a label from the model is used when the pattern form contains it, else derived', () => {
+  const sentence = 'We take this risk into account today.';
+  const segments = label => [{ text: 'take', role: 'fixed' }, { text: 'this risk', role: 'slot', label },
+    { text: 'into account', role: 'fixed' }];
+  assert.deepEqual(labelsOf(sentence, { words: ['take A into account'], segments: segments('A') }), ['A']);
+  assert.deepEqual(labelsOf(sentence, { words: ['take A into account'], segments: segments(undefined) }), ['A']);
+  assert.deepEqual(labelsOf(sentence, { words: ['take A into account'], segments: segments('명사') }), ['A']);
+  assert.deepEqual(labelsOf(sentence, { words: ['현재형'], segments: segments(undefined) }), []);
+});
+
+test('a label sits under the first row of a slot that wraps, with that row size', () => {
+  const row = [...words('Regardless of the'), ...words('cost of living we stay.', 16)];
+  const markers = buildGrammarMarkers(annotation(row, [{ words: ['regardless of A'], spans: ['Regardless of'], variableSpans: ['the cost of living'] }]));
+  const slots = markers.filter(m => m.role === 'variable');
+  assert.deepEqual(slots.map(m => m.label), ['A', undefined]);
+  assert.equal(slots[0].size, 3);
+});
+
+test('popup pieces show the covered stretch with roles, labels and words (not bare punctuation) in between', () => {
+  const prepared = prepareSentence('Not only did he win, but he also broke the record.');
+  const pieces = sentencePieces({ words: ['not only A but also B'], segments: [
+    { text: 'Not only', role: 'fixed' }, { text: 'did he win', role: 'slot', label: 'A' },
+    { text: 'but', role: 'fixed' }, { text: 'also', role: 'fixed' }, { text: 'broke the record', role: 'slot', label: 'B' }] }, prepared);
+  assert.deepEqual(pieces, [
+    { text: 'Not only', role: 'fixed' }, { text: 'did he win', role: 'slot', label: 'A' },
+    { text: 'but', role: 'fixed' }, { text: 'he', role: null }, { text: 'also', role: 'fixed' },
+    { text: 'broke the record', role: 'slot', label: 'B' }]);
+});
+
+test('pieces split inside a contraction are placed; a slot that is the word itself is fixed', () => {
+  const sentence = "It isn't cheap but it's worth it.";
+  const got = roleWords(sentence, buildGrammarMarkers(annotation(words(sentence), [{ words: ['not A, but B'], segments: [
+    { text: "n't", role: 'fixed' }, { text: 'cheap', role: 'slot', label: 'A' }, { text: 'but', role: 'fixed' }] }])));
+  assert.deepEqual(got.slot, ['cheap']);
+  assert.equal(got.fixed.length, 2); // "n't" (drawn under the end of "isn't") and "but"
+  const born = 'This is the house where I was born.';
+  assert.deepEqual(roleWords(born, buildGrammarMarkers(annotation(words(born), [{ words: ['be born'], segments: [
+    { text: 'was', role: 'slot', label: 'be' }, { text: 'born', role: 'fixed' }] }]))), { fixed: ['was', 'born'], slot: [] });
+});
+
+test('an unlabeled slot the pattern form spells (in any inflection) is the expression itself', () => {
+  const sentence = 'You should have told me earlier.';
+  assert.deepEqual(roleWords(sentence, buildGrammarMarkers(annotation(words(sentence), [{ words: ['tell sb sth'], segments: [
+    { text: 'told', role: 'slot', label: 'v' }, { text: 'me', role: 'slot', label: 'sb' }] }]))), { fixed: ['told'], slot: ['me'] });
+});
+
+test('slots sharing one stretch of template each get their own part of it', () => {
+  const run = (sentence, form, segments) => sentencePieces({ words: [form], segments }, prepareSentence(sentence))
+    .filter(p => p.role === 'slot').map(p => `${p.text}[${p.label}]`);
+  assert.deepEqual(run('She gave him a book yesterday.', 'give A B',
+    [{ text: 'gave', role: 'fixed' }, { text: 'him', role: 'slot' }, { text: 'a book', role: 'slot' }]), ['him[A]', 'a book[B]']);
+  assert.deepEqual(run('I spent two hours reading it.', 'spend A V-ing',
+    [{ text: 'spent', role: 'fixed' }, { text: 'two hours', role: 'slot' }, { text: 'reading', role: 'slot' }]), ['two hours[A]', 'reading[V-ing]']);
+  assert.deepEqual(run('If I were you, I would go.', 'If S were ~, S would V', [{ text: 'If', role: 'fixed' },
+    { text: 'I', role: 'slot' }, { text: 'were', role: 'fixed' }, { text: 'you', role: 'slot' }, { text: 'I', role: 'slot' },
+    { text: 'would', role: 'fixed' }, { text: 'go', role: 'slot' }]), ['I[S]', 'you[~]', 'I[S]', 'go[V]']);
+});
+
+test('each placed slot keeps its own model label, and a placeholder spelled like the word stays a slot', () => {
+  const run = (sentence, form, segments) => sentencePieces({ words: [form], segments }, prepareSentence(sentence))
+    .map(p => `${p.role}:${p.text}${p.label ? `[${p.label}]` : ''}`);
+  assert.deepEqual(run('Prices rose from day to day.', 'from A to B', [{ text: 'from', role: 'fixed' },
+    { text: 'day', role: 'slot', label: 'A' }, { text: 'to', role: 'fixed' }, { text: 'day', role: 'slot', label: 'B' }]),
+  ['fixed:from', 'slot:day[A]', 'fixed:to', 'slot:day[B]']);
+  assert.deepEqual(run('He made me do the dishes.', 'make A do', [{ text: 'made', role: 'fixed' },
+    { text: 'me', role: 'slot', label: 'A' }, { text: 'do', role: 'slot', label: 'do' }]),
+  ['fixed:made', 'slot:me[A]', 'slot:do[do]']);
+});

@@ -1,6 +1,25 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { createSentencePattern } from '../../services/annotation';
+import { prepareSentence, sentencePieces } from '../../utils/grammarRoles';
 import BuddyLoader from '../BuddyLoader';
+
+// The pattern inside the sentence: its own words in dark blue dashes, the
+// words filling its replaceable parts in light blue with the placeholder
+// (A, ~, V-ing …) written under them — the same marks as on the page.
+function PatternPieces({ pattern, prepared }) {
+  const pieces = useMemo(() => (prepared ? sentencePieces(pattern, prepared) : []), [pattern, prepared]);
+  if (!pieces.length) return null;
+  return (
+    <span className="pattern-pieces">
+      {pieces.map((piece, i) => (piece.role
+        ? <span key={i} className={`pattern-piece is-${piece.role}`}>
+          <span className="pattern-piece-text">{piece.text}</span>
+          {piece.label && <span className="pattern-piece-label">{piece.label}</span>}
+        </span>
+        : <span key={i} className="pattern-piece-gap">{piece.text}</span>))}
+    </span>
+  );
+}
 
 export default function GrammarModeContent({
   grammarData, checkedPatterns, loading,
@@ -10,6 +29,8 @@ export default function GrammarModeContent({
   ko,
 }) {
   const [savedPatternIds, setSavedPatternIds] = useState(new Set());
+  const sentence = grammarData?.originalText;
+  const prepared = useMemo(() => (sentence ? prepareSentence(sentence) : null), [sentence]);
 
   async function handleSaveAsPattern(pattern, index) {
     if (savedPatternIds.has(index)) return;
@@ -37,6 +58,7 @@ export default function GrammarModeContent({
               <div key={i} className="pattern-item">
                 <div className="pattern-content">
                   <span className="pattern-words">{pattern.words?.join(' ')}</span>
+                  <PatternPieces pattern={pattern} prepared={prepared} />
                   <span className="pattern-explanation">{pattern.explanation}</span>
                 </div>
                 <button
@@ -87,6 +109,7 @@ export default function GrammarModeContent({
                     />
                     <div className="pattern-content">
                       <span className="pattern-words">{pattern.words?.join(' ')}</span>
+                      <PatternPieces pattern={pattern} prepared={prepared} />
                       <span className="pattern-explanation">{pattern.explanation}</span>
                     </div>
                   </label>

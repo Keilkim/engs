@@ -2,6 +2,7 @@ import DOMPurify from 'dompurify';
 import { TranslatableText } from '../../../components/translatable';
 import { PenCanvas } from '../../../components/pen-mode';
 import { GrammarPatternRenderer } from './index';
+import { GrammarSlotLabels } from './GrammarPatternRenderer';
 import { safeJsonParse } from '../../../utils/errors';
 import ReadingBookmark from './ReadingBookmark';
 
@@ -332,6 +333,7 @@ export default function ImageContentView({
     <div ref={zoomWrapperRef} className="zoom-wrapper" style={zoomStyle}>
       <img src={displayImage} alt={source.title} className="screenshot-image" draggable={false} />
       <SvgOverlay {...svgProps} />
+      <GrammarSlotLabels annotations={getGrammarAnnotations(currentPage)} ocrWords={ocrWords} />
       <ReadingBookmark bookmark={readingBookmark?.kind === 'document' && readingBookmark.page === currentPage ? readingBookmark : null}
         onRemove={onRemoveBookmark} />
       <PenCanvasSection {...penProps} />

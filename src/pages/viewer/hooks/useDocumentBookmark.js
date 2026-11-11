@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import useReadingBookmark from '../../../hooks/useReadingBookmark';
+import { bookmarkScrollDelta } from '../../../utils/readingBookmark';
 
 export default function useDocumentBookmark({ sourceId, source, containerNode, zoomWrapperRef,
   scrollContainerRef, zoomScale, currentPage, setCurrentPage, totalPages }) {
@@ -30,7 +31,9 @@ export default function useDocumentBookmark({ sourceId, source, containerNode, z
         const scroller = scrollContainerRef.current;
         if (scroller) {
           const rect = image.getBoundingClientRect();
-          scroller.scrollTop += rect.top - scroller.getBoundingClientRect().top + rect.height * bookmark.y / 100;
+          const box = scroller.getBoundingClientRect();
+          scroller.scrollTop += bookmarkScrollDelta({ imageTop: rect.top, imageHeight: rect.height,
+            scrollerTop: box.top, scrollerHeight: scroller.clientHeight || box.height, y: bookmark.y });
         }
         restored.current = sourceId;
       });

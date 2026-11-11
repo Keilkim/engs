@@ -25,3 +25,11 @@ export function isBookmarkSwipe({ dx, dy, elapsed, zoomScale, multiTouch = false
   return !multiTouch && zoomScale <= 1 && elapsed > 0 && elapsed < 1800
     && Math.abs(dx) >= 80 && Math.abs(dy) <= 30 && Math.abs(dx) > Math.abs(dy) * 2;
 }
+
+// Restore with the bookmark a fifth of the way down the screen, so the lines
+// just above it show again instead of the mark sitting on the top edge.
+export const BOOKMARK_VIEW_OFFSET = 0.2;
+
+export function bookmarkScrollDelta({ imageTop, imageHeight, scrollerTop, scrollerHeight, y }) {
+  return imageTop - scrollerTop + imageHeight * y / 100 - scrollerHeight * BOOKMARK_VIEW_OFFSET;
+}

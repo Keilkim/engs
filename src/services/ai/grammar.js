@@ -4,6 +4,7 @@ import { parseGeminiJSON } from './gemini';
 import { googleTranslate } from './vocabulary';
 import { getSetting, SETTINGS_KEYS } from '../settings';
 import { logError } from '../../utils/errors';
+import { buildGrammarPrompt, withSegmentSpans } from './grammarPrompt';
 
 /**
  * Check if tags contains any of the target tags
@@ -190,73 +191,13 @@ export function analyzeGrammar(text) {
   };
 }
 
-// "segments" carry each piece's role; flashcards and review still read the
-// flat "spans" (fixed words) / "variableSpans" (slot words), so derive them.
-export function withSegmentSpans(pattern) {
-  const segments = (Array.isArray(pattern?.segments) ? pattern.segments : [])
-    .filter(segment => typeof segment?.text === 'string' && segment.text.trim())
-    .map(segment => ({ text: segment.text.trim(), role: segment.role === 'slot' ? 'slot' : 'fixed' }));
-  if (!segments.length) return pattern;
-  const texts = role => segments.filter(segment => segment.role === role).map(segment => segment.text);
-  // A pattern made only of slots still needs words to bold on its card.
-  const fixed = texts('fixed');
-  return { ...pattern, segments, spans: fixed.length ? fixed : texts('slot'), variableSpans: texts('slot') };
-}
-
 /**
  * AI-based grammar pattern analysis (Gemini API)
  */
 export async function analyzeGrammarPatterns(text) {
   const level = getSetting(SETTINGS_KEYS.ENGLISH_LEVEL, 'intermediate');
 
-  const levelInstruction = {
-    beginner: 'Target A1-A2 level. Extract only basic, high-frequency expressions that beginners should know first. Skip advanced idioms and complex collocations.',
-    intermediate: 'Target B1-B2 level. Extract useful everyday expressions including common idioms, phrasal verbs, and collocations.',
-    advanced: 'Target C1-C2 level. Extract advanced, sophisticated expressions including nuanced idioms, literary collocations, and complex patterns.',
-  }[level] || '';
-
-  const prompt = `You are an English tutor making a study card for a Korean learner. Analyze this sentence.
-
-Sentence: "${text}"
-
-LEVEL: ${levelInstruction}
-
-Produce two things:
-1. "translation": a natural Korean translation of the WHOLE sentence.
-2. "patterns": the most useful things to learn from this sentence. This includes BOTH:
-   - Expressions worth memorizing: idioms, phrasal verbs, collocations (use A, B, C for variable parts).
-   - Notable grammar structures: relative clauses, participial phrases, conditionals, passive voice, key verb tenses/modals, comparatives, "to-infinitive"/gerund usage, etc.
-   For each, put a short form in "words", a concise Korean explanation, and "segments".
-   "segments": the pattern's words AS THEY APPEAR IN THE SENTENCE ABOVE, in sentence order, each
-   piece copied verbatim (same spelling, conjugation and capitalization) and labeled with a role:
-     - "fixed": words that belong to the expression or grammar cue itself and stay the same
-       whenever the pattern is used (e.g. "take", "into account", "to", "who", "am used to").
-     - "slot": words filling a replaceable part — whatever "words" writes as A/B/C, ~, V, Ving,
-       p.p., sb/sth, one's or any other placeholder (e.g. "this risk", the verb after "to").
-   Start a new piece wherever the role changes or the pattern skips unrelated words. Examples:
-     "We take this risk into account" + "take A into account" → [{"text":"take","role":"fixed"},
-       {"text":"this risk","role":"slot"},{"text":"into account","role":"fixed"}]
-     "She decided to leave early" + "to-v" → [{"text":"to","role":"fixed"},{"text":"leave","role":"slot"}]
-     "It was not cheap but fast" + "not A but B" → [{"text":"not","role":"fixed"},{"text":"cheap","role":"slot"},
-       {"text":"but","role":"fixed"},{"text":"fast","role":"slot"}]
-   Every "text" MUST appear character-for-character in the sentence. Exclude unrelated words and
-   clauses. NEVER use the whole sentence as a fallback.
-
-RULES:
-- ALWAYS fill "translation".
-- Give 1-4 patterns, prioritizing what a learner at the level above would find genuinely useful or tricky.
-- For a grammar structure, "words" can hold the pattern form (e.g. ["who + 동사"], ["as long as"], ["have been Ving"], ["not A but B"]).
-- Only include a pattern if you can fill "segments" with real substrings copied verbatim from the sentence.
-- Only return an empty "patterns" list if the text is NOT a real sentence (e.g. a lone interjection). A normal sentence must yield at least one pattern.
-
-Return ONLY valid JSON, no markdown:
-{
-  "translation": "문장 전체의 자연스러운 한국어 번역",
-  "patterns": [
-    { "words": ["regardless of A"], "segments": [{ "text": "regardless of", "role": "fixed" }, { "text": "the result", "role": "slot" }], "explanation": "A에 상관없이 (전치사구)" },
-    { "words": ["who + 동사"], "segments": [{ "text": "who", "role": "fixed" }, { "text": "runs", "role": "slot" }], "explanation": "관계대명사 who: 앞의 사람 명사를 꾸며주는 절을 이끔" }
-  ]
-}`;
+  const prompt = buildGrammarPrompt(text, level);
 
   // Gemini gives translation + idioms + grammar structures. If that call fails
   // or comes back empty/unparseable, we DON'T hard-fail — long-press would then

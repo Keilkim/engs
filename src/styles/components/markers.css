@@ -159,11 +159,13 @@
 
 /* Saved expressions: fixed words in dark blue dashes, the words filling
    A/~/V slots in light blue dashes. With non-scaling-stroke the dash
-   lengths are screen pixels, so they stay even at any zoom. */
+   lengths are screen pixels, so they stay even at any zoom. Dashes are
+   several times longer than the line is thick so they read as dashes,
+   not dots. */
 .grammar-underline {
   stroke: #1d4ed8;
-  stroke-width: 2px;
-  stroke-dasharray: 4 3;
+  stroke-width: 1.2px;
+  stroke-dasharray: 7 4;
   stroke-linecap: butt;
   fill: none;
   pointer-events: none;
@@ -176,4 +178,27 @@
 
 .grammar-pattern-group {
   pointer-events: none;
+}
+
+/* Slot names under light underlines. The layer is a size container laid over
+   the page, so 1cqh is 1% of the page height — the unit the OCR boxes use —
+   and labels scale with the text they sit under, including when zoomed. */
+.grammar-slot-labels {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  container-type: size;
+}
+
+.grammar-slot-labels > span {
+  position: absolute;
+  transform: translate(-50%, 0.12em);
+  font-family: var(--font-family, system-ui, sans-serif);
+  font-size: max(8px, calc(var(--glyph) * 0.62cqh));
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: #3b82f6;
+  text-shadow: 0 0 2px #fff, 0 0 2px #fff;
 }
