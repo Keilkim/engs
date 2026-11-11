@@ -13,7 +13,7 @@ function PatternPieces({ pattern, prepared }) {
     <span className="pattern-pieces">
       {pieces.map((piece, i) => (piece.role
         ? <span key={i} className={`pattern-piece is-${piece.role}`}>
-          <span className="pattern-piece-text">{piece.text}</span>
+          <span className="pattern-piece-text"><span className="pattern-piece-ink">{piece.text}</span></span>
           {piece.label && <span className="pattern-piece-label">{piece.label}</span>}
         </span>
         : <span key={i} className="pattern-piece-gap">{piece.text}</span>))}

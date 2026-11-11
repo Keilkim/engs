@@ -157,33 +157,28 @@
   }
 }
 
-/* Saved expressions: fixed words in dark blue dashes, the words filling
-   A/~/V slots in light blue dashes. With non-scaling-stroke the dash
-   lengths are screen pixels, so they stay even at any zoom. Dashes are
-   several times longer than the line is thick so they read as dashes,
-   not dots. */
+/* Saved expressions: the expression's own words get a thin dark blue solid
+   line. The words filling its replaceable parts (A, ~, V …) get a light blue
+   wave instead, drawn in .grammar-slot-marks, so the two differ in shape as
+   well as colour. */
 .grammar-underline {
   stroke: #1d4ed8;
   stroke-width: 1.2px;
-  stroke-dasharray: 7 4;
   stroke-linecap: butt;
   fill: none;
   pointer-events: none;
   vector-effect: non-scaling-stroke;
 }
 
-.grammar-underline-variable {
-  stroke: #93c5fd;
-}
-
 .grammar-pattern-group {
   pointer-events: none;
 }
 
-/* Slot names under light underlines. The layer is a size container laid over
-   the page, so 1cqh is 1% of the page height — the unit the OCR boxes use —
-   and labels scale with the text they sit under, including when zoomed. */
-.grammar-slot-labels {
+/* Slot waves and slot names. This HTML layer is not stretched like the SVG
+   overlay (preserveAspectRatio="none"), so the wave keeps its shape. It is a
+   size container laid over the page: 1cqh is 1% of the page height, the unit
+   the OCR boxes use, so labels scale with the text they sit under. */
+.grammar-slot-marks {
   position: absolute;
   inset: 0;
   z-index: 10;
@@ -191,9 +186,18 @@
   container-type: size;
 }
 
-.grammar-slot-labels > span {
+.grammar-slot-wave {
   position: absolute;
-  transform: translate(-50%, 0.12em);
+  height: 4px;
+  transform-origin: 0 50%;
+  translate: 0 -50%; /* rotate is set inline from the measured page size */
+  /* 6px period, 1.2px light blue stroke; tiles seamlessly. */
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='4'%3E%3Cpath d='M0 2Q1.5 .6 3 2T6 2' fill='none' stroke='%2393c5fd' stroke-width='1.2'/%3E%3C/svg%3E") left center / 6px 4px repeat-x;
+}
+
+.grammar-slot-label {
+  position: absolute;
+  transform: translate(-50%, 0.2em);
   font-family: var(--font-family, system-ui, sans-serif);
   font-size: max(8px, calc(var(--glyph) * 0.62cqh));
   font-weight: 600;
