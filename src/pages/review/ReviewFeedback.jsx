@@ -1,42 +1,39 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 import Buddy from '../../components/Buddy';
-import { DustPuffs } from '../../components/BuddyLoader';
 
-export default function ReviewFeedback({ result, answer, busy, onAdvance }) {
+// A right answer only needs a moment to sink in; a wrong one waits for a tap so the answer can be studied.
+const CORRECT_HOLD_MS = 1100;
+
+export default function ReviewFeedback({ result, answer, onAdvance }) {
   const continueButton = useRef(null);
-  const pending = useRef(false);
+  const autoAdvance = useEffectEvent(() => { if (!document.hidden) onAdvance(); });
 
   useEffect(() => {
     continueButton.current?.focus({ preventScroll: true });
+    if (!result.correct) return undefined;
+    const timer = setTimeout(autoAdvance, CORRECT_HOLD_MS);
+    return () => clearTimeout(timer);
   }, [result]);
 
-  async function advance(event) {
+  function advance(event) {
     event.stopPropagation();
-    if (busy || pending.current || document.hidden) return;
-    pending.current = true;
-    try { await onAdvance(); } finally { pending.current = false; }
+    if (!document.hidden) onAdvance();
   }
 
   return <>
     <div className="practice-feedback-shade" aria-hidden="true" />
-    <button ref={continueButton} type="button" className="practice-feedback-continue" disabled={busy}
+    <button ref={continueButton} type="button" className="practice-feedback-continue"
       onClick={advance} onKeyDown={event => { if (event.repeat) event.preventDefault(); }}
-      aria-label={busy ? '복습 결과 저장 중' : '확인하고 터치! 다음 카드로 넘어가기'} />
+      aria-label={result.correct ? '다음 카드로 넘어가기' : '확인하고 터치! 다음 카드로 넘어가기'} />
     <div className={`practice-feedback ${result.correct ? 'is-correct' : 'is-incorrect'}`} role="status" aria-live="polite" aria-atomic="true">
       <Buddy pose={result.correct ? 'correct' : 'surprised'} className="practice-feedback-buddy" animated={false} />
       <div className="practice-feedback-copy">
         <div className="practice-feedback-heading">
           <strong>{result.correct ? '맞았어요!' : '앗, 이 뜻이었어요!'}</strong>
         </div>
-        <span>{busy ? <>다음 카드 준비 중<DustPuffs /></> : result.correct ? '기억이 하나 더 쌓였어요' : '괜찮아요, 한 번 더 눈에 담아요'}</span>
-        <span className="sr-only">정답: {answer}. 화면 아무 곳이나 터치하거나 Enter 키를 누르면 다음 카드로 넘어가요.</span>
+        <span>{result.correct ? '기억이 하나 더 쌓였어요' : '괜찮아요, 한 번 더 눈에 담아요'}</span>
+        <span className="sr-only">정답: {answer}. {result.correct ? '잠시 후 다음 카드로 넘어가요.' : '화면 아무 곳이나 터치하거나 Enter 키를 누르면 다음 카드로 넘어가요.'}</span>
       </div>
     </div>
-    {/* Shown only after a pause, in the middle of the screen, for people unsure how to move on. */}
-    {!busy && <span className="practice-tap-gesture" aria-hidden="true">
-      <img src="/images/orange-dust-tap-hand.webp" alt="" width="64" height="64" draggable="false" />
-      <span className="practice-tap-rays">{[-64, -32, 0, 32, 64].map(angle =>
-        <i key={angle} style={{ '--ray-angle': `${angle}deg` }} />)}</span>
-    </span>}
   </>;
 }

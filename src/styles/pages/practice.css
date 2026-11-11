@@ -47,19 +47,9 @@
 .practice-feedback-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
 .practice-feedback-copy strong { font-size: 19px; font-weight: 750; letter-spacing: -.035em; }
 .practice-feedback-copy > span:not(.sr-only) { font-size: 12px; line-height: 1.6; color: var(--color-text-sub); text-wrap: balance; }
-.practice-feedback-copy .dust-puffs { --puff-size: 12px; height: 18px; margin-left: 4px; }
 .practice-main.is-feedback .practice-context, .practice-main.is-feedback .practice-spoken,
 .practice-main.is-feedback > .practice-note, .practice-main.is-feedback .practice-footer { display: none; }
 .practice-tap-hint { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: 100%; min-height: 40px; color: #95989d; font-size: 14px; font-weight: 500; letter-spacing: .02em; pointer-events: none; }
-.practice-tap-hint.is-saving { gap: 12px; }
-/* Fixed under the full-screen continue button: center of the screen, nudged right, after a 3s pause. */
-.practice-tap-gesture { position: fixed; left: calc(50% + 80px); top: 50%; z-index: 34; display: block; width: 52px; height: 44px; translate: -50% -50%; transform: rotate(-28deg); pointer-events: none; filter: drop-shadow(0 6px 14px #21170e2e); animation: practice-hand-appear 320ms 3s cubic-bezier(.2,1.4,.4,1) backwards; }
-.practice-tap-gesture > img { position: absolute; width: 64px; height: 64px; left: -6px; top: -8px; }
-.practice-tap-rays { position: absolute; left: 22px; top: -5px; width: 1px; height: 1px; animation: practice-tap-rays 1.8s ease-out infinite; }
-.practice-tap-rays i { position: absolute; width: 3px; height: 8px; left: -1px; top: -20px; border-radius: 3px; background: #a6a8ad; transform-origin: 50% 20px; transform: rotate(var(--ray-angle)); }
-@keyframes practice-hand-fade { from { opacity: 0; } }
-@keyframes practice-hand-appear { from { opacity: 0; scale: .6; } to { opacity: 1; scale: 1; } }
-@keyframes practice-tap-rays { 0%, 28% { opacity: 0; transform: scale(.7); } 40%, 52% { opacity: 1; transform: scale(1); } 72%, 100% { opacity: 0; transform: scale(1.2); } }
 @keyframes practice-feedback-pop { from { opacity: 0; transform: translateY(14px) scale(.78); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes practice-shade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes practice-buddy-cheer { 0% { transform: rotate(-9deg) scale(.85); } 40% { transform: translateY(-10px) rotate(7deg) scale(1.12); } 70% { transform: translateY(2px) rotate(-3deg) scale(.97); } 100% { transform: none; } }
@@ -156,10 +146,7 @@
 @media (prefers-reduced-motion: reduce) {
   .practice-progress > span, .practice-choices button { transition: none; }
   .practice-card-stage > .practice-card, .practice-feedback, .practice-feedback-shade,
-  .practice-feedback:is(.is-correct, .is-incorrect) .practice-feedback-buddy, .is-answer-reveal,
-  .practice-tap-rays { animation: none; transform: none; }
-  .practice-tap-rays { opacity: .6; }
-  .practice-tap-gesture { animation-name: practice-hand-fade; animation-timing-function: ease-out; }
+  .practice-feedback:is(.is-correct, .is-incorrect) .practice-feedback-buddy, .is-answer-reveal { animation: none; transform: none; }
 }
 @media (max-height: 700px) {
   .practice-main.is-feedback { padding-top: 12px; }

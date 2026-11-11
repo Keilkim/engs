@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Buddy from '../../components/Buddy';
-import BuddyLoader, { DustPuffs } from '../../components/BuddyLoader';
+import BuddyLoader from '../../components/BuddyLoader';
 import ScenePlayer from '../../containers/flashcard/ScenePlayer';
 import usePracticeAudio from '../../hooks/usePracticeAudio';
 import { compareSpokenAnswer, markSpans } from '../../services/reviewPractice';
@@ -57,7 +57,7 @@ export default function Review() {
 
   useEffect(() => {
     // Fetch both poses before the first answer so the reaction can appear immediately.
-    ['/images/orange-dust-buddy-correct.webp', '/images/orange-dust-buddy-surprised.webp', '/images/orange-dust-tap-hand.webp'].forEach(src => {
+    ['/images/orange-dust-buddy-correct.webp', '/images/orange-dust-buddy-surprised.webp'].forEach(src => {
       const image = new Image();
       image.src = src;
     });
@@ -125,7 +125,10 @@ export default function Review() {
   const maskedDefinition = mode === 'speak' && card.vocabulary && card.word
     ? card.definition.replace(new RegExp(card.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '____') : card.definition;
   const result = practice.result;
-  const feedbackActive = Boolean(result && !practice.saveError);
+  const feedbackActive = Boolean(result);
+  const unsavedNotice = practice.unsaved > 0 && <p role="alert" className="practice-message">
+    복습 결과 {practice.unsaved}개를 아직 저장하지 못했어요. 연결을 확인하고{' '}
+    <button className="practice-text-button" onClick={practice.retrySaves}>다시 저장</button>해 주세요.</p>;
   const locked = practice.busy || feedbackActive;
   const visibleChoices = result?.choices || choice;
   const cardLabel = card.kind === 'pattern' ? `EXPRESSION${practice.parts.length > 1 ? ` ${practice.partIndex + 1} / ${practice.parts.length}` : ''}`
@@ -176,6 +179,7 @@ export default function Review() {
         <p className="practice-finish-count"><strong>{answers.length}개</strong> 확인했어요.</p>
         <div className="practice-result"><span>맞혔다고 체크 <strong>{recalled}</strong></span><span>다시 볼 표현 <strong>{answers.length - recalled}</strong></span></div>
         <p>{practice.session.kind === 'daily' ? '오늘 헷갈린 표현은 내일 다시 만나요.' : '이번 연습은 예정된 복습 간격에 영향을 주지 않아요.'}</p>
+        {unsavedNotice}
         <button className="practice-primary" onClick={leave}>여기서 마치기</button>
         {practice.retryItems.length > 0 && <button className="practice-secondary" onClick={() => { setPaused(false); practice.startRetry(); }}>헷갈린 {practice.retryItems.length}개 다시 해보기</button>}
         {practice.overview.due > 0 && <button className="practice-text-button" onClick={() => practice.load(true, practice.options)}>다음 묶음 시작 · 예정 항목 {practice.overview.due}개 남음</button>}
@@ -206,7 +210,7 @@ export default function Review() {
         <div className="practice-card-stage" key={cardKey}>
           {recall || practice.revealed ? <section className={`practice-card ${practice.revealed ? 'is-revealed' : choice ? 'is-flipped' : ''} ${feedbackActive ? 'is-feedback' : ''}`}>{face}</section>
             : <button className="practice-card" onClick={reveal} disabled={practice.busy} aria-label="카드를 눌러 정답 보기">{face}</button>}
-          {feedbackActive && <ReviewFeedback result={result} answer={card.definition || card.word} busy={practice.busy} onAdvance={next} />}
+          {feedbackActive && <ReviewFeedback result={result} answer={card.definition || card.word} onAdvance={next} />}
         </div>
 
         {mode === 'listen' && !practice.revealed && !choice && <button className="practice-secondary" onClick={() => {
@@ -237,12 +241,12 @@ export default function Review() {
         </div>
 
         {practice.saveError && <p role="alert" className="practice-message">{practice.saveError}</p>}
+        {unsavedNotice}
         {practice.storageWarning && <p role="status" className="practice-note">이 브라우저에 이어하기 위치를 보관하지 못했어요. 서버에 저장된 복습 결과는 유지돼요.</p>}
-        <div className={`practice-actions ${feedbackActive ? 'practice-actions--feedback' : ''}`}>{result ? practice.saveError ? <button className="practice-primary" onClick={next} disabled={practice.busy}>{practice.busy ? <>저장 중<DustPuffs /></> : '저장하고 다음으로'}</button>
-          : <TapToContinueHint busy={practice.busy} />
+        <div className={`practice-actions ${feedbackActive ? 'practice-actions--feedback' : ''}`}>{result ? !result.correct && <TapToContinueHint />
           : practice.revealed ? <>
             <button className="practice-secondary" onClick={() => evaluate(false)} disabled={practice.busy}>다시 볼래요</button>
-            <button className="practice-primary" onClick={() => evaluate(true)} disabled={practice.busy}>{practice.busy ? '저장 중…' : '맞혔어요'}</button>
+            <button className="practice-primary" onClick={() => evaluate(true)} disabled={practice.busy}>맞혔어요</button>
           </> : choice ? <button className="practice-secondary" onClick={forget}>잘 모르겠어요</button>
           : recall ? <>
             <button className="practice-secondary" onClick={forget}>기억 안 나요</button>
